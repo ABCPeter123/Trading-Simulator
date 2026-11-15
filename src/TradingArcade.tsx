@@ -41,6 +41,7 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
   const [takePct, setTakePct] = useState("0");
   const [assetId, setAssetId] = useState("aapl");
   const [startingPoint, setStartingPoint] = useState(0.3);
+  const [startDate, setStartDate] = useState("");
   const [newGame, setNewGame] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -165,7 +166,7 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
     try {
       const selected = filteredCatalog.find(a=>a.id===assetId) ?? filteredCatalog[0];
       if (!selected) throw Error("Choose a supported instrument.");
-      const result=await gameStart(selected.id,startingPoint,period);
+      const result=await gameStart(selected.id,startingPoint,period,startDate);
       setGame(result);
       setCode(SAMPLE_CODE);
       setStopPct("0");
@@ -275,7 +276,10 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
            <option value="10Y">10 years · daily candles</option>
            <option value="MAX">Maximum available history</option>
          </select>
-         <label htmlFor="arc-start-point">Starting point</label>
+         <label htmlFor="arc-choose-date">Historical start date (optional)</label>
+         <input id="arc-choose-date" type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} title="Choose the date when the game should start. Leave blank to use the standard starting point."/>
+         <small className="arc-date-hint">Choose a date such as 2008-09-15 or 2020-03-01. Requires source coverage and indicator warmup.</small>
+         <label htmlFor="arc-start-point">Starting point {startDate?"(ignored when date is set)":""}</label>
          <select id="arc-start-point" value={startingPoint} onChange={e=>setStartingPoint(Number(e.target.value))}>
            <option value={0.2}>Early season · More candles to play</option>
            <option value={0.3}>Standard season</option>
