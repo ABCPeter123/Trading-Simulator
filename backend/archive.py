@@ -108,3 +108,16 @@ def archive_stats(asset_id: str, window: str) -> dict[str, Any]:
         "highest_price": row[4], "average_volume": row[5],
         "storage": "local zstd parquet", "price_source": "archived provider candles (not an executable quote)",
     }
+
+
+def load_archived_history(asset_id: str, window: str) -> list[dict[str, int | float]]:
+    """Return recorded provider bars when the external feed is unavailable.
+
+    Archive is an offline *historical snapshot*, never a current exchange quote.
+    """
+    path = archive_path(asset_id, window)
+    if not path.exists():
+        return []
+    with ARCHIVE_LOCK:
+        rows = pl.read_parquet(path).sort("time").tail(1000).to_dicts()
+    return [{column: row[column] for column in BAR_SCHEMA} for row in rows]
