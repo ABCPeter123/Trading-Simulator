@@ -332,7 +332,7 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
            <div className="arc-box-head"><div><Bot size={18}/><strong>Strategy Workshop</strong><span className="arc-tag">NO CODING EXPERIENCE NEEDED</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{editorOpen?"Collapse":"Expand"}</button></div>
            <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>Teach your trading bot what to do</strong><p>Write rules in plain English. The engine evaluates the conditions at each revealed candle close, then queues trades for the next candle.</p></div></div>
            {editorOpen&&<div className="arc-editor">
-             <VisualStrategyBuilder onAdd={rule=>{setCode(prev=>prev.trim()?prev.trim()+"\\n"+rule:rule);setCodeError("");}}/>
+             <VisualStrategyBuilder onAdd={rule=>{setCode(prev=>prev.trim()?prev.trim()+"\n"+rule:rule);setCodeError("");}}/>
              <div className="arc-template-row"><span>TRY A TEMPLATE</span>{game.examples.map(sample=><button key={sample.title} onClick={()=>{setCode(sample.code);setCodeError("");}}>{sample.title}</button>)}</div>
              <div className="arc-code-head"><span><Terminal size={14}/> strategy.tradesim</span><span>{codeSaved?"SAVED TO GAME":"UNSAVED CHANGES"}</span></div>
              <textarea spellCheck={false} aria-label="Trading strategy rules" value={code} onChange={e=>{setCode(e.target.value);setCodeError("");}} rows={5} placeholder="WHEN SMA(10) CROSSES ABOVE SMA(30) BUY 25%" maxLength={1800}/>
