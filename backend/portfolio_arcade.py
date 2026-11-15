@@ -75,14 +75,22 @@ def _prepare(histories):
         by_id[asset_id] = daily
         timeline.update(daily)
     days = sorted(timeline)
-    # No playable day until every symbol has 35 previous candles.
+    # A basket must genuinely overlap; two disjoint histories must never
+    # share a replay timeline with indefinitely stale portfolio marks.
+    shared = set.intersection(*(set(daily) for daily in by_id.values()))
+    shared_days = sorted(shared)
+    if len(shared_days) < 75 or shared_days[-1] < days[max(0, len(days) - 21)]:
+        raise HTTPException(422, detail="Basket needs at least 75 overlapping daily candles, including a recent shared session.")
+    # Start only after warmup observations exist for every member AND at
+    # least 35 common sessions exist, so the benchmark is comparable.
+    warmup_day = shared_days[34]
     seen = {asset_id: 0 for asset_id in by_id}
     first = None
     for idx, day in enumerate(days):
         for asset_id, available in by_id.items():
             if day in available:
                 seen[asset_id] += 1
-        if all(count >= 36 for count in seen.values()):
+        if day >= warmup_day and all(count >= 36 for count in seen.values()):
             first = idx
             break
     if first is None or len(days) - first < 45:
