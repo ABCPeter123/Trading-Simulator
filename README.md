@@ -2,6 +2,27 @@
 
 A **local-first paper trading and historical replay terminal** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Portfolio Arcade v0.6
+
+**New: multi-asset historical seasons.** From Trading Arcade choose
+**Portfolio Arcade** to trade 2-5 USD stocks, ETFs or crypto assets with one
+shared $100,000 cash account. The engine aligns real daily candles, honors
+missing market sessions, and lets you skip 1, 5, 20, or 100 calendar steps.
+Every instrument has its own position and mark date.
+
+Safe cross-asset strategies can use one symbol's indicators to trade another:
+
+```text
+WHEN spy SMA(10) CROSSES ABOVE SMA(30) BUY 25% qqq
+WHEN spy SMA(10) CROSSES BELOW SMA(30) SELL 100% qqq
+```
+
+New runs are stored in a separate SQLite table. **Existing Trading Arcade
+saves remain intact.** There are no new dependencies, so just `git pull`
+and use your existing `start-local.ps1` launcher.
+
+See [Portfolio Arcade instructions](docs/PORTFOLIO_ARCADE.md).
+
 ## Trading Arcade v0.5 (historical depth, instruments, no-code builder)
 
 The app now opens in the [Trading Arcade](docs/ARCADE.md) by default.
