@@ -1,0 +1,296 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft, ArrowUpRight, ArrowDownRight, BarChart3, Bot, Check,
+  ChevronRight, Clock3, FastForward, Pause, Play, Plus, Save,
+  Search, ShieldCheck, ShoppingCart, Trash2, Wallet, Zap,
+} from "lucide-react";
+import { PriceChart } from "./components/PriceChart";
+import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
+import { gameCatalog } from "./arcadeApi";
+import type { CatalogInstrument } from "./arcadeApi";
+import type { Asset, TradeSide } from "./types";
+import {
+  listPortfolioSeasons, loadPortfolioSeason, newPortfolioSeason,
+  advancePortfolio, tradePortfolio, cancelPortfolioOrder,
+  savePortfolioStrategy, savePortfolioRisk,
+} from "./portfolioApi";
+import type { PortfolioSaved, PortfolioSeason } from "./portfolioApi";
+import "./arcade.css";
+import "./portfolio.css";
+
+const SAVED = "trade-sim-active-portfolio-season";
+const HISTORY_OPTIONS = ["1Y","2Y","5Y","10Y","MAX"];
+const errorText = (e: unknown) => e instanceof Error ? e.message : "Operation failed.";
+const fmtQty = (n:number) => n.toLocaleString("en-US", {maximumFractionDigits:8});
+const fmtTime = (t:number) => new Date(t*1000).toLocaleDateString("en-CA");
+const eligible = (i: CatalogInstrument) =>
+  i.tradable && i.currency === "USD" && ["Stocks","ETFs","Crypto"].includes(i.asset_class);
+
+export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
+  const [catalog, setCatalog] = useState<CatalogInstrument[]>([]);
+  const [saved, setSaved] = useState<PortfolioSaved[]>([]);
+  const [season, setSeason] = useState<PortfolioSeason|null>(null);
+  const [setup, setSetup] = useState(true);
+  const [basket, setBasket] = useState<string[]>(["spy","qqq"]);
+  const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState("5Y");
+  const [startDate, setStartDate] = useState("");
+  const [focused, setFocused] = useState("spy");
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [playing, setPlaying] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [side, setSide] = useState<TradeSide>("buy");
+  const [kind, setKind] = useState<"market"|"limit"|"stop">("market");
+  const [size, setSize] = useState("25");
+  const [sizeType, setSizeType] = useState<"percent"|"units">("percent");
+  const [trigger, setTrigger] = useState("");
+  const [source, setSource] = useState("spy");
+  const [target, setTarget] = useState("qqq");
+  const [strategy, setStrategy] = useState("");
+  const [stop, setStop] = useState("0");
+  const [take, setTake] = useState("0");
+  const [chartStyle, setChartStyle] = useState<"candles"|"line">("candles");
+
+  const selected = catalog.find(item => item.id === focused);
+  const chosenAsset: Asset = useMemo(() => {
+    const original = ASSETS.find(item => item.id === focused);
+    if (original) return original;
+    return {
+      id: focused, symbol: selected?.symbol ?? focused.toUpperCase(),
+      name: selected?.name ?? focused, exchange: selected?.currency ?? "USD",
+      assetClass: (selected?.asset_class ?? "Stocks") as Asset["assetClass"],
+      decimals: selected?.decimals ?? 2, spreadBps: 5, accent:"#aa9bff",
+    };
+  }, [focused, selected?.symbol, selected?.name, selected?.currency, selected?.asset_class, selected?.decimals]);
+
+  const hydrate = useCallback((next: PortfolioSeason) => {
+    setSeason(next);
+    setFocused(prev => next.asset_ids.includes(prev) ? prev : next.asset_ids[0]);
+    setSource(prev => next.asset_ids.includes(prev) ? prev : next.asset_ids[0]);
+    setTarget(prev => next.asset_ids.includes(prev) ? prev : next.asset_ids.at(-1)!);
+    setStrategy(next.strategy);
+    setStop(String(next.risk.stop_loss_pct));
+    setTake(String(next.risk.take_profit_pct));
+    setSetup(false);
+    localStorage.setItem(SAVED, next.id);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([gameCatalog(), listPortfolioSeasons()]).then(async ([instruments,runs]) => {
+      if (cancelled) return;
+      setCatalog(instruments);
+      setSaved(runs);
+      const preferred = localStorage.getItem(SAVED);
+      const resume = runs.find(run=>run.id===preferred) ?? runs[0];
+      if (resume) {
+        const data = await loadPortfolioSeason(resume.id);
+        if (!cancelled) hydrate(data);
+      }
+    }).catch(e=>{if(!cancelled)setError(errorText(e));});
+    return ()=>{cancelled=true;};
+  }, [hydrate]);
+
+  const update = async (task:()=>Promise<PortfolioSeason>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true); setError("");
+    try {
+      const next = await task();
+      hydrate(next);
+      setNotice(next.events[0] || "Saved.");
+      if(next.finished) setPlaying(false);
+    } catch(e) {
+      setError(errorText(e));
+      setPlaying(false);
+    } finally {
+      busyRef.current = false; setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!playing || !season || season.finished || setup) return;
+    const timer = setInterval(() => {
+      if (busyRef.current) return;
+      busyRef.current = true;
+      void advancePortfolio(season.id, 5).then(next => {
+        hydrate(next);
+        if (next.finished) setPlaying(false);
+      }).catch(e=>{setError(errorText(e));setPlaying(false);}).finally(()=>{busyRef.current=false;});
+    }, 700);
+    return ()=>clearInterval(timer);
+  }, [playing,season?.id,season?.finished,setup,hydrate]);
+
+  const assetName = (id:string) => catalog.find(i=>i.id===id)?.symbol ??
+    ASSETS.find(i=>i.id===id)?.symbol ?? id.toUpperCase();
+  const positions = season?.positions ?? [];
+  const current = positions.find(p=>p.asset_id===focused);
+  const bars = season?.bars[focused] ?? [];
+  const last = bars.at(-1);
+  const filtered = catalog.filter(i=>eligible(i)&&
+    (i.symbol+" "+i.name).toLowerCase().includes(search.toLowerCase())).slice(0,100);
+  const advance = (n:number, untilAction=false) => {
+    if(season) void update(()=>advancePortfolio(season.id,n,untilAction));
+  };
+  const addRule = () => {
+    const line = `WHEN ${source} SMA(10) CROSSES ABOVE SMA(30) BUY 25% ${target}`;
+    setStrategy(prev=>prev.trim()?prev.trim()+"\n"+line:line);
+  };
+  const trade = (e: React.FormEvent) => {
+    e.preventDefault();
+    if(!season)return;
+    void update(()=>tradePortfolio(season.id,{
+      asset_id:focused, side, kind, size, size_type:sizeType,
+      ...(kind==="market"?{}:{price:trigger}),
+    }));
+  };
+
+  return <div className="arc-page port-page">
+    <header className="arc-top">
+      <div className="arc-top-left">
+        <button className="arc-back" onClick={()=>{setPlaying(false);onExit();}} aria-label="Back to single-asset Arcade"><ArrowLeft size={18}/></button>
+        <div className="arc-logo"><BarChart3 size={23}/></div>
+        <div className="arc-brand">PORTFOLIO <span>ARCADE</span><small>MULTI-ASSET HISTORICAL TRADING</small></div>
+      </div>
+      <div className="arc-top-right">
+        {season && <span className="arc-live"><span/> {season.day} · LVL {season.metrics.level}</span>}
+        <button className="arc-outline-button" onClick={()=>{setPlaying(false);setSetup(true);}}><Plus size={15}/> New basket</button>
+      </div>
+    </header>
+    {setup || !season ? <main className="port-setup">
+      <span className="arc-upper">MULTI-ASSET CHALLENGE</span>
+      <h1>One portfolio. <em>Multiple markets.</em></h1>
+      <p>Choose 2 to 5 instruments. All positions use a shared $100,000 USD account. Prices come from synchronized historical daily candles, with no future information revealed.</p>
+      <div className="port-picker">
+        <div className="port-selected"><strong>YOUR BASKET ({basket.length}/5)</strong>
+          <div>{basket.map(id=><button key={id} onClick={()=>setBasket(prev=>prev.filter(x=>x!==id))}>{assetName(id)} ×</button>)}</div>
+        </div>
+        <label htmlFor="port-search"><Search size={15}/> Search instruments</label>
+        <input id="port-search" type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Apple, SPY, BTC ..."/>
+        <div className="port-catalog">{filtered.map(a=><button key={a.id}
+          className={basket.includes(a.id)?"selected":""}
+          disabled={!basket.includes(a.id)&&basket.length>=5}
+          onClick={()=>setBasket(prev=>prev.includes(a.id)?prev.filter(x=>x!==a.id):[...prev,a.id])}>
+          <strong>{a.symbol}</strong><small>{a.name}</small><span>{basket.includes(a.id)?"Added":"+"}</span>
+        </button>)}</div>
+        <div className="port-settings">
+          <label>Historical range<select value={period} onChange={e=>setPeriod(e.target.value)}>{HISTORY_OPTIONS.map(v=><option key={v} value={v}>{v==="MAX"?"Maximum available":v}</option>)}</select></label>
+          <label>Start date (optional)<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
+        </div>
+        {error&&<p className="arc-error" role="alert">{error}</p>}
+        <button className="arc-cta" disabled={busy||basket.length<2}
+          onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate))}>
+          <Play size={16}/> {busy?"Loading real historical data...":"Start portfolio season"}
+        </button>
+        {saved.length>0 && <label>Resume saved season<select defaultValue="" onChange={e=>{
+          if(e.target.value) void update(()=>loadPortfolioSeason(e.target.value));
+        }}><option value="">Select a saved basket</option>{saved.map(x=>
+          <option key={x.id} value={x.id}>{x.asset_ids.map(assetName).join(" + ")} · {x.period}</option>)}</select></label>}
+      </div>
+    </main> : <main className="port-layout">
+      <section className="port-main">
+        <div className="port-metrics">
+          <div><small>EQUITY</small><strong>{formatMoney(season.metrics.equity)}</strong></div>
+          <div><small>CASH</small><strong>{formatMoney(season.metrics.cash)}</strong></div>
+          <div><small>YOUR RETURN</small><strong className={season.metrics.return_pct>=0?"positive":"negative"}>{season.metrics.return_pct.toFixed(2)}%</strong></div>
+          <div><small>EQUAL-WEIGHT HOLD</small><strong>{season.metrics.equal_weight_hold_pct.toFixed(2)}%</strong></div>
+        </div>
+        <div className="port-toolbar">
+          <span><Clock3 size={15}/> {season.day} · Step {season.current_step+1}/{season.total_steps}</span>
+          <div><button disabled={busy||playing||season.finished} onClick={()=>advance(1)}><ChevronRight size={16}/> 1 day</button>
+            <button disabled={busy||playing||season.finished} onClick={()=>advance(5)}><FastForward size={15}/> +5</button>
+            <button disabled={busy||playing||season.finished} onClick={()=>advance(20)}><FastForward size={15}/> +20</button>
+            <button disabled={busy||playing||season.finished||!season.strategy} onClick={()=>advance(100,true)}>Next bot</button>
+            <button disabled={busy||season.finished} onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={15}/>:<Play size={15}/>} {playing?"Pause":"Autoplay"}</button>
+          </div>
+        </div>
+        <div className="port-asset-tabs">{season.asset_ids.map(id=><button key={id}
+          className={id===focused?"active":""} onClick={()=>setFocused(id)}>
+          <strong>{assetName(id)}</strong><span>{formatPrice(season.positions.find(p=>p.asset_id===id)?.last_price??0,2)}</span>
+        </button>)}</div>
+        <div className="port-chart-wrap">
+          <div className="arc-box-head"><div><BarChart3 size={17}/><strong>{assetName(focused)} · {chosenAsset.name}</strong>
+            <span className="arc-tag">FUTURE HIDDEN</span></div>
+            <div className="arc-chart-view"><button className={chartStyle==="candles"?"selected":""} onClick={()=>setChartStyle("candles")}>Candles</button>
+              <button className={chartStyle==="line"?"selected":""} onClick={()=>setChartStyle("line")}>Line</button></div>
+          </div>
+          <div className="arc-chart-wrap">{bars.length>0&&
+            <PriceChart asset={chosenAsset} range="1Y" style={chartStyle} bars={bars} visibleWindow={110}/>}</div>
+          <div className="port-source">{season.sources[focused]} · Last actual bar: {last?fmtTime(last.time):"none"}
+            {current&&!current.has_bar_today&&<span> · Market closed on {season.day}, no orders filled for this symbol</span>}</div>
+        </div>
+        <div className="port-positions">
+          <div className="arc-box-head"><div><Wallet size={17}/><strong>Portfolio positions</strong></div><span className="arc-tag">SHARED USD ACCOUNT</span></div>
+          <div className="arc-table-scroll"><table><thead><tr><th>SYMBOL</th><th>QTY</th><th>AVG COST</th><th>MARKET VALUE</th><th>UNREALIZED P&L</th><th>MARK DATE</th></tr></thead><tbody>
+            {positions.map(p=><tr key={p.asset_id} onClick={()=>setFocused(p.asset_id)} className="port-clickrow">
+              <td>{assetName(p.asset_id)}</td><td>{fmtQty(p.quantity)}</td><td>{formatMoney(p.average_cost)}</td>
+              <td>{formatMoney(p.market_value)}</td><td className={(p.unrealized_pnl??0)>=0?"positive":"negative"}>{formatMoney(p.unrealized_pnl??0)}</td><td>{p.mark_day??"None"}</td>
+            </tr>)}
+          </tbody></table></div>
+        </div>
+        <div className="port-strategy">
+          <div className="arc-box-head"><div><Bot size={17}/><strong>Cross-asset strategy lab</strong></div><span className="arc-tag">SAFE RULE LANGUAGE</span></div>
+          <p>A signal from one instrument can trade another. Orders queue after the signal candle closes and fill no earlier than the target symbol's next actual session.</p>
+          <div className="port-rule-row">
+            <label>Signal symbol<select value={source} onChange={e=>setSource(e.target.value)}>{season.asset_ids.map(id=><option key={id} value={id}>{assetName(id)}</option>)}</select></label>
+            <label>Trade symbol<select value={target} onChange={e=>setTarget(e.target.value)}>{season.asset_ids.map(id=><option key={id} value={id}>{assetName(id)}</option>)}</select></label>
+            <button onClick={addRule}><Plus size={16}/> Add crossover rule</button>
+          </div>
+          <textarea aria-label="Cross-asset strategy rules" rows={5} spellCheck={false} value={strategy}
+            onChange={e=>setStrategy(e.target.value)} placeholder="WHEN spy SMA(10) CROSSES ABOVE SMA(30) BUY 25% qqq"/>
+          <div className="port-rule-row"><button onClick={()=>setStrategy(
+            `WHEN ${source} SMA(10) CROSSES ABOVE SMA(30) BUY 25% ${target}\nWHEN ${source} SMA(10) CROSSES BELOW SMA(30) SELL 100% ${target}`
+          )}>Use crossover template</button>
+            <button disabled={busy||playing||strategy===season.strategy} onClick={()=>void update(()=>savePortfolioStrategy(season.id,strategy))}><Save size={16}/> Save & arm bot</button>
+          </div>
+        </div>
+        <div className="port-history">
+          <div className="arc-box-head"><div><Clock3 size={17}/><strong>Trade journal</strong></div><span>{season.fills.length} recent fills</span></div>
+          <div className="arc-table-scroll"><table><thead><tr><th>DATE</th><th>SYMBOL</th><th>SIDE</th><th>QTY</th><th>PRICE</th><th>FEE</th><th>ENGINE</th></tr></thead><tbody>
+            {season.fills.slice(0,30).map((fill,i)=><tr key={fill.order_id+"-"+i}>
+              <td>{fmtTime(fill.time)}</td><td>{assetName(fill.asset_id)}</td><td className={fill.side==="buy"?"positive":"negative"}>{fill.side.toUpperCase()}</td>
+              <td>{fmtQty(fill.quantity)}</td><td>{formatMoney(fill.price)}</td><td>{formatMoney(fill.fee)}</td><td>{fill.source}</td>
+            </tr>)}
+          </tbody></table></div>
+        </div>
+      </section>
+      <aside className="port-side">
+        <section className="port-trade">
+          <div className="arc-box-head"><div><ShoppingCart size={17}/><strong>Trade {assetName(focused)}</strong></div></div>
+          <form onSubmit={trade}>
+            <div className="port-toggle"><button type="button" className={side==="buy"?"active-buy":""} onClick={()=>setSide("buy")}><ArrowUpRight size={15}/> Buy</button>
+              <button type="button" className={side==="sell"?"active-sell":""} onClick={()=>setSide("sell")}><ArrowDownRight size={15}/> Sell</button></div>
+            <label>Order type<select value={kind} onChange={e=>setKind(e.target.value as typeof kind)}>
+              <option value="market">Market · next available open</option><option value="limit">Limit</option><option value="stop">Stop</option>
+            </select></label>
+            {kind!=="market"&&<label>Trigger price<input type="number" min="0.000001" step="any" required value={trigger} onChange={e=>setTrigger(e.target.value)}/></label>}
+            <label>Size type<select value={sizeType} onChange={e=>setSizeType(e.target.value as typeof sizeType)}><option value="percent">% of cash / holdings</option><option value="units">Exact units</option></select></label>
+            <label>Quantity<input type="number" min="0.00000001" step="any" required value={size} onChange={e=>setSize(e.target.value)}/></label>
+            {sizeType==="percent"&&<div className="port-percent">{[10,25,50,100].map(n=><button key={n} type="button" onClick={()=>setSize(String(n))}>{n}%</button>)}</div>}
+            <p>Held: {fmtQty(current?.quantity??0)} · Cash: {formatMoney(season.metrics.cash)}</p>
+            <button className="port-submit" disabled={busy||playing||season.finished} type="submit">{side==="buy"?"Queue Buy":"Queue Sell"}</button>
+          </form>
+        </section>
+        <section className="port-risk">
+          <div className="arc-box-head"><div><ShieldCheck size={17}/><strong>Portfolio risk controls</strong></div></div>
+          <p>Applies the same percentages to each held symbol using its own average cost.</p>
+          <label>Stop loss %<input type="number" value={stop} min="0" max="75" step="0.1" onChange={e=>setStop(e.target.value)}/></label>
+          <label>Take profit %<input type="number" value={take} min="0" max="75" step="0.1" onChange={e=>setTake(e.target.value)}/></label>
+          <button disabled={busy||playing} onClick={()=>void update(()=>savePortfolioRisk(season.id,Number(stop),Number(take)))}><ShieldCheck size={15}/> Apply risk limits</button>
+        </section>
+        <section className="port-queue">
+          <div className="arc-box-head"><div><Clock3 size={17}/><strong>Pending orders</strong></div><span>{season.orders.length}</span></div>
+          {season.orders.length===0?<p>No pending orders</p>:season.orders.map(o=><div className="port-queue-item" key={o.id}>
+            <span>{assetName(o.asset_id)} {o.side.toUpperCase()} {o.size}{o.size_type==="percent"?"%":""} · {o.kind} {o.source==="bot"?"(bot)":""}</span>
+            <button disabled={busy||playing} title="Cancel order" onClick={()=>void update(()=>cancelPortfolioOrder(season.id,o.id))}><Trash2 size={15}/></button>
+          </div>)}
+        </section>
+        {notice&&<div className="arc-note" role="status"><Check size={15}/>{notice}<button onClick={()=>setNotice("")}>×</button></div>}
+        {error&&<div className="arc-error" role="alert">{error}</div>}
+        <p className="port-disclaimer">{season.execution_notice}</p>
+      </aside>
+    </main>}
+  </div>;
+}
