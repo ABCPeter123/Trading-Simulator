@@ -6,7 +6,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .assets import get_instrument, list_instruments
+from .assets import get_instrument, list_instruments, search_yahoo, import_yahoo
 from .ledger import account_snapshot, reset_account, submit_order
 from .market import history, quote, market_open
 from .strategy import sma_backtest
@@ -138,3 +138,14 @@ class ArcadeRisk(BaseModel):
 @app.put("/api/arcade/{run_id}/risk")
 def arcade_risk(run_id: str, risk: ArcadeRisk):
     return set_risk(run_id, risk.stop_loss_pct, risk.take_profit_pct)
+
+@app.get("/api/instruments/discover")
+def discover_instruments(search: str = Query(..., min_length=2, max_length=60)):
+    return search_yahoo(search)
+
+class ImportTicker(BaseModel):
+    symbol: str = Field(min_length=1, max_length=20)
+
+@app.post("/api/instruments/import")
+def add_instrument(request: ImportTicker):
+    return import_yahoo(request.symbol)
