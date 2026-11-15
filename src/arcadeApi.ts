@@ -96,3 +96,13 @@ export const gameValidateCode = (code: string) =>
   request<{valid: boolean; rules: {line: number; left: string; operator: string; right: string; side: string; percent: number}[]}>(
     "/arcade/validate", {method: "POST", body: JSON.stringify({code})},
   );
+
+export interface DiscoveredInstrument {
+  symbol: string; name: string; asset_class: string; exchange: string; currency: string;
+}
+export const gameDiscover = (query: string) =>
+  request<DiscoveredInstrument[]>(`/instruments/discover?search=${encodeURIComponent(query)}`);
+export const gameImportTicker = (symbol: string) =>
+  request<CatalogInstrument>("/instruments/import", {
+    method:"POST", body:JSON.stringify({symbol}),
+  });
