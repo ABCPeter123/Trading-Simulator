@@ -1,106 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  ArrowDownLeft,
-  ArrowRight,
-  ArrowUpRight,
-  BarChart3,
-  CandlestickChart,
-  Check,
-  ChevronDown,
-  CircleHelp,
-  Clock3,
-  Database,
-  LineChart,
-  RotateCcw,
-  Search,
-  ShieldCheck,
-  Wallet,
-  X,
+  Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, BarChart3, CandlestickChart,
+  Check, ChevronDown, Clock3, Database, FastForward, LineChart, PauseCircle,
+  Play, RefreshCw, RotateCcw, Search, ShieldCheck, Wallet, X,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
-import {
-  ASSET_CLASSES,
-  ASSETS,
-  createDemoSeries,
-  formatMoney,
-  formatPrice,
-  INITIAL_CASH,
-} from "./data/demoMarket";
-import type { Asset, AssetClass, ChartStyle, DemoAccount, DemoTrade, TimeRange, TradeSide } from "./types";
+import { ASSET_CLASSES, ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
+import { getAccount, getBacktest, getHistory, getQuote, request, resetAccount, sendOrder, supportsCashTrading } from "./api";
+import type { AccountResponse, BacktestResponse, HistoryResponse, MarketBar, QuoteResponse } from "./api";
+import { advanceReplay, NEW_REPLAY, replayFee, replayFillPrice, replayStartIndex } from "./replay";
+import type { ReplayAccount } from "./replay";
+import type { Asset, AssetClass, ChartStyle, TimeRange, TradeSide } from "./types";
 
-const STORAGE_KEY = "trade-simulator-demo-account-v1";
 const RANGES: TimeRange[] = ["1D", "1W", "1M", "3M", "1Y"];
-const DEFAULT_ACCOUNT: DemoAccount = { cash: INITIAL_CASH, trades: [] };
-
-function getInitialAccount(): DemoAccount {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_ACCOUNT;
-    const value: unknown = JSON.parse(raw);
-    if (
-      typeof value === "object" && value !== null &&
-      "cash" in value && typeof value.cash === "number" && Number.isFinite(value.cash) && value.cash >= 0 &&
-      "trades" in value && Array.isArray(value.trades) &&
-      value.trades.every((trade: unknown) =>
-        typeof trade === "object" && trade !== null &&
-        "assetId" in trade && typeof trade.assetId === "string" && ASSETS.some((asset) => asset.id === trade.assetId) &&
-        "side" in trade && (trade.side === "buy" || trade.side === "sell") &&
-        "quantity" in trade && typeof trade.quantity === "number" && Number.isFinite(trade.quantity) && trade.quantity > 0 &&
-        "price" in trade && typeof trade.price === "number" && Number.isFinite(trade.price) && trade.price > 0 &&
-        "id" in trade && typeof trade.id === "string" &&
-        "createdAt" in trade && typeof trade.createdAt === "string"
-      )
-    ) {
-      return value as DemoAccount;
-    }
-  } catch {
-    // Fall back to a clean local demo if browser storage is unavailable.
-  }
-  return DEFAULT_ACCOUNT;
-}
-
-interface Position {
-  asset: Asset;
-  quantity: number;
-  averageCost: number;
-  marketValue: number;
-  unrealizedPnl: number;
-}
-
-function positionsFromTrades(trades: DemoTrade[]): Position[] {
-  const holdings = new Map<string, { quantity: number; averageCost: number }>();
-  for (const trade of trades) {
-    const prior = holdings.get(trade.assetId) ?? { quantity: 0, averageCost: 0 };
-    if (trade.side === "buy") {
-      const quantity = prior.quantity + trade.quantity;
-      holdings.set(trade.assetId, {
-        quantity,
-        averageCost: ((prior.quantity * prior.averageCost) + trade.quantity * trade.price) / quantity,
-      });
-    } else {
-      holdings.set(trade.assetId, {
-        quantity: Math.max(0, prior.quantity - trade.quantity),
-        averageCost: prior.averageCost,
-      });
-    }
-  }
-  return [...holdings.entries()].flatMap(([id, holding]) => {
-    const asset = ASSETS.find((item) => item.id === id);
-    if (!asset || holding.quantity < 1e-9) return [];
-    return [{
-      asset,
-      quantity: holding.quantity,
-      averageCost: holding.averageCost,
-      marketValue: holding.quantity * asset.referencePrice,
-      unrealizedPnl: holding.quantity * (asset.referencePrice - holding.averageCost),
-    }];
-  });
-}
-
-function numberString(number: number) {
-  return Number(number.toFixed(8)).toLocaleString("en-US", { maximumFractionDigits: 8 });
-}
+const formatQuantity = (n: number) => n.toLocaleString("en-US", {maximumFractionDigits: 8});
+const dt = (timestamp: number | string) =>
+  new Date(typeof timestamp === "number" ? timestamp * 1000 : timestamp).toLocaleString();
+const errorMessage = (err: unknown) => err instanceof Error ? err.message : "Unexpected error.";
+const initialCash = 100_000;
 
 function App() {
   const [assetClass, setAssetClass] = useState<AssetClass>("Stocks");
@@ -108,290 +25,414 @@ function App() {
   const [search, setSearch] = useState("");
   const [range, setRange] = useState<TimeRange>("1M");
   const [chartStyle, setChartStyle] = useState<ChartStyle>("candles");
+  const [mode, setMode] = useState<"market" | "replay">("market");
   const [side, setSide] = useState<TradeSide>("buy");
   const [quantity, setQuantity] = useState("1");
-  const [account, setAccount] = useState<DemoAccount>(getInitialAccount);
+  const [history, setHistory] = useState<HistoryResponse | null>(null);
+  const [quote, setQuote] = useState<QuoteResponse | null>(null);
+  const [lastQuotes, setLastQuotes] = useState<Record<string, QuoteResponse>>({});
+  const [account, setAccount] = useState<AccountResponse | null>(null);
+  const [backendOnline, setBackendOnline] = useState(false);
+  const [loadingMarket, setLoadingMarket] = useState(false);
+  const [marketError, setMarketError] = useState("");
+  const [tradeError, setTradeError] = useState("");
   const [notice, setNotice] = useState("");
-  const [formError, setFormError] = useState("");
+  const [placing, setPlacing] = useState(false);
   const [activePanel, setActivePanel] = useState<"positions" | "history">("positions");
-
-  const selectedAsset = ASSETS.find((asset) => asset.id === selectedId) ?? ASSETS[0];
-  const market = useMemo(() => createDemoSeries(selectedAsset, range), [selectedAsset, range]);
-  const watchlist = ASSETS.filter(
-    (asset) =>
-      asset.assetClass === assetClass &&
-      `${asset.symbol} ${asset.name}`.toLowerCase().includes(search.trim().toLowerCase()),
-  );
-  const snapshots = useMemo(
-    () => Object.fromEntries(ASSETS.map((asset) => [asset.id, createDemoSeries(asset, "1D").changePct])),
-    [],
-  );
-  const positions = useMemo(() => positionsFromTrades(account.trades), [account.trades]);
-  const exposure = positions.reduce((sum, position) => sum + position.marketValue, 0);
-  const equity = account.cash + exposure;
-  const unrealizedPnl = positions.reduce((sum, position) => sum + position.unrealizedPnl, 0);
-  const heldQuantity = positions.find((position) => position.asset.id === selectedId)?.quantity ?? 0;
-  const bid = selectedAsset.referencePrice * (1 - selectedAsset.spreadBps / 20_000);
-  const ask = selectedAsset.referencePrice * (1 + selectedAsset.spreadBps / 20_000);
-  const fill = side === "buy" ? ask : bid;
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [replayAccount, setReplayAccount] = useState<ReplayAccount>({...NEW_REPLAY});
+  const [showBacktest, setShowBacktest] = useState(false);
+  const [fast, setFast] = useState("10");
+  const [slow, setSlow] = useState("30");
+  const [backtest, setBacktest] = useState<BacktestResponse | null>(null);
+  const [backtestError, setBacktestError] = useState("");
+  const [runningBacktest, setRunningBacktest] = useState(false);
+  const selectedAsset = ASSETS.find(asset => asset.id === selectedId) ?? ASSETS[0];
+  const supported = supportsCashTrading(selectedAsset.id, selectedAsset.assetClass);
+  const allBars = history?.asset_id === selectedId ? history.bars : [];
+  const visibleBars = useMemo(() => mode === "replay" ? allBars.slice(0, replayIndex + 1) : allBars, [mode, allBars, replayIndex]);
+  const latestCandle = visibleBars.at(-1);
+  const previousCandle = visibleBars.length > 1 ? visibleBars[visibleBars.length - 2] : undefined;
+  const currency = history?.currency ?? (selectedId === "vfv" ? "CAD" : "USD");
+  const snapshot = mode === "replay" ? latestCandle?.close : quote?.asset_id === selectedId ? quote.price : latestCandle?.close;
+  const change = latestCandle && previousCandle ? latestCandle.close - previousCandle.close : null;
+  const changePct = change !== null && previousCandle ? (change / previousCandle.close) * 100 : null;
+  const high = visibleBars.length ? Math.max(...visibleBars.map(bar => bar.high)) : null;
+  const low = visibleBars.length ? Math.min(...visibleBars.map(bar => bar.low)) : null;
+  const quoteReady = quote?.asset_id === selectedId && quote.tradable;
+  const selectedQuote = lastQuotes[selectedId];
   const parsedQuantity = Number(quantity);
-  const estimatedCost = Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity * fill : 0;
-  const stepsRequireWhole = selectedAsset.assetClass === "Futures" || selectedAsset.assetClass === "Options";
+  const wholeUnits = selectedAsset.assetClass === "Stocks" || selectedAsset.assetClass === "ETFs" || selectedAsset.assetClass === "Options" || selectedAsset.assetClass === "Futures";
+  const validQuantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0 && parsedQuantity <= 100_000_000 &&
+    (!wholeUnits || Number.isInteger(parsedQuantity)) && (!quantity.includes(".") || quantity.split(".")[1].length <= 8);
+  const indicativeFill = mode === "replay"
+    ? (latestCandle && replayFillPrice(selectedAsset, side, latestCandle.close))
+    : quote && (quote.bid !== null && quote.ask !== null
+      ? (side === "buy" ? quote.ask : quote.bid) * (side === "buy" ? 1.0002 : 0.9998)
+      : quote.price * (side === "buy" ? 1 + quote.spread_bps / 20000 + 0.0002 : 1 - quote.spread_bps / 20000 - 0.0002));
+  const estimate = validQuantity && indicativeFill ? parsedQuantity * indicativeFill : 0;
+
+  const loadAccount = useCallback(async () => {
+    try { setAccount(await getAccount()); setBackendOnline(true); }
+    catch (error) { setBackendOnline(false); setTradeError(errorMessage(error)); }
+  }, []);
+
+  useEffect(() => { void loadAccount(); }, [loadAccount]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(account));
-    } catch {
-      // Trading UI remains usable if storage is disabled.
-    }
-  }, [account]);
-
-  function changeAssetClass(next: AssetClass) {
-    setAssetClass(next);
-    setSearch("");
-    setSelectedId(ASSETS.find((asset) => asset.assetClass === next)?.id ?? "aapl");
-    setQuantity("1");
-    setFormError("");
-  }
+    let cancelled = false;
+    setLoadingMarket(true);
+    setMarketError("");
+    setHistory(null);
+    setQuote(null);
+    setBacktest(null);
+    setReplayAccount({...NEW_REPLAY});
+    const load = async () => {
+      const [h, q] = await Promise.allSettled([getHistory(selectedId, range), getQuote(selectedId)]);
+      if (cancelled) return;
+      if (h.status === "fulfilled") {
+        setHistory(h.value);
+        setReplayIndex(replayStartIndex(h.value.bars.length));
+        setBackendOnline(true);
+      } else setMarketError(errorMessage(h.reason));
+      if (q.status === "fulfilled") {
+        setQuote(q.value);
+        setLastQuotes(prev => ({...prev, [selectedId]: q.value}));
+        setBackendOnline(true);
+      } else if (h.status !== "fulfilled") setMarketError(errorMessage(q.reason));
+      setLoadingMarket(false);
+    };
+    void load();
+    const poll = setInterval(async () => {
+      try {
+        const next = await getQuote(selectedId);
+        if (!cancelled) {
+          setQuote(next);
+          setLastQuotes(prev => ({...prev, [selectedId]: next}));
+        }
+      } catch {
+        if (!cancelled) setQuote(null);
+      }
+    }, 45_000);
+    return () => { cancelled = true; clearInterval(poll); };
+  }, [selectedId, range]);
 
   function selectAsset(asset: Asset) {
     setSelectedId(asset.id);
     setQuantity("1");
-    setFormError("");
+    setTradeError("");
+    setNotice("");
   }
-
-  function placeDemoOrder(event: React.FormEvent<HTMLFormElement>) {
+  function changeClass(next: AssetClass) {
+    setAssetClass(next);
+    setSearch("");
+    selectAsset(ASSETS.find(asset => asset.assetClass === next) ?? ASSETS[0]);
+  }
+  function changeMode(next: "market" | "replay") {
+    setMode(next);
+    setTradeError("");
+    setNotice("");
+    if (next === "replay") {
+      setReplayIndex(replayStartIndex(allBars.length));
+      setReplayAccount({...NEW_REPLAY});
+    }
+  }
+  function resetReplay() {
+    setReplayIndex(replayStartIndex(allBars.length));
+    setReplayAccount({...NEW_REPLAY});
+    setNotice("Replay reset. Previous replay orders were cleared.");
+    setTradeError("");
+  }
+  function stepReplay(count = 1) {
+    if (!allBars.length || replayIndex >= allBars.length - 1) return;
+    let next = replayAccount;
+    let message: string | undefined;
+    const end = Math.min(replayIndex + count, allBars.length - 1);
+    for (let i = replayIndex + 1; i <= end; i++) {
+      const result = advanceReplay(next, allBars[i], selectedAsset);
+      next = result.account;
+      if (result.message) message = result.message;
+    }
+    setReplayIndex(end);
+    setReplayAccount(next);
+    if (message) setNotice(message);
+    setTradeError("");
+  }
+  async function placeOrder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFormError("");
-    if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0 || (stepsRequireWhole && !Number.isInteger(parsedQuantity))) {
-      setFormError(stepsRequireWhole ? "Enter a positive whole number of demo contracts." : "Enter a valid positive quantity.");
+    setTradeError("");
+    if (!validQuantity) { setTradeError(wholeUnits ? "Enter a positive whole-unit quantity." : "Enter a positive quantity with at most 8 decimals."); return; }
+    if (!supported) { setTradeError("This asset is chart-only until its contract and currency rules are implemented."); return; }
+    if (mode === "replay") {
+      if (!allBars.length || replayIndex >= allBars.length - 1) {setTradeError("Replay is at the final candle."); return;}
+      if (replayAccount.pending) {setTradeError("Step forward to fill the existing pending order first."); return;}
+      if (side === "sell" && parsedQuantity > replayAccount.quantity + 1e-9) {setTradeError("Not enough replay holdings."); return;}
+      // Do not inspect the next bar to fill this order. It fills only when the user advances.
+      setReplayAccount(prev => ({...prev, pending: {side, quantity: parsedQuantity}}));
+      setNotice(`Replay ${side} queued. Advance one candle to simulate execution at the next open.`);
       return;
     }
-    if (side === "buy" && estimatedCost > account.cash + 1e-8) {
-      setFormError("Insufficient demo cash for this order.");
+    if (!quoteReady) {setTradeError(quote?.block_reason ?? "No fresh tradable quote available."); return;}
+    setPlacing(true);
+    try {
+      const response = await sendOrder(selectedId, side, quantity);
+      setAccount(response.account);
+      setNotice(`Paper ${side} filled: ${formatQuantity(parsedQuantity)} ${selectedAsset.symbol} at ${formatPrice(response.fill.price, selectedAsset.decimals)}. Fee: ${formatMoney(response.fill.fee)}.`);
+      setActivePanel("history");
+      setQuantity("1");
+    } catch (error) {setTradeError(errorMessage(error));}
+    finally {setPlacing(false);}
+  }
+  async function resetPortfolio() {
+    if (mode === "replay") {resetReplay(); return;}
+    if (!window.confirm("Delete all local paper orders and reset to $100,000?")) return;
+    try {
+      setAccount(await resetAccount());
+      setNotice("Local paper account reset.");
+      setTradeError("");
+    } catch (error) {setTradeError(errorMessage(error));}
+  }
+  async function runBacktest() {
+    const f = Number(fast), s = Number(slow);
+    if (!Number.isInteger(f) || !Number.isInteger(s) || f < 2 || f >= s || s > 100) {
+      setBacktestError("Use whole numbers where 2 <= fast < slow <= 100.");
       return;
     }
-    if (side === "sell" && parsedQuantity > heldQuantity + 1e-8) {
-      setFormError("You can only sell demo units you already hold.");
-      return;
-    }
-    const trade: DemoTrade = {
-      id: crypto.randomUUID(),
-      assetId: selectedAsset.id,
-      side,
-      quantity: parsedQuantity,
-      price: fill,
-      createdAt: new Date().toISOString(),
-    };
-    setAccount((current) => ({
-      cash: Math.max(0, current.cash + (side === "buy" ? -estimatedCost : estimatedCost)),
-      trades: [...current.trades, trade],
-    }));
-    setNotice(`Demo ${side} filled: ${numberString(parsedQuantity)} ${selectedAsset.symbol} @ ${formatPrice(fill, selectedAsset.decimals)}.`);
-    setActivePanel("positions");
+    setRunningBacktest(true);
+    setBacktestError("");
+    setBacktest(null);
+    try {setBacktest(await getBacktest(selectedId, f, s));}
+    catch (error) {setBacktestError(errorMessage(error));}
+    finally {setRunningBacktest(false);}
   }
 
-  function resetDemo() {
-    if (!window.confirm("Reset your demo portfolio and clear all saved demo trades in this browser?")) return;
-    setAccount({ cash: INITIAL_CASH, trades: [] });
-    setNotice("Demo portfolio reset to $100,000.");
-    setFormError("");
-  }
+  const held = mode === "replay" ? replayAccount.quantity : (account?.positions.find(position => position.asset_id === selectedId)?.quantity ?? 0);
+  const replayExposure = replayAccount.quantity * (latestCandle?.close ?? 0);
+  const totalCash = mode === "replay" ? replayAccount.cash : account?.cash;
+  const equity = mode === "replay" ? replayAccount.cash + replayExposure : account?.equity;
+  const exposure = mode === "replay" ? replayExposure : account?.positions.reduce((sum, position) => sum + (position.market_value ?? 0), 0);
+  const unrealized = mode === "replay" ? replayAccount.quantity * ((latestCandle?.close ?? 0) - replayAccount.averageCost) : account?.unrealized_pnl;
+  const openCount = mode === "replay" ? (replayAccount.quantity > 1e-9 ? 1 : 0) : (account?.positions.length ?? 0);
+  const tradeCount = mode === "replay" ? replayAccount.fills.length : (account?.fills.length ?? 0);
+  const canTrade = supported && validQuantity && (mode === "replay" ? allBars.length > 2 && replayIndex < allBars.length - 1 && !replayAccount.pending : !!quoteReady);
+
+  const watchlist = ASSETS.filter(asset => asset.assetClass === assetClass &&
+    `${asset.symbol} ${asset.name}`.toLowerCase().includes(search.trim().toLowerCase()));
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark"><BarChart3 size={21} strokeWidth={2.5} /></span>
+        <div className="brand"><span className="brand-mark"><BarChart3 size={21} strokeWidth={2.5}/></span>
           <div className="brand-name">TRADING<span>SIM</span><small>TERMINAL</small></div>
         </div>
-        <div className="topbar-divider" />
-        <div className="topnav">
-          <span className="nav-active"><Activity size={15} /> Workspace</span>
-          <button type="button" onClick={() => document.getElementById("portfolio-panel")?.scrollIntoView({ behavior: "smooth" })}><Wallet size={15} /> Portfolio</button>
-        </div>
+        <div className="topbar-divider"/>
+        <nav className="topnav"><span className="nav-active"><Activity size={15}/> Workspace</span>
+          <button type="button" onClick={() => document.getElementById("portfolio-panel")?.scrollIntoView({behavior:"smooth"})}><Wallet size={15}/> Portfolio</button>
+        </nav>
         <div className="topbar-right">
-          <span className="local-status"><span className="local-dot" /> LOCAL MODE</span>
-          <span className="topbar-balance"><span>ACCOUNT EQUITY</span><strong>{formatMoney(equity)}</strong></span>
-          <button type="button" className="reset-button" onClick={resetDemo} title="Reset demo portfolio"><RotateCcw size={15} /><span>Reset</span></button>
+          <span className="local-status"><span className={backendOnline ? "local-dot" : "offline-dot"}/>{backendOnline ? "LOCAL API ONLINE" : "API OFFLINE"}</span>
+          <span className="topbar-balance"><span>{mode === "replay" ? "REPLAY EQUITY" : "PAPER EQUITY"}</span><strong>{equity == null ? "Unavailable" : formatMoney(equity)}</strong></span>
+          <button type="button" className="reset-button" onClick={() => void resetPortfolio()}><RotateCcw size={15}/><span>Reset</span></button>
         </div>
       </header>
-
-      <div className="notice-strip">
-        <div><Database size={14} /><strong>SANDBOX DATA</strong><span>All charts, quotes, spreads, and fills are synthetic. No live feed connected.</span></div>
-        <span className="notice-right">LOCAL DEMONSTRATION · USD</span>
-      </div>
+      <div className="notice-strip"><div>
+        <Database size={14}/><strong>{mode === "replay" ? "HISTORICAL REPLAY" : "REAL MARKET DATA"}</strong>
+        <span>{mode === "replay" ? "Orders fill only on the next visible candle's open." : "Public market feeds may be delayed. Fills are modeled, never actual exchange executions."}</span>
+      </div><span className="notice-right">LOCAL ACCOUNT · USD</span></div>
 
       <main className="workspace">
         <aside className="watchlist-panel">
-          <div className="watchlist-heading">
-            <div><span className="eyebrow">MARKET EXPLORER</span><h2>Watchlist</h2></div>
-            <span className="subtle-counter">{ASSETS.length} assets</span>
-          </div>
-          <label className="search-field">
-            <Search size={16} />
-            <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search symbols..." aria-label="Search symbols" />
-            <span>⌕</span>
+          <div className="watchlist-heading"><div><span className="eyebrow">MARKET EXPLORER</span><h2>Watchlist</h2></div><span className="subtle-counter">{ASSETS.length} assets</span></div>
+          <label className="search-field"><Search size={16}/>
+            <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbols..." aria-label="Search symbols"/>
           </label>
           <div className="category-tabs" role="tablist" aria-label="Asset classes">
-            {ASSET_CLASSES.map((group) =>
-              <button key={group} role="tab" aria-selected={assetClass === group} className={assetClass === group ? "category-active" : ""} onClick={() => changeAssetClass(group)}>{group}</button>,
-            )}
+            {ASSET_CLASSES.map(group =>
+              <button key={group} type="button" role="tab" aria-selected={assetClass===group} className={assetClass===group?"category-active":""} onClick={() => changeClass(group)}>{group}</button>)}
           </div>
-          <div className="watchlist-table-label"><span>SYMBOL / NAME</span><span>LAST / CHANGE</span></div>
+          <div className="watchlist-table-label"><span>SYMBOL / NAME</span><span>LAST KNOWN / STATUS</span></div>
           <div className="watchlist-items">
-            {watchlist.length === 0 ? <div className="watch-empty">No symbols match your search.</div> : watchlist.map((asset) => {
-              const change = snapshots[asset.id];
-              return (
-                <button type="button" key={asset.id} className={`asset-item ${selectedId === asset.id ? "asset-selected" : ""}`} onClick={() => selectAsset(asset)}>
-                  <span className="asset-icon" style={{ "--asset-accent": asset.accent } as React.CSSProperties}>{asset.symbol.slice(0, 1)}</span>
-                  <span className="asset-details"><strong>{asset.symbol}</strong><small>{asset.name}</small></span>
-                  <span className="asset-quote"><strong>{formatPrice(asset.referencePrice, asset.decimals)}</strong><small className={change >= 0 ? "positive" : "negative"}>{change >= 0 ? "+" : ""}{change.toFixed(2)}%</small></span>
-                </button>
-              );
+            {watchlist.length === 0 ? <div className="watch-empty">No symbols match your search.</div> : watchlist.map(asset => {
+              const q = lastQuotes[asset.id];
+              return <button type="button" key={asset.id} className={`asset-item ${selectedId === asset.id ? "asset-selected" : ""}`} onClick={() => selectAsset(asset)}>
+                <span className="asset-icon" style={{"--asset-accent":asset.accent} as React.CSSProperties}>{asset.symbol.slice(0,1)}</span>
+                <span className="asset-details"><strong>{asset.symbol}</strong><small>{asset.name}</small></span>
+                <span className="asset-quote"><strong>{q ? formatPrice(q.price, asset.decimals) : "—"}</strong><small className={q?.tradable ? "positive" : ""}>{q ? (q.tradable ? "Quote ready" : q.block_reason ?? "Indicative") : "Not loaded"}</small></span>
+              </button>;
             })}
           </div>
-          <div className="sidebar-bottom">
-            <div className="sidebar-info-icon"><ShieldCheck size={18} /></div>
-            <div><strong>Safe simulation</strong><span>No real orders or financial accounts.</span></div>
-          </div>
+          <div className="sidebar-bottom"><div className="sidebar-info-icon"><ShieldCheck size={18}/></div><div><strong>Local paper account</strong><span>No broker connection or real orders.</span></div></div>
         </aside>
 
         <section className="center-column">
           <div className="instrument-header">
-            <div className="instrument-title">
-              <div className="symbol-logo" style={{ "--asset-accent": selectedAsset.accent } as React.CSSProperties}>{selectedAsset.symbol[0]}</div>
-              <div>
-                <div className="instrument-name"><h1>{selectedAsset.symbol}</h1><span className="market-badge">{selectedAsset.assetClass}</span></div>
-                <p>{selectedAsset.name} <span>·</span> {selectedAsset.exchange}</p>
-              </div>
+            <div className="instrument-title"><div className="symbol-logo" style={{"--asset-accent": selectedAsset.accent} as React.CSSProperties}>{selectedAsset.symbol[0]}</div>
+              <div><div className="instrument-name"><h1>{selectedAsset.symbol}</h1><span className="market-badge">{selectedAsset.assetClass}</span></div><p>{selectedAsset.name} <span>·</span> {selectedAsset.exchange}</p></div>
             </div>
-            <div className="instrument-price">
-              <strong>{formatPrice(selectedAsset.referencePrice, selectedAsset.decimals)} <small>USD</small></strong>
-              <span className={market.changePct >= 0 ? "positive" : "negative"}>
-                {market.change >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownLeft size={14} />}
-                {market.change >= 0 ? "+" : ""}{formatPrice(market.change, selectedAsset.decimals)} ({market.changePct >= 0 ? "+" : ""}{market.changePct.toFixed(2)}%)
-                <small> / SIMULATED {range}</small>
+            <div className="instrument-price"><strong>{snapshot == null ? "—" : formatPrice(snapshot, selectedAsset.decimals)} <small>{currency}</small></strong>
+              <span className={change === null ? "" : change >= 0 ? "positive" : "negative"}>
+                {change !== null && (change >= 0 ? <ArrowUpRight size={14}/> : <ArrowDownLeft size={14}/>)}
+                {change === null ? "No market data" : `${change >= 0 ? "+" : ""}${formatPrice(change, selectedAsset.decimals)} (${changePct! >= 0 ? "+" : ""}${changePct!.toFixed(2)}%)`}
+                <small> / LAST TWO BARS</small>
               </span>
             </div>
           </div>
 
           <div className="market-stats">
-            <div><span>DEMO BID</span><strong>{formatPrice(bid, selectedAsset.decimals)}</strong></div>
-            <div><span>DEMO ASK</span><strong>{formatPrice(ask, selectedAsset.decimals)}</strong></div>
-            <div><span>RANGE HIGH</span><strong>{formatPrice(market.high, selectedAsset.decimals)}</strong></div>
-            <div><span>RANGE LOW</span><strong>{formatPrice(market.low, selectedAsset.decimals)}</strong></div>
-            <div className="market-stats-source"><span className="muted-dot" /> OFFLINE SAMPLE</div>
+            <div><span>{quote?.bid == null ? "BID / MODEL" : "EXCHANGE BID"}</span><strong>{mode==="replay" ? "—" : quote?.bid != null ? formatPrice(quote.bid, selectedAsset.decimals) : "Unavailable"}</strong></div>
+            <div><span>{quote?.ask == null ? "ASK / MODEL" : "EXCHANGE ASK"}</span><strong>{mode==="replay" ? "—" : quote?.ask != null ? formatPrice(quote.ask, selectedAsset.decimals) : "Unavailable"}</strong></div>
+            <div><span>VISIBLE HIGH</span><strong>{high == null ? "—" : formatPrice(high, selectedAsset.decimals)}</strong></div>
+            <div><span>VISIBLE LOW</span><strong>{low == null ? "—" : formatPrice(low, selectedAsset.decimals)}</strong></div>
+            <div className="market-stats-source"><span className="muted-dot"/>{loadingMarket ? "LOADING" : quote?.source?.includes("Coinbase") ? "COINBASE" : "INDICATIVE"}</div>
           </div>
 
-          <section className="chart-card" aria-label="Price chart">
+          <section className="chart-card">
             <div className="chart-toolbar">
-              <div className="chart-toolbar-label"><CandlestickChart size={17} /><strong>Price chart</strong><span className="demo-pill">DEMO OHLCV</span></div>
+              <div className="chart-toolbar-label"><CandlestickChart size={17}/><strong>Price chart</strong><span className="demo-pill">{history ? "HISTORICAL OHLCV" : "NO DATA"}</span></div>
               <div className="chart-actions">
-                <div className="timeframe-control" aria-label="Chart timeframe">
-                  {RANGES.map((period) => <button type="button" key={period} className={range === period ? "control-active" : ""} aria-pressed={range === period} onClick={() => setRange(period)}>{period}</button>)}
-                </div>
-                <div className="toolbar-separator" />
-                <div className="style-control">
-                  <button type="button" className={chartStyle === "candles" ? "control-active" : ""} aria-label="Candlestick chart" title="Candlesticks" onClick={() => setChartStyle("candles")}><CandlestickChart size={17} /></button>
-                  <button type="button" className={chartStyle === "line" ? "control-active" : ""} aria-label="Line chart" title="Line chart" onClick={() => setChartStyle("line")}><LineChart size={17} /></button>
-                </div>
+                <div className="timeframe-control" aria-label="Timeframe">{RANGES.map(period =>
+                  <button type="button" key={period} className={range===period ? "control-active" : ""} aria-pressed={range===period} onClick={() => setRange(period)}>{period}</button>)}
+                </div><div className="toolbar-separator"/>
+                <div className="style-control"><button type="button" className={chartStyle==="candles"?"control-active":""} title="Candlesticks" aria-label="Candlestick view" onClick={()=>setChartStyle("candles")}><CandlestickChart size={17}/></button>
+                  <button type="button" className={chartStyle==="line"?"control-active":""} title="Line" aria-label="Line view" onClick={()=>setChartStyle("line")}><LineChart size={17}/></button></div>
               </div>
             </div>
-            <div className="chart-body">
-              <PriceChart asset={selectedAsset} range={range} style={chartStyle} />
+            <div className="chart-mode-bar">
+              <div className="mode-tabs">
+                <button type="button" className={mode==="market"?"mode-selected":""} onClick={()=>changeMode("market")}><Activity size={14}/> Market</button>
+                <button type="button" className={mode==="replay"?"mode-selected":""} onClick={()=>changeMode("replay")}><Clock3 size={14}/> Replay</button>
+              </div>
+              <span>{history ? `${history.source} · latest bar ${dt(history.bars.at(-1)!.time)}` : "Connect local API for market history"}</span>
             </div>
-            <div className="chart-footer"><span><span className="legend-dot up-dot" /> Up <span className="legend-dot down-dot" /> Down <span className="legend-volume" /> Volume</span><span>Illustrative data · <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a></span></div>
+            <div className="chart-body">
+              {visibleBars.length ? <PriceChart asset={selectedAsset} range={range} style={chartStyle} bars={visibleBars}/> :
+                <div className="chart-placeholder">{loadingMarket ? <RefreshCw size={26} className="spin"/> : <Database size={26}/>}
+                  <strong>{loadingMarket ? "Fetching market history" : "Chart not available"}</strong>
+                  <span>{marketError || "Start the Python API and select an available instrument."}</span>
+                </div>}
+            </div>
+            {mode==="replay" && <div className="replay-controls">
+              <button type="button" onClick={resetReplay} title="Restart replay"><RotateCcw size={15}/> Restart</button>
+              <div className="replay-progress"><span>BAR {visibleBars.length} / {allBars.length}</span><span>{latestCandle ? dt(latestCandle.time) : "—"}</span></div>
+              <button type="button" onClick={()=>stepReplay(1)} disabled={!allBars.length || replayIndex >= allBars.length-1}><Play size={16}/> Next</button>
+              <button type="button" onClick={()=>stepReplay(5)} disabled={!allBars.length || replayIndex >= allBars.length-1}><FastForward size={17}/> +5</button>
+            </div>}
+            <div className="chart-footer"><span><span className="legend-dot up-dot"/> Up <span className="legend-dot down-dot"/> Down <span className="legend-volume"/> Volume</span>
+              <span>{mode==="replay" ? "No future bars displayed" : "Historical data, not tick-by-tick"} · <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a></span>
+            </div>
           </section>
 
           <section className="portfolio-card" id="portfolio-panel">
-            <div className="section-heading">
-              <div><span className="eyebrow">YOUR ACCOUNT</span><h2>Portfolio overview</h2></div>
-              <span className="sim-account"><span className="local-dot" /> PAPER ACCOUNT</span>
-            </div>
+            <div className="section-heading"><div><span className="eyebrow">{mode==="replay"?"ISOLATED REPLAY ACCOUNT":"SQLITE PAPER ACCOUNT"}</span><h2>Portfolio overview</h2></div><span className="sim-account"><span className="local-dot"/> PAPER ACCOUNT</span></div>
             <div className="portfolio-metrics">
-              <div><span>NET LIQUIDATION</span><strong>{formatMoney(equity)}</strong><small>Cash + marked demo positions</small></div>
-              <div><span>AVAILABLE CASH</span><strong>{formatMoney(account.cash)}</strong><small>USD buying power</small></div>
-              <div><span>MARKET EXPOSURE</span><strong>{formatMoney(exposure)}</strong><small>{positions.length} open symbols</small></div>
-              <div><span>UNREALIZED P&L</span><strong className={unrealizedPnl >= 0 ? "positive" : "negative"}>{unrealizedPnl >= 0 ? "+" : "-"}{formatMoney(Math.abs(unrealizedPnl))}</strong><small>At synthetic reference prices</small></div>
+              <div><span>NET LIQUIDATION</span><strong>{equity == null ? "—" : formatMoney(equity)}</strong><small>{mode==="replay"?"At current replay close":"Unavailable if any mark missing"}</small></div>
+              <div><span>AVAILABLE CASH</span><strong>{totalCash == null ? "—" : formatMoney(totalCash)}</strong><small>USD cash-only</small></div>
+              <div><span>MARKET EXPOSURE</span><strong>{exposure == null ? "—" : formatMoney(exposure)}</strong><small>{openCount} open instruments</small></div>
+              <div><span>UNREALIZED P&L</span><strong className={unrealized == null ? "" : unrealized >= 0 ? "positive" : "negative"}>{unrealized == null ? "—" : formatMoney(unrealized)}</strong><small>Without simulated exit costs</small></div>
             </div>
-            <div className="portfolio-tab-row">
-              <div className="portfolio-tabs" role="tablist" aria-label="Portfolio view">
-                <button type="button" role="tab" aria-selected={activePanel === "positions"} className={activePanel === "positions" ? "portfolio-tab-active" : ""} onClick={() => setActivePanel("positions")}>Positions <span>{positions.length}</span></button>
-                <button type="button" role="tab" aria-selected={activePanel === "history"} className={activePanel === "history" ? "portfolio-tab-active" : ""} onClick={() => setActivePanel("history")}>Order history <span>{account.trades.length}</span></button>
-              </div>
-            </div>
+            <div className="portfolio-tab-row"><div className="portfolio-tabs" role="tablist" aria-label="Portfolio view">
+              <button role="tab" aria-selected={activePanel==="positions"} className={activePanel==="positions"?"portfolio-tab-active":""} onClick={()=>setActivePanel("positions")}>Positions <span>{openCount}</span></button>
+              <button role="tab" aria-selected={activePanel==="history"} className={activePanel==="history"?"portfolio-tab-active":""} onClick={()=>setActivePanel("history")}>Fills <span>{tradeCount}</span></button>
+            </div></div>
             <div className="table-scroll">
-              {activePanel === "positions" ? (
-                positions.length ? <table className="data-table">
-                  <thead><tr><th>ASSET</th><th>QTY</th><th>AVG COST</th><th>MARKET VALUE</th><th>UNREALIZED P&L</th></tr></thead>
-                  <tbody>{positions.map((position) => <tr key={position.asset.id}>
-                    <td><strong>{position.asset.symbol}</strong><small>{position.asset.assetClass}</small></td>
-                    <td>{numberString(position.quantity)}</td>
-                    <td>{formatPrice(position.averageCost, position.asset.decimals)}</td>
-                    <td>{formatMoney(position.marketValue)}</td>
-                    <td className={position.unrealizedPnl >= 0 ? "positive" : "negative"}>{position.unrealizedPnl >= 0 ? "+" : "-"}{formatMoney(Math.abs(position.unrealizedPnl))}</td>
-                  </tr>)}</tbody>
-                </table> : <div className="empty-state"><Wallet size={25} /><strong>No open positions</strong><span>Choose a symbol and place a demo buy to get started.</span></div>
+              {activePanel==="positions" ? (
+                mode==="replay" ? replayAccount.quantity > 0 ? <table className="data-table"><thead><tr><th>ASSET</th><th>QUANTITY</th><th>AVERAGE COST</th><th>MARKET VALUE</th><th>UNREALIZED P&L</th></tr></thead><tbody><tr>
+                  <td><strong>{selectedAsset.symbol}</strong></td><td>{formatQuantity(replayAccount.quantity)}</td>
+                  <td>{formatPrice(replayAccount.averageCost, selectedAsset.decimals)}</td><td>{formatMoney(replayExposure)}</td><td className={unrealized! >= 0?"positive":"negative"}>{formatMoney(unrealized!)}</td>
+                </tr></tbody></table> : <div className="empty-state"><Wallet size={25}/><strong>No replay positions</strong><span>Queue a buy and advance to the next candle.</span></div>
+                  : account?.positions.length ? <table className="data-table"><thead><tr><th>ASSET</th><th>QUANTITY</th><th>AVERAGE COST</th><th>MARKET VALUE</th><th>UNREALIZED P&L</th></tr></thead>
+                    <tbody>{account.positions.map(position => {
+                      const asset = ASSETS.find(item => item.id === position.asset_id);
+                      return <tr key={position.asset_id}><td><strong>{asset?.symbol ?? position.asset_id}</strong><small>{asset?.assetClass}</small></td><td>{formatQuantity(position.quantity)}</td>
+                        <td>{formatPrice(position.average_cost, asset?.decimals ?? 2)}</td><td>{position.market_value === null ? "Unpriced" : formatMoney(position.market_value)}</td>
+                        <td className={position.unrealized_pnl == null ? "" : position.unrealized_pnl >= 0?"positive":"negative"}>{position.unrealized_pnl === null ? "—" : formatMoney(position.unrealized_pnl)}</td>
+                      </tr>;
+                    })}</tbody></table>
+                  : <div className="empty-state"><Wallet size={25}/><strong>No open positions</strong><span>Buy a supported instrument when its market is open.</span></div>
               ) : (
-                account.trades.length ? <table className="data-table">
-                  <thead><tr><th>TIME</th><th>SYMBOL</th><th>SIDE</th><th>QTY</th><th>FILL PRICE</th></tr></thead>
-                  <tbody>{[...account.trades].reverse().map((trade) => {
-                    const asset = ASSETS.find((item) => item.id === trade.assetId)!;
-                    return <tr key={trade.id}>
-                      <td>{new Date(trade.createdAt).toLocaleString()}</td>
-                      <td><strong>{asset.symbol}</strong></td>
-                      <td className={trade.side === "buy" ? "positive" : "negative"}>{trade.side.toUpperCase()}</td>
-                      <td>{numberString(trade.quantity)}</td>
-                      <td>{formatPrice(trade.price, asset.decimals)}</td>
-                    </tr>;
-                  })}</tbody>
-                </table> : <div className="empty-state"><Clock3 size={25} /><strong>No trades recorded</strong><span>Executed demo market orders will appear here.</span></div>
+                (mode==="replay" ? replayAccount.fills.length>0 : !!account?.fills.length) ?
+                  <table className="data-table"><thead><tr><th>TIME</th><th>SYMBOL</th><th>SIDE</th><th>QTY</th><th>FILL PRICE</th><th>FEE</th></tr></thead>
+                    <tbody>{mode==="replay" ? replayAccount.fills.map((fill, index) => <tr key={index}>
+                      <td>{dt(fill.time)}</td><td><strong>{selectedAsset.symbol}</strong></td>
+                      <td className={fill.side==="buy"?"positive":"negative"}>{fill.side.toUpperCase()}</td><td>{formatQuantity(fill.quantity)}</td><td>{formatPrice(fill.price, selectedAsset.decimals)}</td><td>{formatMoney(fill.fee)}</td>
+                    </tr>) : account?.fills.map(fill => <tr key={fill.id}>
+                      <td>{dt(fill.created_at)}</td><td><strong>{ASSETS.find(a=>a.id===fill.asset_id)?.symbol ?? fill.asset_id}</strong></td>
+                      <td className={fill.side==="buy"?"positive":"negative"}>{fill.side.toUpperCase()}</td><td>{formatQuantity(fill.quantity)}</td>
+                      <td>{formatPrice(fill.price, ASSETS.find(a=>a.id===fill.asset_id)?.decimals ?? 2)}</td><td>{formatMoney(fill.fee)}</td>
+                    </tr>)}</tbody></table>
+                  : <div className="empty-state"><Clock3 size={25}/><strong>No executed orders</strong><span>Paper fills will appear here.</span></div>
               )}
             </div>
+          </section>
+
+          <section className="portfolio-card strategy-card">
+            <div className="section-heading">
+              <div><span className="eyebrow">HISTORICAL RESEARCH</span><h2>Strategy backtester</h2></div>
+              <button type="button" className="text-link" onClick={()=>setShowBacktest(v=>!v)}>{showBacktest ? "Collapse" : "Configure"} <ChevronDown size={15}/></button>
+            </div>
+            {showBacktest && <div className="strategy-body">
+              <p>Backtest an SMA crossover using one year of actual daily candles. Signal at bar close; modeled execution at the <strong>next bar open</strong>.</p>
+              <div className="strategy-settings"><label>Fast MA (days)<input type="number" min="2" max="99" value={fast} onChange={e=>setFast(e.target.value)}/></label>
+                <label>Slow MA (days)<input type="number" min="3" max="100" value={slow} onChange={e=>setSlow(e.target.value)}/></label>
+                <button type="button" disabled={runningBacktest || !supported} onClick={()=>void runBacktest()}><Play size={15}/>{runningBacktest ? "Running..." : "Run backtest"}</button>
+              </div>
+              {backtestError && <p className="form-error">{backtestError}</p>}
+              {!supported && <p className="support-text">This instrument does not yet support the USD cash strategy engine.</p>}
+              {backtest && <div className="backtest-results">
+                <div><span>STRATEGY RETURN</span><strong className={backtest.return_pct>=0?"positive":"negative"}>{backtest.return_pct.toFixed(2)}%</strong></div>
+                <div><span>BUY AND HOLD</span><strong>{backtest.buy_hold_pct.toFixed(2)}%</strong></div>
+                <div><span>MAX DRAWDOWN</span><strong className="negative">{backtest.max_drawdown_pct.toFixed(2)}%</strong></div>
+                <div><span>EXECUTED ORDERS</span><strong>{backtest.trades.length}</strong></div>
+                <p>{backtest.execution}. This does not model intrabar fills or market impact.</p>
+              </div>}
+            </div>}
           </section>
         </section>
 
         <aside className="ticket-column">
           <section className="ticket-card">
-            <div className="ticket-heading"><div><span className="eyebrow">TRADE EXECUTION</span><h2>Order ticket</h2></div><span className="ticket-icon"><ArrowRight size={18} /></span></div>
-            <div className="ticket-security">
-              <span className="ticket-security-symbol">{selectedAsset.symbol}</span><span className="ticket-security-class">{selectedAsset.assetClass} <ChevronDown size={12} /></span>
-            </div>
+            <div className="ticket-heading"><div><span className="eyebrow">{mode==="replay"?"NEXT-BAR EXECUTION":"PAPER EXECUTION"}</span><h2>Order ticket</h2></div><span className="ticket-icon"><ArrowRight size={18}/></span></div>
+            <div className="ticket-security"><span className="ticket-security-symbol">{selectedAsset.symbol}</span><span className="ticket-security-class">{selectedAsset.assetClass}<ChevronDown size={12}/></span></div>
             <div className="side-switch">
-              <button type="button" className={side === "buy" ? "buy-active" : ""} onClick={() => { setSide("buy"); setFormError(""); }}>Buy / Long</button>
-              <button type="button" className={side === "sell" ? "sell-active" : ""} onClick={() => { setSide("sell"); setFormError(""); }}>Sell / Close</button>
+              <button type="button" className={side==="buy"?"buy-active":""} onClick={()=>{setSide("buy");setTradeError("");}}>Buy / Long</button>
+              <button type="button" className={side==="sell"?"sell-active":""} onClick={()=>{setSide("sell");setTradeError("");}}>Sell / Close</button>
             </div>
-            <form onSubmit={placeDemoOrder}>
-              <div className="field-head"><label htmlFor="order-type">Order type</label><CircleHelp size={14} /></div>
-              <select id="order-type" value="market" onChange={() => {}} aria-label="Order type">
-                <option value="market">Market (demo instant fill)</option>
-              </select>
-              <div className="field-head"><label htmlFor="order-quantity">Quantity {stepsRequireWhole ? "(contracts)" : "(units)"}</label><span className="field-hint">Held: {numberString(heldQuantity)}</span></div>
-              <div className="quantity-field"><input id="order-quantity" type="number" inputMode="decimal" step={stepsRequireWhole ? "1" : "any"} min={stepsRequireWhole ? "1" : "0.00000001"} value={quantity} onChange={(e) => { setQuantity(e.target.value); setFormError(""); }} required /><span>{stepsRequireWhole ? "CONTRACTS" : "UNITS"}</span></div>
+            <form onSubmit={e=>void placeOrder(e)}>
+              <div className="field-head"><label htmlFor="order-type">Order type</label></div>
+              <select id="order-type" value="market" onChange={()=>{}} aria-label="Order type"><option value="market">{mode==="replay"?"Next-bar open (replay)":"Market (modeled)"}</option></select>
+              <div className="field-head"><label htmlFor="order-quantity">Quantity {wholeUnits?"(whole units)":"(base units)"}</label><span className="field-hint">Held: {formatQuantity(held)}</span></div>
+              <div className="quantity-field"><input id="order-quantity" type="number" inputMode="decimal" step={wholeUnits?"1":"any"} min={wholeUnits?"1":"0.00000001"} value={quantity} onChange={e=>{setQuantity(e.target.value);setTradeError("");}} required/><span>UNITS</span></div>
               <div className="ticket-summary">
-                <div><span>Reference price</span><strong>{formatPrice(selectedAsset.referencePrice, selectedAsset.decimals)}</strong></div>
-                <div><span>{side === "buy" ? "Est. ask fill" : "Est. bid fill"}</span><strong>{formatPrice(fill, selectedAsset.decimals)}</strong></div>
-                <div><span>Illustrative spread</span><strong>{selectedAsset.spreadBps} bps</strong></div>
-                <div className="ticket-total"><span>Est. order value</span><strong>{formatMoney(estimatedCost)}</strong></div>
+                <div><span>Last reference price</span><strong>{snapshot==null?"—":formatPrice(snapshot, selectedAsset.decimals)}</strong></div>
+                <div><span>{mode==="replay"?"Est. fill at current close":"Estimated fill price"}</span><strong>{indicativeFill == null?"—":formatPrice(indicativeFill, selectedAsset.decimals)}</strong></div>
+                <div><span>{mode==="replay"?"Model spread":"Modeled spread"}</span><strong>{selectedAsset.spreadBps} bps</strong></div>
+                <div className="ticket-total"><span>{mode==="replay"?"Illustrative order value":"Estimated order value"}</span><strong>{formatMoney(estimate)}</strong></div>
               </div>
-              {formError && <p className="form-error" role="alert">{formError}</p>}
-              <button className={`submit-order ${side === "sell" ? "submit-sell" : ""}`} type="submit">{side === "buy" ? <ArrowUpRight size={19} /> : <ArrowDownLeft size={19} />} Place demo {side}</button>
+              {replayAccount.pending && mode==="replay" && <p className="support-text">Pending {replayAccount.pending.side} order for {formatQuantity(replayAccount.pending.quantity)} units. Advance replay to fill.</p>}
+              {tradeError && <p role="alert" className="form-error">{tradeError}</p>}
+              {!supported && <p className="support-text">{selectedAsset.assetClass==="Options"?"Choose a real dated contract in a future options-chain release.":selectedAsset.assetClass==="Futures"?"Chart-only until multiplier, margin, and settlement rules are implemented.":"CAD-to-USD conversion is not implemented."}</p>}
+              {supported && mode==="market" && !quoteReady && <p className="support-text">{quote?.block_reason ?? "No fresh market quote. Orders are blocked."}</p>}
+              <button type="submit" className={`submit-order ${side==="sell"?"submit-sell":""}`} disabled={!canTrade || placing}>
+                {side==="buy"?<ArrowUpRight size={19}/>:<ArrowDownLeft size={19}/>}
+                {placing?"Submitting...":mode==="replay"?`Queue replay ${side}`:`Paper ${side}`}
+              </button>
             </form>
-            <div className="ticket-footnote"><ShieldCheck size={15} /><span>Long-only toy ledger. No contract multipliers, commissions, or actual exchange fills.</span></div>
+            <div className="ticket-footnote"><ShieldCheck size={15}/><span>Long-only USD account. Market-mode orders require fresh quotes during supported sessions. Spread, slippage and fees are modeled, not guaranteed execution.</span></div>
           </section>
           <section className="account-card">
-            <div className="account-heading"><span>SIMULATION STATUS</span><span className="account-status"><span className="local-dot" /> ACTIVE</span></div>
-            <div className="account-item"><Database size={17} /><div><strong>Market data</strong><span>Deterministic sample candles</span></div><span className="offline-tag">OFFLINE</span></div>
-            <div className="account-item"><Clock3 size={17} /><div><strong>Session</strong><span>Frozen historical sample</span></div></div>
-            <div className="account-item"><Check size={17} /><div><strong>Order engine</strong><span>Basic browser simulation</span></div></div>
+            <div className="account-heading"><span>SIMULATION STATUS</span><span className="account-status"><span className={backendOnline?"local-dot":"offline-dot"}/>{backendOnline?"ONLINE":"OFFLINE"}</span></div>
+            <div className="account-item"><Database size={17}/><div><strong>Market data</strong><span>{history?.source ?? "Unavailable"}</span></div><span className="offline-tag">{history?"REAL":"NONE"}</span></div>
+            <div className="account-item"><Clock3 size={17}/><div><strong>Last quote</strong><span>{quote ? dt(quote.timestamp) : "Unavailable"}</span></div></div>
+            <div className="account-item">{mode==="replay"?<PauseCircle size={17}/>:<Check size={17}/>}<div><strong>{mode==="replay"?"Historical replay":"Quote freshness"}</strong><span>{mode==="replay"?"Step-by-step, next-open fills":quote?.fresh?"Fresh enough for paper model":"Stale or unavailable"}</span></div></div>
+            <div className="account-item"><RefreshCw size={17}/><div><strong>Market snapshots</strong><span>Refresh quote roughly every 45 seconds</span></div>
+              <button type="button" className="mini-icon-button" onClick={() => {void getQuote(selectedId).then(next=>{setQuote(next);setLastQuotes(p=>({...p,[selectedId]:next}));}).catch(e=>setMarketError(errorMessage(e)));}} title="Refresh quote"><RefreshCw size={14}/></button>
+            </div>
           </section>
-          <div className="build-note"><span className="build-dot" /> Trading Simulator <span>v0.1 · FOUNDATION</span></div>
+          <div className="build-note"><span className="build-dot"/> Trading Simulator <span>v0.2 · LOCAL ENGINE</span></div>
         </aside>
       </main>
-      {notice && <div className="toast" role="status"><Check size={17} /><span>{notice}</span><button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><X size={16} /></button></div>}
+      {notice && <div className="toast" role="status"><Check size={17}/><span>{notice}</span><button type="button" onClick={()=>setNotice("")} aria-label="Dismiss message"><X size={16}/></button></div>}
     </div>
   );
 }
-
 export default App;
