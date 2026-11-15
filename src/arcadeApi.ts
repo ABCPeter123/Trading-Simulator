@@ -43,6 +43,8 @@ export interface ArcadeRun {
   id: string;
   asset_id: string;
   source: string;
+  period: string;
+  risk: {stop_loss_pct: number; take_profit_pct: number};
   current_bar: number;
   total_bars: number;
   finished: boolean;
@@ -64,10 +66,24 @@ export interface SavedArcadeRun {
   updated_at: string;
 }
 
+export interface CatalogInstrument {
+  id: string;
+  symbol: string;
+  name: string;
+  asset_class: string;
+  currency: string;
+  tradable: boolean;
+  decimals: number;
+}
+export const gameCatalog = () => request<CatalogInstrument[]>("/instruments?limit=250");
+export const gameSetRisk = (id: string, stopLossPct: number, takeProfitPct: number) =>
+  request<ArcadeRun>(`/arcade/${id}/risk`, {
+    method: "PUT", body: JSON.stringify({stop_loss_pct: stopLossPct, take_profit_pct: takeProfitPct}),
+  });
 export const gameRuns = () => request<SavedArcadeRun[]>("/arcade/runs");
 export const gameLoad = (id: string) => request<ArcadeRun>(`/arcade/${encodeURIComponent(id)}`);
-export const gameStart = (assetId: string, startingPoint: number) =>
-  request<ArcadeRun>("/arcade/new", {method: "POST", body: JSON.stringify({asset_id: assetId, starting_point: startingPoint})});
+export const gameStart = (assetId: string, startingPoint: number, period: "1Y"|"2Y"|"5Y"|"10Y"|"MAX") =>
+  request<ArcadeRun>("/arcade/new", {method: "POST", body: JSON.stringify({asset_id: assetId, starting_point: startingPoint, period})});
 export const gameStep = (id: string, count: number, untilAction = false) =>
   request<ArcadeRun>(`/arcade/${id}/advance`, {method: "POST", body: JSON.stringify({count, until_action: untilAction})});
 export const gameTrade = (id: string, order: {side: TradeSide; kind: OrderKind; size: string; size_type: "percent" | "units"; price?: string}) =>
