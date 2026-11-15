@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, BarChart3, CandlestickChart,
   Check, ChevronDown, Clock3, Database, FastForward, LineChart, PauseCircle,
-  Play, RefreshCw, RotateCcw, Search, ShieldCheck, Wallet, X,
+  Play, RefreshCw, RotateCcw, Search, ShieldCheck, Wallet, X, Trophy,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
 import { ASSET_CLASSES, ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
@@ -18,7 +18,7 @@ const dt = (timestamp: number | string) =>
   new Date(typeof timestamp === "number" ? timestamp * 1000 : timestamp).toLocaleString();
 const errorMessage = (err: unknown) => err instanceof Error ? err.message : "Unexpected error.";
 
-function App() {
+function App({onOpenArcade}: {onOpenArcade:()=>void}) {
   const [assetClass, setAssetClass] = useState<AssetClass>("Stocks");
   const [selectedId, setSelectedId] = useState("aapl");
   const [search, setSearch] = useState("");
@@ -236,6 +236,7 @@ function App() {
         <div className="topbar-divider"/>
         <nav className="topnav"><span className="nav-active"><Activity size={15}/> Workspace</span>
           <button type="button" onClick={() => document.getElementById("portfolio-panel")?.scrollIntoView({behavior:"smooth"})}><Wallet size={15}/> Portfolio</button>
+          <button type="button" onClick={onOpenArcade}><Trophy size={15}/> Trading Arcade</button>
         </nav>
         <div className="topbar-right">
           <span className="local-status"><span className={backendOnline ? "local-dot" : "offline-dot"}/>{backendOnline ? "LOCAL API ONLINE" : "API OFFLINE"}</span>
