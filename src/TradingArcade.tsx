@@ -308,7 +308,7 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
 
          <section className="arc-chart-box">
            <div className="arc-box-head"><div><Activity size={17}/><strong>Historical market</strong><span className="arc-tag">FUTURE HIDDEN</span></div><div className="arc-chart-view"><button className={chartStyle==="candles"?"selected":""} onClick={()=>setChartStyle("candles")}>Candles</button><button className={chartStyle==="line"?"selected":""} onClick={()=>setChartStyle("line")}>Line</button></div></div>
-           <div className="arc-chart-wrap"><PriceChart asset={asset!} range="1Y" style={chartStyle} bars={game.bars}/></div>
+           <div className="arc-chart-wrap"><PriceChart asset={asset!} range="1Y" style={chartStyle} bars={game.bars} visibleWindow={120}/></div>
            <div className="arc-chart-bottom"><span><span className="arc-green-dot"/> REAL HISTORICAL OHLCV</span><span>Next candle cannot be viewed until you advance</span></div>
          </section>
 
