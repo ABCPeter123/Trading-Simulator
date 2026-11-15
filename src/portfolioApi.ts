@@ -49,7 +49,7 @@ export interface PortfolioSeason {
   metrics: {
     cash: number; exposure: number; equity: number; return_pct: number;
     equal_weight_hold_pct: number; max_drawdown_pct: number;
-    xp: number; level: number;
+    xp: number; level: number; score: number; badges: string[];
   };
   positions: PortfolioPosition[];
   orders: PortfolioOrder[];
