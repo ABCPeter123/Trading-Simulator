@@ -14,7 +14,7 @@ from .archive import archive_stats
 from .arcade import start_run, get_run, list_runs, submit_order as submit_arcade_order, cancel_order, set_strategy, advance_run, set_risk
 from .arcade_dsl import compile_rules, EXAMPLES
 
-app = FastAPI(title="Trading Simulator Local API", version="0.2.0")
+app = FastAPI(title="Trading Simulator Local API", version="0.5.0")
 
 class NewOrder(BaseModel):
     asset_id: str
@@ -27,7 +27,7 @@ def instruments(search: str = Query("", max_length=80), category: str = Query(""
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "mode": "local", "version": "0.2.0"}
+    return {"status": "ok", "mode": "local", "version": "0.5.0"}
 
 @app.get("/api/market/{asset_id}")
 def market_history(asset_id: str, range: str = Query("1M")):
