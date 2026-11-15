@@ -75,7 +75,7 @@ export interface CatalogInstrument {
   tradable: boolean;
   decimals: number;
 }
-export const gameCatalog = () => request<CatalogInstrument[]>("/instruments?limit=250");
+export const gameCatalog = () => request<CatalogInstrument[]>("/instruments?limit=500");
 export const gameSetRisk = (id: string, stopLossPct: number, takeProfitPct: number) =>
   request<ArcadeRun>(`/arcade/${id}/risk`, {
     method: "PUT", body: JSON.stringify({stop_loss_pct: stopLossPct, take_profit_pct: takeProfitPct}),
