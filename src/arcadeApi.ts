@@ -82,8 +82,8 @@ export const gameSetRisk = (id: string, stopLossPct: number, takeProfitPct: numb
   });
 export const gameRuns = () => request<SavedArcadeRun[]>("/arcade/runs");
 export const gameLoad = (id: string) => request<ArcadeRun>(`/arcade/${encodeURIComponent(id)}`);
-export const gameStart = (assetId: string, startingPoint: number, period: "1Y"|"2Y"|"5Y"|"10Y"|"MAX") =>
-  request<ArcadeRun>("/arcade/new", {method: "POST", body: JSON.stringify({asset_id: assetId, starting_point: startingPoint, period})});
+export const gameStart = (assetId: string, startingPoint: number, period: "1Y"|"2Y"|"5Y"|"10Y"|"MAX", startDate?: string) =>
+  request<ArcadeRun>("/arcade/new", {method: "POST", body: JSON.stringify({asset_id: assetId, starting_point: startingPoint, period, start_date: startDate || null})});
 export const gameStep = (id: string, count: number, untilAction = false) =>
   request<ArcadeRun>(`/arcade/${id}/advance`, {method: "POST", body: JSON.stringify({count, until_action: untilAction})});
 export const gameTrade = (id: string, order: {side: TradeSide; kind: OrderKind; size: string; size_type: "percent" | "units"; price?: string}) =>
