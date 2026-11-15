@@ -6,12 +6,12 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .assets import get_instrument
+from .assets import get_instrument, list_instruments
 from .ledger import account_snapshot, reset_account, submit_order
 from .market import history, quote, market_open
 from .strategy import sma_backtest
 from .archive import archive_stats
-from .arcade import start_run, get_run, list_runs, submit_order as submit_arcade_order, cancel_order, set_strategy, advance_run
+from .arcade import start_run, get_run, list_runs, submit_order as submit_arcade_order, cancel_order, set_strategy, advance_run, set_risk
 from .arcade_dsl import compile_rules, EXAMPLES
 
 app = FastAPI(title="Trading Simulator Local API", version="0.2.0")
@@ -20,6 +20,10 @@ class NewOrder(BaseModel):
     asset_id: str
     side: Literal["buy", "sell"]
     quantity: str = Field(min_length=1, max_length=40)
+
+@app.get("/api/instruments")
+def instruments(search: str = Query("", max_length=80), category: str = Query("", max_length=30), limit: int = Query(250, ge=1, le=250)):
+    return list_instruments(search, category, limit)
 
 @app.get("/api/health")
 def health():
@@ -75,6 +79,7 @@ def get_archive_stats(asset_id: str, range: str = Query("1Y")):
 class ArcadeStart(BaseModel):
     asset_id: str
     starting_point: float = Field(default=0.3, ge=0.15, le=0.75)
+    period: Literal["1Y", "2Y", "5Y", "10Y", "MAX"] = "5Y"
 
 class ArcadeOrder(BaseModel):
     side: Literal["buy", "sell"]
@@ -104,7 +109,7 @@ def arcade_validate(strategy: ArcadeStrategy):
 
 @app.post("/api/arcade/new")
 def arcade_new(request: ArcadeStart):
-    return start_run(request.asset_id, request.starting_point)
+    return start_run(request.asset_id, request.starting_point, request.period)
 
 @app.get("/api/arcade/{run_id}")
 def arcade_get(run_id: str):
@@ -125,3 +130,11 @@ def arcade_advance(run_id: str, request: ArcadeAdvance):
 @app.put("/api/arcade/{run_id}/strategy")
 def arcade_strategy(run_id: str, strategy: ArcadeStrategy):
     return set_strategy(run_id, strategy.code)
+
+class ArcadeRisk(BaseModel):
+    stop_loss_pct: float = Field(default=0, ge=0, le=75)
+    take_profit_pct: float = Field(default=0, ge=0, le=75)
+
+@app.put("/api/arcade/{run_id}/risk")
+def arcade_risk(run_id: str, risk: ArcadeRisk):
+    return set_risk(run_id, risk.stop_loss_pct, risk.take_profit_pct)
