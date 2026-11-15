@@ -117,7 +117,7 @@ def submit_order(asset_id: str, side: str, quantity: object, quote_data: dict) -
     if not instrument.tradable or instrument.currency != "USD":
         raise HTTPException(422, detail="This instrument cannot be traded in the current USD cash model.")
     if not quote_data["tradable"]:
-        raise HTTPException(409, detail=quote_data["block_reason"] or "Market quote is not executable.")
+        raise HTTPException(409, detail=quote_data.get("block_reason") or "Market quote is not executable.")
     if side not in ("buy", "sell"):
         raise HTTPException(400, detail="Unsupported order side.")
     qty = positive_quantity(quantity, whole=instrument.kind in ("Stocks", "ETFs"))
