@@ -26,10 +26,19 @@ RANGE_CONFIG = {
     "1W": ("7d", "30m", 300),
     "1M": ("1mo", "1h", 400),
     "3M": ("3mo", "1d", 300),
+    "6M": ("6mo", "1d", 300),
     "1Y": ("1y", "1d", 400),
+    "2Y": ("2y", "1d", 800),
+    "5Y": ("5y", "1d", 1600),
+    "10Y": ("10y", "1d", 2800),
+    "MAX": ("max", "1d", 30000),
 }
-COINBASE_SECONDS = {"1D": 300, "1W": 3600, "1M": 21600, "3M": 86400, "1Y": 86400}
-COINBASE_DAYS = {"1D": 1, "1W": 7, "1M": 30, "3M": 90, "1Y": 365}
+COINBASE_SECONDS = {"1D": 300, "1W": 3600, "1M": 21600,
+                    "3M": 86400, "6M": 86400, "1Y": 86400,
+                    "2Y": 86400, "5Y": 86400, "10Y": 86400, "MAX": 86400}
+COINBASE_DAYS = {"1D": 1, "1W": 7, "1M": 30, "3M": 90,
+                 "6M": 183, "1Y": 365, "2Y": 730, "5Y": 1827,
+                 "10Y": 3653, "MAX": 365*13}
 _client = httpx.Client(timeout=13, headers={"User-Agent": "TradingSimLocal/0.2"})
 _logger = logging.getLogger(__name__)
 _lock = Lock()
@@ -61,8 +70,9 @@ def coinbase_candles(asset: Instrument, window: str) -> list[dict[str, float | i
     start = end - timedelta(days=COINBASE_DAYS[window])
     rows_by_time: dict[int, dict] = {}
     chunk_end = end
-    # API limit: up to 300 intervals per request. Fetch from the end backward.
-    while chunk_end > start and len(rows_by_time) < 450:
+    # Exchange endpoint caps pages at 300 bars. Paginate backward to cover
+    # entire years; no fabricated candles for gaps in the source feed.
+    while chunk_end > start and len(rows_by_time) < 6500:
         chunk_start = max(start, chunk_end - timedelta(seconds=step * 290))
         try:
             resp = _client.get(
@@ -87,9 +97,9 @@ def coinbase_candles(asset: Instrument, window: str) -> list[dict[str, float | i
             except (TypeError, ValueError, OverflowError):
                 continue
         chunk_end = chunk_start - timedelta(seconds=1)
-        if len(rows_by_time) >= 440:
+        if len(rows_by_time) >= 6490:
             break
-    return sorted(rows_by_time.values(), key=lambda bar: bar["time"])[-400:]
+    return sorted(rows_by_time.values(), key=lambda bar: bar["time"])[-6500:]
 
 def yahoo_candles(asset: Instrument, window: str) -> list[dict[str, float | int]]:
     period, interval, limit = RANGE_CONFIG[window]
