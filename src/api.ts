@@ -1,0 +1,72 @@
+import type { AssetClass, TimeRange, TradeSide } from "./types";
+
+export interface MarketBar { time: number; open: number; high: number; low: number; close: number; volume: number }
+export interface HistoryResponse {
+  asset_id: string; range: TimeRange; source: string; currency: string;
+  bars: MarketBar[]; as_of: string; is_demo: boolean; delayed_or_indicative: boolean;
+}
+export interface QuoteResponse {
+  asset_id: string; price: number; bid: number | null; ask: number | null;
+  currency: string; timestamp: string; source: string; as_of_age_seconds: number;
+  market_open: boolean; fresh: boolean; tradable: boolean; spread_bps: number;
+  execution_model: string; block_reason: string | null;
+}
+export interface Fill {
+  id: string; asset_id: string; side: TradeSide; quantity: number;
+  price: number; fee: number; created_at: string; source: string; quote_time: string;
+}
+export interface Position {
+  asset_id: string; quantity: number; average_cost: number; mark: number | null;
+  market_value: number | null; unrealized_pnl: number | null;
+}
+export interface AccountResponse {
+  cash: number; equity: number | null; realized_pnl: number;
+  unrealized_pnl: number | null; positions: Position[]; fills: Fill[];
+  has_unpriced_positions: boolean;
+}
+export interface BacktestResponse {
+  asset_id: string; strategy: string; fast: number; slow: number;
+  starting_cash: number; ending_equity: number; return_pct: number;
+  buy_hold_pct: number; max_drawdown_pct: number;
+  trades: {time: number; side: TradeSide; quantity: number; fill: number; fee: number}[];
+  equity_curve: {time: number; value: number}[];
+  execution: string; data_source: string;
+}
+
+export async function request<T>(route: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`/api${route}`, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...options?.headers },
+  });
+  let payload: unknown;
+  try { payload = await response.json(); }
+  catch { throw new Error("Local API is unreachable. Start the Python backend on port 8000."); }
+  if (!response.ok) {
+    const detail = typeof payload === "object" && payload !== null && "detail" in payload ? payload.detail : null;
+    throw new Error(typeof detail === "string" ? detail : `Request failed (${response.status})`);
+  }
+  return payload as T;
+}
+export function getHistory(assetId: string, range: TimeRange) {
+  return request<HistoryResponse>(`/market/${assetId}?range=${range}`);
+}
+export function getQuote(assetId: string) {
+  return request<QuoteResponse>(`/quotes/${assetId}`);
+}
+export function getAccount() {
+  return request<AccountResponse>("/account");
+}
+export function sendOrder(assetId: string, side: TradeSide, quantity: string) {
+  return request<{fill: Fill; account: AccountResponse}>("/orders", {
+    method: "POST", body: JSON.stringify({asset_id: assetId, side, quantity}),
+  });
+}
+export function resetAccount() {
+  return request<AccountResponse>("/account/reset", {method: "POST"});
+}
+export function getBacktest(assetId: string, fast: number, slow: number) {
+  return request<BacktestResponse>(`/backtest/${assetId}?fast=${fast}&slow=${slow}`);
+}
+export function supportsCashTrading(assetId: string, assetClass: AssetClass) {
+  return !["Options", "Futures"].includes(assetClass) && assetId !== "vfv";
+}
