@@ -175,3 +175,12 @@
 .arc-risk-save{margin-top:14px;border:0;border-radius:7px;padding:11px;width:100%;background:#50d6a0;color:#0c2b20;font-size:12px;font-weight:850;display:flex;justify-content:center;align-items:center;gap:8px}
 .arc-risk-body>small{display:block;margin-top:12px;color:#81ac9b;line-height:1.55;font-size:10px}
 .arc-start-form input[type=search]{height:41px;padding:0 12px;font-size:12px;width:100%}
+
+.arc-discover{background:#262a46;color:#c6b3ff;border:1px solid #52527a;padding:11px 12px;border-radius:7px;font-size:11px;font-weight:750;text-align:center}
+.arc-discover:hover:not(:disabled){background:#343258}
+.arc-remote-results{border:1px solid #475475;background:#171f36;border-radius:9px;overflow:hidden;padding:10px}
+.arc-remote-results>strong{display:block;font-size:9px;letter-spacing:.09em;color:#b5a6f0;margin:2px 4px 9px}
+.arc-remote-results>div{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid #2f3951;padding:9px 3px}
+.arc-remote-results>div span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.arc-remote-results>div b{font-size:11px}.arc-remote-results>div small{color:#90a1bc;font-size:10px;line-height:1.4}
+.arc-remote-results>div button{border:1px solid #655d94;background:#3a315b;color:#e2d4ff;font-size:10px;font-weight:800;border-radius:6px;padding:8px 12px}
