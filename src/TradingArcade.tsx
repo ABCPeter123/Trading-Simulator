@@ -10,10 +10,10 @@ import type { Asset } from "./types";
 import VisualStrategyBuilder from "./VisualStrategyBuilder";
 import { PriceChart } from "./components/PriceChart";
 import {
-  gameCancel, gameCatalog, gameLoad, gameRuns, gameSaveCode, gameSetRisk, gameStart, gameStep,
+  gameCancel, gameCatalog, gameDiscover, gameImportTicker, gameLoad, gameRuns, gameSaveCode, gameSetRisk, gameStart, gameStep,
   gameTrade, gameValidateCode,
 } from "./arcadeApi";
-import type { ArcadeRun, CatalogInstrument, OrderKind, SavedArcadeRun } from "./arcadeApi";
+import type { ArcadeRun, CatalogInstrument, DiscoveredInstrument, OrderKind, SavedArcadeRun } from "./arcadeApi";
 import type { TradeSide } from "./types";
 import "./arcade.css";
 
@@ -32,6 +32,9 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
   const [saved, setSaved] = useState<SavedArcadeRun[]>([]);
   const [catalog, setCatalog] = useState<CatalogInstrument[]>([]);
   const [catalogSearch, setCatalogSearch] = useState("");
+  const [remoteResults, setRemoteResults] = useState<DiscoveredInstrument[]>([]);
+  const [searchingRemote, setSearchingRemote] = useState(false);
+  const [importingSymbol, setImportingSymbol] = useState("");
   const [catalogClass, setCatalogClass] = useState("All");
   const [period, setPeriod] = useState<"1Y"|"2Y"|"5Y"|"10Y"|"MAX">("5Y");
   const [stopPct, setStopPct] = useState("0");
@@ -130,6 +133,31 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
     return()=>clearInterval(timer);
   },[playing,game?.id,game?.finished,newGame,speed]);
 
+  async function searchMore() {
+    if(catalogSearch.trim().length<2) {setError("Enter at least two characters to search external tickers.");return;}
+    setSearchingRemote(true);setError("");setRemoteResults([]);
+    try {setRemoteResults(await gameDiscover(catalogSearch.trim()));}
+    catch(e) {setError(errText(e));}
+    finally {setSearchingRemote(false);}
+  }
+  async function importTicker(symbol: string) {
+    setImportingSymbol(symbol);setError("");
+    try {
+      const item=await gameImportTicker(symbol);
+      setCatalog(prev=>prev.some(p=>p.id===item.id)?prev:[...prev,item]);
+      setCatalogSearch("");
+      setCatalogClass("All");
+      setRemoteResults([]);
+      if(item.tradable&&item.currency==="USD") {
+        setAssetId(item.id);
+        setNote(symbol+" added to your local instruments.");
+      } else {
+        setNote(symbol+" imported for research, but is chart-only until currency and contract rules are supported.");
+      }
+    } catch(e) {setError(errText(e));}
+    finally {setImportingSymbol("");}
+  }
+
   async function createNew() {
     setPlaying(false);
     if(busyRef.current)return;
@@ -223,7 +251,15 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
        <p>Start with $100,000 in virtual cash, reveal real historical candles, and compete against buy-and-hold. Play manually or design a trading bot. Skip weeks in seconds.</p>
        <div className="arc-start-form">
          <label htmlFor="arc-market-search">Find a market · {catalog.length} instruments indexed</label>
-         <input id="arc-market-search" type="search" value={catalogSearch} placeholder="Search symbol or company..." onChange={e=>setCatalogSearch(e.target.value)}/>
+         <input id="arc-market-search" type="search" value={catalogSearch} placeholder="Search symbol or company..." onChange={e=>{setCatalogSearch(e.target.value);setRemoteResults([]);}}/>
+         <button className="arc-discover" type="button" disabled={searchingRemote||catalogSearch.trim().length<2} onClick={()=>void searchMore()}>{searchingRemote?"Searching Yahoo Finance...":"Find more instruments across Yahoo Finance"}</button>
+         {remoteResults.length>0&&<div className="arc-remote-results">
+           <strong>DISCOVERED · {remoteResults.length} RESULTS</strong>
+           {remoteResults.map(item=><div key={item.symbol}>
+             <span><b>{item.symbol}</b><small>{item.name} · {item.asset_class} · {item.currency}</small></span>
+             <button type="button" disabled={!!importingSymbol} onClick={()=>void importTicker(item.symbol)}>{importingSymbol===item.symbol?"Importing...":"Add"}</button>
+           </div>)}
+         </div>}
          <select aria-label="Filter asset class" value={catalogClass} onChange={e=>setCatalogClass(e.target.value)}>
            {["All","Stocks","ETFs","Crypto","Forex"].map(group=><option key={group}>{group}</option>)}
          </select>
