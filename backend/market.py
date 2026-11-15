@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import math
 import logging
 
-from .archive import record_history
+from .archive import record_history, load_archived_history
 
 import httpx
 import yfinance as yf
@@ -120,9 +120,27 @@ def history(asset_id: str, window: str) -> dict[str, Any]:
     if not instrument.ticker:
         raise HTTPException(422, detail="Select an actual dated option contract to load option history.")
     def load():
-        bars = coinbase_candles(instrument, window) if instrument.kind == "Crypto" else yahoo_candles(instrument, window)
-        if not bars:
-            raise HTTPException(503, detail="No market data available for this symbol and timeframe.")
+        try:
+            bars = coinbase_candles(instrument, window) if instrument.kind == "Crypto" else yahoo_candles(instrument, window)
+            if not bars:
+                raise HTTPException(503, detail="No market data available for this symbol and timeframe.")
+        except HTTPException:
+            # Historical replay can continue offline using recorded real bars,
+            # but these are explicitly stale and never feed live paper orders.
+            try:
+                stored = load_archived_history(asset_id, window)
+            except Exception as exc:
+                _logger.warning("Failed to read locally archived candles: %s", exc)
+                stored = []
+            if not stored:
+                raise
+            return {
+                "asset_id": asset_id, "range": window,
+                "source": "Local Parquet archive (offline historical snapshot)",
+                "currency": instrument.currency, "bars": stored,
+                "as_of": datetime.fromtimestamp(stored[-1]["time"], tz=timezone.utc).isoformat(),
+                "is_demo": False, "delayed_or_indicative": True, "offline_cache": True,
+            }
         response = {
             "asset_id": asset_id, "range": window, "source": "Coinbase Exchange" if instrument.kind == "Crypto" else "Yahoo Finance (unofficial)",
             "currency": instrument.currency, "bars": bars,
@@ -133,7 +151,7 @@ def history(asset_id: str, window: str) -> dict[str, Any]:
         # response into a silent synthetic fallback or fail the quote feed.
         try:
             record_history(response)
-        except (OSError, ValueError, TypeError, RuntimeError) as exc:
+        except Exception as exc:
             _logger.warning("Could not archive provider market data: %s", exc)
         return response
     return cached(("history:"+asset_id, window), 75 if window in ("1D", "1W") else 240, load)
