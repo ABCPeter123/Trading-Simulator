@@ -6,8 +6,8 @@ import {
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
-import { gameCatalog } from "./arcadeApi";
-import type { CatalogInstrument } from "./arcadeApi";
+import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
+import type { CatalogInstrument, DiscoveredInstrument } from "./arcadeApi";
 import type { Asset, TradeSide } from "./types";
 import {
   listPortfolioSeasons, loadPortfolioSeason, newPortfolioSeason,
@@ -33,6 +33,8 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const [setup, setSetup] = useState(true);
   const [basket, setBasket] = useState<string[]>(["spy","qqq"]);
   const [search, setSearch] = useState("");
+  const [external, setExternal] = useState<DiscoveredInstrument[]>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
   const [period, setPeriod] = useState("5Y");
   const [startDate, setStartDate] = useState("");
   const [focused, setFocused] = useState("spy");
@@ -139,6 +141,27 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const last = bars.at(-1);
   const filtered = catalog.filter(i=>eligible(i)&&
     (i.symbol+" "+i.name).toLowerCase().includes(search.toLowerCase())).slice(0,100);
+  const discover = async () => {
+    setSearchBusy(true);setError("");
+    try {setExternal(await gameDiscover(search));}
+    catch(e){setError(errorText(e));}
+    finally{setSearchBusy(false);}
+  };
+  const importSymbol = async (symbol: string) => {
+    setSearchBusy(true);setError("");
+    try {
+      const newAsset = await gameImportTicker(symbol);
+      setCatalog(prev=>prev.some(a=>a.id===newAsset.id)?prev:[...prev,newAsset]);
+      if(!eligible(newAsset)) {
+        setError(symbol+" is available for research but is not eligible for USD cash portfolio trading.");
+      } else {
+        setBasket(prev=>prev.includes(newAsset.id)?prev:prev.length<5?[...prev,newAsset.id]:prev);
+        setNotice(symbol+" imported and saved locally.");
+      }
+      setExternal([]);
+    } catch(e){setError(errorText(e));}
+    finally{setSearchBusy(false);}
+  };
   const advance = (n:number, untilAction=false) => {
     if(season) void update(()=>advancePortfolio(season.id,n,untilAction));
   };
@@ -176,7 +199,14 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <div>{basket.map(id=><button key={id} onClick={()=>setBasket(prev=>prev.filter(x=>x!==id))}>{assetName(id)} ×</button>)}</div>
         </div>
         <label htmlFor="port-search"><Search size={15}/> Search instruments</label>
-        <input id="port-search" type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Apple, SPY, BTC ..."/>
+        <input id="port-search" type="search" value={search} onChange={e=>{setSearch(e.target.value);setExternal([]);}} placeholder="Apple, SPY, BTC ..."/>
+        <button className="port-search-more" disabled={searchBusy||search.trim().length<2} onClick={()=>void discover()}>
+          {searchBusy?"Searching provider...":"Discover more instruments on Yahoo Finance"}
+        </button>
+        {external.length>0&&<div className="port-discovery">{external.map(item=><div key={item.symbol}>
+          <span><strong>{item.symbol}</strong><small>{item.name} · {item.currency}</small></span>
+          <button disabled={searchBusy} onClick={()=>void importSymbol(item.symbol)}>Import</button>
+        </div>)}</div>}
         <div className="port-catalog">{filtered.map(a=><button key={a.id}
           className={basket.includes(a.id)?"selected":""}
           disabled={!basket.includes(a.id)&&basket.length>=5}
