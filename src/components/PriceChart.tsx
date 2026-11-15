@@ -31,7 +31,7 @@ export function PriceChart({ asset, range, style }: PriceChartProps) {
         textColor: "#8696a9",
         fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
         fontSize: 11,
-        attributionLogo: false,
+        attributionLogo: true,
       },
       grid: {
         vertLines: { color: "#1c2733" },
