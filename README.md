@@ -28,35 +28,37 @@ Market data are real but **fills are simulations**. Yahoo does not provide verif
 
 ## Run locally (Windows PowerShell)
 
-Clone once:
+Clone once (skip this if you already have the folder):
 
 ```powershell
 git clone https://github.com/ABCPeter123/Trading-Simulator.git
 cd Trading-Simulator
 ```
 
-**Terminal 1, start Python API:**
+**Normal daily startup:** If you already cloned the repository, open it in VS Code and run:
 
 ```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+powershell -ExecutionPolicy Bypass -File .\start-local.ps1
 ```
 
-**Terminal 2, start browser UI:**
+The launcher detects your existing `.venv` and `node_modules` and reuses them.
+It installs dependencies only when missing or when dependency manifests change,
+starts the local API and Vite in separate PowerShell windows, and opens
+**http://127.0.0.1:5173**. It does not reset your portfolio or market archive.
 
-```powershell
-npm install
-npm run dev
-```
-
-Open **http://127.0.0.1:5173**. Both terminals must remain running.
+To incorporate a new GitHub update, run `git pull` first, then the same launcher.
+To check dependencies without starting servers, append `-SetupOnly`.
 
 The API health endpoint is http://127.0.0.1:8000/api/health and its interactive documentation is http://127.0.0.1:8000/docs.
 
-On macOS/Linux, replace `py -3 -m venv .venv` with `python3 -m venv .venv`, use `.venv/bin/python` instead of `.venv\Scripts\python.exe`.
+**Manual startup:** If dependencies are already installed, start the backend in
+one terminal with `.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload`
+and the frontend in another with `npm run dev`. No reinstall is necessary.
 
-For future updates, run `git pull` before starting. Then reinstall dependencies if the requirements or package files changed.
+For macOS/Linux use a Python virtual environment and the manual backend/frontend
+commands. The one-command launcher is designed for Windows PowerShell.
+
+See [local setup and persistent state conventions](docs/LOCAL_SETUP.md).
 
 ## Using the simulator
 
