@@ -12,6 +12,9 @@ from time import monotonic
 from typing import Any
 from zoneinfo import ZoneInfo
 import math
+import logging
+
+from .archive import record_history
 
 import httpx
 import yfinance as yf
@@ -28,6 +31,7 @@ RANGE_CONFIG = {
 COINBASE_SECONDS = {"1D": 300, "1W": 3600, "1M": 21600, "3M": 86400, "1Y": 86400}
 COINBASE_DAYS = {"1D": 1, "1W": 7, "1M": 30, "3M": 90, "1Y": 365}
 _client = httpx.Client(timeout=13, headers={"User-Agent": "TradingSimLocal/0.2"})
+_logger = logging.getLogger(__name__)
 _lock = Lock()
 _cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
 
@@ -119,12 +123,19 @@ def history(asset_id: str, window: str) -> dict[str, Any]:
         bars = coinbase_candles(instrument, window) if instrument.kind == "Crypto" else yahoo_candles(instrument, window)
         if not bars:
             raise HTTPException(503, detail="No market data available for this symbol and timeframe.")
-        return {
+        response = {
             "asset_id": asset_id, "range": window, "source": "Coinbase Exchange" if instrument.kind == "Crypto" else "Yahoo Finance (unofficial)",
             "currency": instrument.currency, "bars": bars,
             "as_of": datetime.fromtimestamp(bars[-1]["time"], tz=timezone.utc).isoformat(),
             "is_demo": False, "delayed_or_indicative": instrument.kind != "Crypto",
         }
+        # Archiving is best-effort. File errors must not turn a real price
+        # response into a silent synthetic fallback or fail the quote feed.
+        try:
+            record_history(response)
+        except (OSError, ValueError, TypeError, RuntimeError) as exc:
+            _logger.warning("Could not archive provider market data: %s", exc)
+        return response
     return cached(("history:"+asset_id, window), 75 if window in ("1D", "1W") else 240, load)
 
 def market_open(instrument: Instrument, now: datetime | None = None) -> bool:
