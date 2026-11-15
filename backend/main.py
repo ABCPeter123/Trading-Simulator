@@ -22,7 +22,7 @@ class NewOrder(BaseModel):
     quantity: str = Field(min_length=1, max_length=40)
 
 @app.get("/api/instruments")
-def instruments(search: str = Query("", max_length=80), category: str = Query("", max_length=30), limit: int = Query(250, ge=1, le=250)):
+def instruments(search: str = Query("", max_length=80), category: str = Query("", max_length=30), limit: int = Query(500, ge=1, le=500)):
     return list_instruments(search, category, limit)
 
 @app.get("/api/health")
