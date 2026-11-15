@@ -47,8 +47,9 @@ never forward filled. If one asset lacks a candle for a given day:
 - Its bot does not evaluate a signal on the missing day.
 - A cryptocurrency may trade on Saturday while a stock remains idle.
 
-A basket must contain sufficient overlapping history, including at least
-36 warm-up observations for each symbol and about 45 playable calendar days.
+A basket must contain at least 75 shared historical daily candles, including
+a shared session near the end of available history, at least 36 warm-up
+observations for each symbol, and about 45 playable calendar days.
 If the provider cannot supply these, season creation fails visibly.
 
 All markets are simulations: market orders use next-bar opens, synthetic
