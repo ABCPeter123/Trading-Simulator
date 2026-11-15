@@ -29,7 +29,7 @@ BAR_SCHEMA = {
     "close": pl.Float64,
     "volume": pl.Float64,
 }
-ALLOWED_RANGES = {"1D", "1W", "1M", "3M", "1Y"}
+ALLOWED_RANGES = {"1D", "1W", "1M", "3M", "6M", "1Y", "2Y", "5Y", "10Y", "MAX"}
 
 
 def archive_path(asset_id: str, window: str) -> Path:
