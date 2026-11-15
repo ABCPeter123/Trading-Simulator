@@ -38,6 +38,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const [focused, setFocused] = useState("spy");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const activeSeasonRef = useRef<string|null>(null);
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -66,13 +67,20 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   }, [focused, selected?.symbol, selected?.name, selected?.currency, selected?.asset_class, selected?.decimals]);
 
   const hydrate = useCallback((next: PortfolioSeason) => {
+    const changedRun = activeSeasonRef.current !== next.id;
+    activeSeasonRef.current = next.id;
     setSeason(next);
-    setFocused(prev => next.asset_ids.includes(prev) ? prev : next.asset_ids[0]);
-    setSource(prev => next.asset_ids.includes(prev) ? prev : next.asset_ids[0]);
-    setTarget(prev => next.asset_ids.includes(prev) ? prev : next.asset_ids.at(-1)!);
-    setStrategy(next.strategy);
-    setStop(String(next.risk.stop_loss_pct));
-    setTake(String(next.risk.take_profit_pct));
+    if (changedRun) {
+      setFocused(next.asset_ids[0]);
+      setSource(next.asset_ids[0]);
+      setTarget(next.asset_ids.at(-1)!);
+      setStrategy(next.strategy);
+      setStop(String(next.risk.stop_loss_pct));
+      setTake(String(next.risk.take_profit_pct));
+      setSaved(prev => prev.some(item=>item.id===next.id) ? prev : [
+        {id:next.id,asset_ids:next.asset_ids,period:next.period,updated_at:new Date().toISOString()},...prev,
+      ]);
+    }
     setSetup(false);
     localStorage.setItem(SAVED, next.id);
   }, []);
