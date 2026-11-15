@@ -15,10 +15,14 @@ interface PriceChartProps {
 
 export function PriceChart({ asset, range, style, bars }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const updateRef = useRef<((bars: MarketBar[]) => void) | null>(null);
 
+  // Create the chart only when its symbol/style configuration changes.
+  // Historical replay appends bars much more frequently, so it uses setData
+  // below instead of tearing down the entire canvas every game tick.
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !bars.length) return;
+    if (!container) return;
     const chart = createChart(container, {
       autoSize: true,
       layout: {
@@ -37,35 +41,55 @@ export function PriceChart({ asset, range, style, bars }: PriceChartProps) {
       },
       localization: { priceFormatter: (value: number) => value.toFixed(asset.decimals) },
     });
-    const format = { type: "price" as const, precision: asset.decimals, minMove: 1 / 10 ** asset.decimals };
-    const candles = bars.map(bar => ({
-      time: bar.time as UTCTimestamp,
-      open: bar.open, high: bar.high, low: bar.low, close: bar.close,
-    }));
+    const priceFormat = {
+      type: "price" as const,
+      precision: asset.decimals,
+      minMove: 1 / 10 ** asset.decimals,
+    };
+    let updatePrice: (newBars: MarketBar[]) => void;
     if (style === "candles") {
       const series = chart.addSeries(CandlestickSeries, {
         upColor: "#35ca98", downColor: "#f96873", borderVisible: false,
-        wickUpColor: "#35ca98", wickDownColor: "#f96873", priceFormat: format,
+        wickUpColor: "#35ca98", wickDownColor: "#f96873", priceFormat,
       });
-      series.setData(candles);
+      updatePrice = (newBars) => series.setData(newBars.map(bar => ({
+        time: bar.time as UTCTimestamp,
+        open: bar.open, high: bar.high, low: bar.low, close: bar.close,
+      })));
     } else {
       const series = chart.addSeries(LineSeries, {
-        color: "#53a9ee", lineWidth: 2, priceFormat: format,
+        color: "#53a9ee", lineWidth: 2, priceFormat,
       });
-      series.setData(candles.map(({time, close}) => ({time, value: close})));
+      updatePrice = (newBars) => series.setData(newBars.map(bar => ({
+        time: bar.time as UTCTimestamp, value: bar.close,
+      })));
     }
     const volume = chart.addSeries(HistogramSeries, {
-      priceFormat: {type: "volume"}, priceScaleId: "",
-      lastValueVisible: false, priceLineVisible: false,
+      priceFormat: {type:"volume"},
+      priceScaleId:"",
+      lastValueVisible:false,
+      priceLineVisible:false,
     });
-    volume.priceScale().applyOptions({scaleMargins: {top: 0.78, bottom: 0.01}});
-    volume.setData(bars.map(bar => ({
-      time: bar.time as UTCTimestamp, value: bar.volume,
-      color: bar.close >= bar.open ? "rgba(53,202,152,.28)" : "rgba(249,104,111,.27)",
-    })));
-    chart.timeScale().fitContent();
-    return () => chart.remove();
-  }, [asset, range, style, bars]);
+    volume.priceScale().applyOptions({scaleMargins: {top:0.78, bottom:0.01}});
+    updateRef.current = (newBars) => {
+      if (!newBars.length) return;
+      updatePrice(newBars);
+      volume.setData(newBars.map(bar => ({
+        time:bar.time as UTCTimestamp,
+        value:bar.volume,
+        color:bar.close>=bar.open ? "rgba(53,202,152,.28)" : "rgba(249,104,111,.27)",
+      })));
+      chart.timeScale().fitContent();
+    };
+    return () => {
+      updateRef.current = null;
+      chart.remove();
+    };
+  }, [asset, range, style]);
 
-  return <div className="chart-canvas" ref={containerRef} aria-label={`${asset.symbol} actual historical market prices chart`} />;
+  useEffect(() => {
+    updateRef.current?.(bars);
+  }, [bars, asset, range, style]);
+
+  return <div className="chart-canvas" ref={containerRef} aria-label={`${asset.symbol} historical market price chart`}/>;
 }
