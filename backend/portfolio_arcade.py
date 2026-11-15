@@ -7,7 +7,6 @@ forward-filled into tradable candles.
 """
 from __future__ import annotations
 
-from bisect import bisect_right
 from contextlib import closing
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -198,6 +197,18 @@ def public(run_id, row, snap, state):
         if start is not None and current is not None:
             hold.append(float((current/start-1)*100))
     baseline = sum(hold)/len(hold) if hold else 0
+    score = max(0, round(500 + (ret-baseline)*12 + drawdown*6))
+    badges = []
+    if state["fills"]:
+        badges.append("First trade")
+    if len({fill["asset_id"] for fill in state["fills"]}) >= 2:
+        badges.append("Diversified trader")
+    if state["strategy"].strip():
+        badges.append("Cross-asset bot")
+    if ret > baseline and state["fills"]:
+        badges.append("Beat the benchmark")
+    if idx == len(days)-1:
+        badges.append("Season complete")
     visible = {}
     for asset_id in json.loads(row["basket"]):
         visible[asset_id] = [snap["daily"][asset_id][day] for day in days[:idx+1]
@@ -212,6 +223,7 @@ def public(run_id, row, snap, state):
             "cash": float(cash), "exposure": float(exposure), "equity": float(equity),
             "return_pct": ret, "equal_weight_hold_pct": baseline,
             "max_drawdown_pct": drawdown, "xp": xp, "level": xp//125+1,
+            "score": score, "badges": badges,
         }, "positions": positions,
         "orders": state["orders"], "fills": state["fills"][-60:][::-1],
         "events": state["events"], "strategy": state["strategy"], "risk": state["risk"],
