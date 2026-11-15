@@ -2,7 +2,28 @@
 
 A **local-first paper trading and historical replay terminal** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
-## Status (v0.3, local compute/data upgrade)
+## Trading Arcade v0.4 (default homepage)
+
+The app now opens in the [Trading Arcade](docs/ARCADE.md) by default.
+Start a historical season with a virtual $100,000 account, manually trade
+with market/limit/stop orders, fast-forward up to 20 candles at a time,
+autoplay, and earn levels/badges/score for your performance against buy-and-hold.
+
+You can also write simple automated strategies, for example:
+
+```text
+WHEN SMA(10) CROSSES ABOVE SMA(30) BUY 50%
+WHEN SMA(10) CROSSES BELOW SMA(30) SELL 100%
+```
+
+The bot runs on the server, evaluates only revealed candles and queues the
+strategy's orders for the next candle open. Run progress and bot rules persist
+in local SQLite. Use the back arrow to return to the existing Trading Terminal.
+
+**No new dependencies are required.** For an existing setup, run `git pull`,
+then start your normal local launcher. Do not recreate or reinstall packages.
+
+## Existing terminal and quant stack (v0.3)
 
 - Actual historical OHLCV charts: stocks, US/Canadian ETFs, continuous futures indicators, forex, and crypto.
 - **Coinbase Exchange public API** for crypto candles and real-time bid/ask snapshots.
@@ -96,6 +117,11 @@ The service caches quote requests briefly and guards against stale quotes. All p
 | `/api/account/reset` | POST | Reset local paper ledger |
 | `/api/backtest/{asset_id}?fast=10&slow=30` | GET | Historical SMA crossover result |
 | `/api/archive/{asset_id}?range=1Y` | GET | Local Parquet archive statistics via DuckDB |
+| `/api/arcade/new` | POST | Create a historical game session |
+| `/api/arcade/{run_id}` | GET | View only revealed candles, portfolio and progress |
+| `/api/arcade/{run_id}/advance` | POST | Time skip or advance to bot action |
+| `/api/arcade/{run_id}/orders` | POST | Queue market, limit or stop order |
+| `/api/arcade/{run_id}/strategy` | PUT | Save a simple trading bot |
 
 ## Tests
 
