@@ -1,5 +1,6 @@
 """Local-only API. Start via: python -m uvicorn backend.main:app --reload"""
 from __future__ import annotations
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
@@ -7,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from .assets import get_instrument
 from .ledger import account_snapshot, reset_account, submit_order
-from .market import history, quote
+from .market import history, quote, market_open
 from .strategy import sma_backtest
 
 app = FastAPI(title="Trading Simulator Local API", version="0.2.0")
@@ -42,9 +43,15 @@ def get_account():
 
 @app.post("/api/orders")
 def place_order(order: NewOrder):
-    get_instrument(order.asset_id)
-    # The server obtains a fresh quote; it never trusts an order's client price.
+    instrument = get_instrument(order.asset_id)
+    # Recheck session and actual quote timestamp per order, even if quote was cached.
+    if not market_open(instrument):
+        raise HTTPException(409, detail="Market session closed.")
     latest = quote(order.asset_id)
+    quote_age = (datetime.now(timezone.utc) - datetime.fromisoformat(latest["timestamp"])).total_seconds()
+    if not (-60 <= quote_age <= (120 if instrument.kind == "Crypto" else 1200)):
+        raise HTTPException(409, detail="Price is stale. Please refresh before trading.")
+    # The server obtains the reference quote; client-supplied prices are ignored.
     fill = submit_order(order.asset_id, order.side, order.quantity, latest)
     return {"fill": fill, "account": get_account()}
 
