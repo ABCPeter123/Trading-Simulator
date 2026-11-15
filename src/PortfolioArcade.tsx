@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowUpRight, ArrowDownRight, BarChart3, Bot, Check,
   ChevronRight, Clock3, FastForward, Pause, Play, Plus, Save,
-  Search, ShieldCheck, ShoppingCart, Trash2, Wallet, Zap,
+  Search, ShieldCheck, ShoppingCart, Trash2, Wallet,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
