@@ -199,6 +199,11 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       </div>
     </main> : <main className="port-layout">
       <section className="port-main">
+        <div className="port-achievements">
+          <strong>LEVEL {season.metrics.level} · {season.metrics.score.toLocaleString()} POINTS</strong>
+          <span>{season.metrics.xp} XP</span>
+          <div>{season.metrics.badges.map(badge=><span key={badge}>{badge}</span>)}</div>
+        </div>
         <div className="port-metrics">
           <div><small>EQUITY</small><strong>{formatMoney(season.metrics.equity)}</strong></div>
           <div><small>CASH</small><strong>{formatMoney(season.metrics.cash)}</strong></div>
