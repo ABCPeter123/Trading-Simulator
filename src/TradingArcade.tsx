@@ -6,17 +6,18 @@ import {
   Trash2, Trophy, Wallet, Zap,
 } from "lucide-react";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
+import type { Asset } from "./types";
+import VisualStrategyBuilder from "./VisualStrategyBuilder";
 import { PriceChart } from "./components/PriceChart";
 import {
-  gameCancel, gameLoad, gameRuns, gameSaveCode, gameStart, gameStep,
+  gameCancel, gameCatalog, gameLoad, gameRuns, gameSaveCode, gameSetRisk, gameStart, gameStep,
   gameTrade, gameValidateCode,
 } from "./arcadeApi";
-import type { ArcadeRun, OrderKind, SavedArcadeRun } from "./arcadeApi";
+import type { ArcadeRun, CatalogInstrument, OrderKind, SavedArcadeRun } from "./arcadeApi";
 import type { TradeSide } from "./types";
 import "./arcade.css";
 
 const SAVED_KEY = "trading-simulator-arcade-current-run";
-const ELIGIBLE = ASSETS.filter(a => !["Futures","Options"].includes(a.assetClass) && a.id !== "vfv");
 const QUICK_SIZES = [10, 25, 50, 100];
 const asTime = (seconds: number) => new Date(seconds*1000).toLocaleDateString("en-CA", {year:"numeric",month:"short",day:"numeric"});
 const errText = (error: unknown) => error instanceof Error ? error.message : "An unexpected error occurred.";
@@ -29,6 +30,12 @@ function Metric({label, value, note, positive}: {label: string; value: string; n
 export default function TradingArcade({onExit}: {onExit:()=>void}) {
   const [game, setGame] = useState<ArcadeRun|null>(null);
   const [saved, setSaved] = useState<SavedArcadeRun[]>([]);
+  const [catalog, setCatalog] = useState<CatalogInstrument[]>([]);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogClass, setCatalogClass] = useState("All");
+  const [period, setPeriod] = useState<"1Y"|"2Y"|"5Y"|"10Y"|"MAX">("5Y");
+  const [stopPct, setStopPct] = useState("0");
+  const [takePct, setTakePct] = useState("0");
   const [assetId, setAssetId] = useState("aapl");
   const [startingPoint, setStartingPoint] = useState(0.3);
   const [newGame, setNewGame] = useState(false);
@@ -54,6 +61,8 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
     const run = await gameLoad(id);
     setGame(run);
     setCode(run.strategy || SAMPLE_CODE);
+    setStopPct(String(run.risk?.stop_loss_pct ?? 0));
+    setTakePct(String(run.risk?.take_profit_pct ?? 0));
     setNewGame(false);
     setError("");
     localStorage.setItem(SAVED_KEY, id);
@@ -63,15 +72,16 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
     let cancelled = false;
     const boot = async () => {
       try {
-        const runs = await gameRuns();
+        const [runs, instruments] = await Promise.all([gameRuns(), gameCatalog()]);
         if (cancelled) return;
         setSaved(runs);
+        setCatalog(instruments);
         const stored = localStorage.getItem(SAVED_KEY);
         const resume = runs.find(r=>r.id===stored) ?? runs[0];
         if (resume) {
           try {
             const state = await gameLoad(resume.id);
-            if (!cancelled) {setGame(state);setCode(state.strategy || SAMPLE_CODE);localStorage.setItem(SAVED_KEY,resume.id);}
+            if (!cancelled) {setGame(state);setCode(state.strategy || SAMPLE_CODE);setStopPct(String(state.risk?.stop_loss_pct ?? 0));setTakePct(String(state.risk?.take_profit_pct ?? 0));localStorage.setItem(SAVED_KEY,resume.id);}
           } catch {
             if (!cancelled) setNewGame(true);
           }
@@ -125,9 +135,13 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
     if(busyRef.current)return;
     busyRef.current=true;setBusy(true);setError("");
     try {
-      const result=await gameStart(assetId,startingPoint);
+      const selected = filteredCatalog.find(a=>a.id===assetId) ?? filteredCatalog[0];
+      if (!selected) throw Error("Choose a supported instrument.");
+      const result=await gameStart(selected.id,startingPoint,period);
       setGame(result);
       setCode(SAMPLE_CODE);
+      setStopPct("0");
+      setTakePct("0");
       setCodeError("");
       setNewGame(false);
       setSaved(await gameRuns());
@@ -174,7 +188,14 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
     finally{setValidating(false);}
   }
 
-  const asset=ASSETS.find(a=>a.id===game?.asset_id);
+  const filteredCatalog = catalog.filter(item => item.tradable && item.currency === "USD" &&
+    (catalogClass === "All" || item.asset_class === catalogClass) &&
+    (item.symbol+" "+item.name).toLowerCase().includes(catalogSearch.trim().toLowerCase()));
+  const catalogAsset = catalog.find(a=>a.id===game?.asset_id);
+  const asset: Asset | undefined = ASSETS.find(a=>a.id===game?.asset_id) ??
+    (catalogAsset ? {id: catalogAsset.id, symbol: catalogAsset.symbol, name: catalogAsset.name,
+      exchange: catalogAsset.currency, assetClass: catalogAsset.asset_class as Asset["assetClass"],
+      decimals: catalogAsset.decimals, spreadBps: 5, accent: "#a7a2ff"} : undefined);
   const latest=game?.bars.at(-1);
   const q=game?.metrics;
   const delta=latest&&game&&game.bars.length>=2 ? latest.close-game.bars[game.bars.length-2].close : 0;
@@ -201,9 +222,22 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
        <h1>Trade through history.<br/><em>Beat the market.</em></h1>
        <p>Start with $100,000 in virtual cash, reveal real historical candles, and compete against buy-and-hold. Play manually or design a trading bot. Skip weeks in seconds.</p>
        <div className="arc-start-form">
-         <label htmlFor="arc-new-asset">Choose your market</label>
-         <select id="arc-new-asset" value={assetId} onChange={e=>setAssetId(e.target.value)}>
-           {ELIGIBLE.map(a=><option key={a.id} value={a.id}>{a.symbol} · {a.name}</option>)}
+         <label htmlFor="arc-market-search">Find a market · {catalog.length} instruments indexed</label>
+         <input id="arc-market-search" type="search" value={catalogSearch} placeholder="Search symbol or company..." onChange={e=>setCatalogSearch(e.target.value)}/>
+         <select aria-label="Filter asset class" value={catalogClass} onChange={e=>setCatalogClass(e.target.value)}>
+           {["All","Stocks","ETFs","Crypto","Forex"].map(group=><option key={group}>{group}</option>)}
+         </select>
+         <label htmlFor="arc-new-asset">Choose your market · {filteredCatalog.length} matches</label>
+         <select id="arc-new-asset" value={filteredCatalog.some(a=>a.id===assetId)?assetId:(filteredCatalog[0]?.id??"")} onChange={e=>setAssetId(e.target.value)}>
+           {filteredCatalog.map(a=><option key={a.id} value={a.id}>{a.symbol} · {a.name}</option>)}
+         </select>
+         <label htmlFor="arc-historical-range">Historical depth</label>
+         <select id="arc-historical-range" value={period} onChange={e=>setPeriod(e.target.value as typeof period)}>
+           <option value="1Y">1 year · daily candles</option>
+           <option value="2Y">2 years · daily candles</option>
+           <option value="5Y">5 years · daily candles</option>
+           <option value="10Y">10 years · daily candles</option>
+           <option value="MAX">Maximum available history</option>
          </select>
          <label htmlFor="arc-start-point">Starting point</label>
          <select id="arc-start-point" value={startingPoint} onChange={e=>setStartingPoint(Number(e.target.value))}>
@@ -220,7 +254,7 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
        <div className="arc-main">
          <section className="arc-hero">
            <div className="arc-symbol-line">
-             <div><span className="arc-upper">SEASON IN PROGRESS</span><h1>{asset?.symbol??game.asset_id}<span className="arc-symbol-currency"> / USD</span></h1><p>{asset?.name} · {game.source}</p></div>
+             <div><span className="arc-upper">SEASON IN PROGRESS</span><h1>{asset?.symbol??game.asset_id}<span className="arc-symbol-currency"> / USD</span></h1><p>{asset?.name} · {game.period} · {game.source}</p></div>
              <div className="arc-price"><strong>{latest ? formatPrice(latest.close,asset?.decimals??2):"—"}</strong><span className={delta>=0?"positive":"negative"}>{delta>=0?<ArrowUpRight size={15}/>:<ArrowDownRight size={15}/>} {delta>=0?"+":""}{formatPrice(delta,asset?.decimals??2)} last candle</span></div>
            </div>
            <div className="arc-progress-line">
@@ -262,6 +296,7 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
            <div className="arc-box-head"><div><Bot size={18}/><strong>Strategy Workshop</strong><span className="arc-tag">NO CODING EXPERIENCE NEEDED</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{editorOpen?"Collapse":"Expand"}</button></div>
            <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>Teach your trading bot what to do</strong><p>Write rules in plain English. The engine evaluates the conditions at each revealed candle close, then queues trades for the next candle.</p></div></div>
            {editorOpen&&<div className="arc-editor">
+             <VisualStrategyBuilder onAdd={rule=>{setCode(prev=>prev.trim()?prev.trim()+"\\n"+rule:rule);setCodeError("");}}/>
              <div className="arc-template-row"><span>TRY A TEMPLATE</span>{game.examples.map(sample=><button key={sample.title} onClick={()=>{setCode(sample.code);setCodeError("");}}>{sample.title}</button>)}</div>
              <div className="arc-code-head"><span><Terminal size={14}/> strategy.tradesim</span><span>{codeSaved?"SAVED TO GAME":"UNSAVED CHANGES"}</span></div>
              <textarea spellCheck={false} aria-label="Trading strategy rules" value={code} onChange={e=>{setCode(e.target.value);setCodeError("");}} rows={5} placeholder="WHEN SMA(10) CROSSES ABOVE SMA(30) BUY 25%" maxLength={1800}/>
@@ -312,6 +347,28 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
                <button className={side==="buy"?"arc-buy-cta":"arc-sell-cta"} disabled={busy||playing||game.finished} type="submit">{side==="buy"?<ArrowUpRight size={17}/>:<ArrowDownRight size={17}/>} Queue {side.toUpperCase()} order</button>
              </form>
              <div className="arc-disclaimer"><ShieldCheck size={14}/><span>Orders execute only as new candles reveal. Fees, spread and slippage are modeled.</span></div>
+           </div>
+         </section>
+
+         <section className="arc-risk-card">
+           <div className="arc-box-head"><div><ShieldCheck size={17}/><strong>Protect your position</strong></div><span className="arc-tag">AUTO EXITS</span></div>
+           <div className="arc-risk-body">
+             <p>Attach automatic downside and upside exits to your holdings. Protections start on the next candle, not inside a new fill candle.</p>
+             <div className="arc-risk-grid">
+               <label>Stop loss %
+                 <input type="number" min="0" max="75" step="0.1" value={stopPct} onChange={e=>setStopPct(e.target.value)}/>
+               </label>
+               <label>Take profit %
+                 <input type="number" min="0" max="75" step="0.1" value={takePct} onChange={e=>setTakePct(e.target.value)}/>
+               </label>
+             </div>
+             <div className="arc-risk-presets"><button onClick={()=>{setStopPct("3");setTakePct("6");}}>3% stop / 6% target</button><button onClick={()=>{setStopPct("5");setTakePct("10");}}>5% / 10%</button><button onClick={()=>{setStopPct("0");setTakePct("0");}}>Off</button></div>
+             <button className="arc-risk-save" disabled={busy||playing} onClick={()=> {
+               const stop=Number(stopPct),take=Number(takePct);
+               if (!Number.isFinite(stop)||!Number.isFinite(take)||stop<0||stop>75||take<0||take>75) {setError("Risk percentages must be between 0 and 75.");return;}
+               void action(()=>gameSetRisk(game.id,stop,take),"Protective exits updated.");
+             }}><ShieldCheck size={15}/> Apply protection</button>
+             <small>Active: stop {game.risk.stop_loss_pct||"off"}% · target {game.risk.take_profit_pct||"off"}%. If both levels are touched in one candle, the stop wins.</small>
            </div>
          </section>
 
