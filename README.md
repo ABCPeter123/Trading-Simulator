@@ -2,14 +2,14 @@
 
 A **local-first paper trading and historical replay terminal** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
-## Trading Arcade v0.4 (default homepage)
+## Trading Arcade v0.5 (historical depth, instruments, no-code builder)
 
 The app now opens in the [Trading Arcade](docs/ARCADE.md) by default.
-Start a historical season with a virtual $100,000 account, manually trade
+Start a historical season with a virtual $100,000 account, choose daily candles from 1 year, 2 years, 5 years, 10 years or maximum available history, manually trade
 with market/limit/stop orders, fast-forward up to 20 candles at a time,
 autoplay, and earn levels/badges/score for your performance against buy-and-hold.
 
-You can also write simple automated strategies, for example:
+The instrument catalog includes 138 stocks, ETFs, forex pairs, crypto pairs, CAD listings and continuous futures references. A Yahoo Finance search/import option lets you explore further equities, ETFs and indices. Actual data availability varies by symbol; options and futures are not trade-enabled.\n\nBuild rules visually using indicator selectors or write simple automated strategies, for example:
 
 ```text
 WHEN SMA(10) CROSSES ABOVE SMA(30) BUY 50%
@@ -17,7 +17,7 @@ WHEN SMA(10) CROSSES BELOW SMA(30) SELL 100%
 ```
 
 The bot runs on the server, evaluates only revealed candles and queues the
-strategy's orders for the next candle open. Run progress and bot rules persist
+strategy's orders for the next candle open. Automatic stop-loss and take-profit controls are also available; ambiguous stop/target candles conservatively select the stop. Run progress and bot rules persist
 in local SQLite. Use the back arrow to return to the existing Trading Terminal.
 
 **No new dependencies are required.** For an existing setup, run `git pull`,
