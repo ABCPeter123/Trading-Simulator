@@ -184,3 +184,6 @@
 .arc-remote-results>div span{display:flex;flex-direction:column;gap:3px;min-width:0}
 .arc-remote-results>div b{font-size:11px}.arc-remote-results>div small{color:#90a1bc;font-size:10px;line-height:1.4}
 .arc-remote-results>div button{border:1px solid #655d94;background:#3a315b;color:#e2d4ff;font-size:10px;font-weight:800;border-radius:6px;padding:8px 12px}
+
+.arc-start-form input[type=date]{height:43px;width:100%;padding:0 12px;color:#e5eaf5;background:#141f2e;border:1px solid #334357;border-radius:8px;font-size:12px}
+.arc-date-hint{display:block;color:#7e94ac;font-size:10px;line-height:1.45}
