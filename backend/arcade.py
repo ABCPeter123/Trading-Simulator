@@ -52,13 +52,15 @@ def event(state, message):
     state["events"] = ([message] + state["events"])[:12]
 
 
-def start_run(asset_id, starting_point=0.3):
+def start_run(asset_id, starting_point=0.3, period="5Y"):
     instrument = get_instrument(asset_id)
     if not instrument.tradable or instrument.currency != "USD":
         raise HTTPException(422, detail="This contract/currency is not supported in the USD cash arcade.")
     if not 0.15 <= starting_point <= 0.75:
         raise HTTPException(422, detail="Starting point must be 15% to 75%.")
-    data = history(asset_id, "1Y")
+    if period not in {"1Y", "2Y", "5Y", "10Y", "MAX"}:
+        raise HTTPException(422, detail="Game history range must be 1Y, 2Y, 5Y, 10Y, or MAX.")
+    data = history(asset_id, period)
     bars = data["bars"]
     if len(bars) < 65:
         raise HTTPException(422, detail="Need at least 65 real historical candles.")
@@ -70,7 +72,7 @@ def start_run(asset_id, starting_point=0.3):
     index = min(len(bars)-2, max(35, int(len(bars) * starting_point)))
     now = datetime.now(timezone.utc).isoformat()
     run_id = str(uuid4())
-    state = dict(index=index, start_index=index, cash=str(INITIAL_CASH), qty="0",
+    state = dict(index=index, start_index=index, period=period, risk={"stop_loss_pct": 0, "take_profit_pct": 0}, cash=str(INITIAL_CASH), qty="0",
                  avg="0", realized="0", orders=[], fills=[], strategy="",
                  curve=[{"time": bars[index]["time"], "value": float(INITIAL_CASH)}],
                  events=["Season started. Future candles are hidden."])
@@ -104,6 +106,7 @@ def public(run_id, row, bars, state):
     if i == len(bars)-1: badges.append("Season complete")
     return {
         "id": run_id, "asset_id": row["asset_id"], "source": row["source"],
+        "period": state.get("period", "1Y"), "risk": state.get("risk", {"stop_loss_pct": 0, "take_profit_pct": 0}),
         "current_bar": i, "total_bars": len(bars), "finished": i == len(bars)-1,
         "progress_pct": round(100*i/(len(bars)-1), 1),
         "bars": bars[:i+1],  # no future data leaves this API
@@ -183,6 +186,17 @@ def set_strategy(run_id, code):
         return public(run_id, row, bars, state)
 
 
+def set_risk(run_id, stop_loss_pct=0, take_profit_pct=0):
+    if any(not (0 <= v <= 75) for v in (stop_loss_pct, take_profit_pct)):
+        raise HTTPException(422, detail="Protective percentages must be from 0 to 75.")
+    with LOCK, closing(connection()) as db, db:
+        row, bars, state = read(db, run_id)
+        state["risk"] = {"stop_loss_pct": stop_loss_pct, "take_profit_pct": take_profit_pct}
+        event(state, "Risk controls updated. Protections apply from the next candle.")
+        save(db, run_id, state)
+        return public(run_id, row, bars, state)
+
+
 def execute(state, order, bar, instrument):
     opening = dec(bar["open"])
     high, low = dec(bar["high"]), dec(bar["low"])
@@ -245,6 +259,28 @@ def advance_run(run_id, count=1, until_action=False):
         for _ in range(min(count, len(bars)-1-state["index"])):
             nxt = state["index"]+1
             bar = bars[nxt]
+            # Risk checks are for holdings entering the bar, never a position
+            # acquired within this same OHLC candle. At most one protective
+            # exit is selected. If both levels touch, stop-loss takes priority.
+            risk = state.get("risk", {})
+            held_before = dec(state["qty"])
+            if held_before > 0:
+                avg = dec(state["avg"])
+                stop_pct = dec(risk.get("stop_loss_pct", 0))
+                take_pct = dec(risk.get("take_profit_pct", 0))
+                stop_level = avg * (1 - stop_pct/100) if stop_pct else None
+                take_level = avg * (1 + take_pct/100) if take_pct else None
+                kind, target = (("stop", stop_level) if stop_level is not None and dec(bar["low"]) <= stop_level
+                                else ("limit", take_level) if take_level is not None and dec(bar["high"]) >= take_level
+                                else (None, None))
+                if kind is not None:
+                    risk_order = {
+                        "id": str(uuid4()), "side": "sell", "kind": kind,
+                        "size": "100", "size_type": "percent",
+                        "price": str(target), "source": "risk", "placed_bar": nxt-1,
+                    }
+                    result = execute(state, risk_order, bar, instrument)
+                    event(state, "PROTECTIVE EXIT: " + result)
             pending = []
             traded = False
             for order in state["orders"]:
