@@ -4,6 +4,14 @@ The catalog is a search namespace, not a guarantee that a provider supports
 every ticker/date. Actual OHLCV availability is checked before any round starts.
 """
 from dataclasses import dataclass
+from hashlib import sha256
+import json
+import os
+from pathlib import Path
+import re
+from threading import RLock
+
+import yfinance as yf
 
 @dataclass(frozen=True)
 class Instrument:
@@ -188,3 +196,107 @@ def list_instruments(search: str = "", category: str = "", limit: int = 150) -> 
         if len(result) >= min(max(1, limit), 250):
             break
     return result
+
+# Optional user-imported securities live locally, never in Git. No wildcard
+# remote fetch on import: Yahoo search must confirm the exact symbol.
+_CUSTOM_PATH = Path(os.environ.get("TRADING_SIM_CUSTOM_INSTRUMENTS",
+                 Path(__file__).resolve().parent.parent / "data" / "custom_instruments.json"))
+_CUSTOM_LOCK = RLock()
+_SYMBOL_PATTERN = re.compile(r"[A-Z0-9^][A-Z0-9.\-^=]{0,19}")
+_ALLOWED_QUOTE_TYPES = {
+    "EQUITY": "Stocks", "ETF": "ETFs",
+    "FUTURE": "Futures", "INDEX": "Indices",
+    "MUTUALFUND": "Funds",
+}
+
+
+def _restore_custom():
+    try:
+        stored = json.loads(_CUSTOM_PATH.read_text(encoding="utf-8"))
+        for item in stored:
+            symbol = str(item["ticker"])
+            kind = str(item["kind"])
+            if not _SYMBOL_PATTERN.fullmatch(symbol) or kind not in _ALLOWED_QUOTE_TYPES.values():
+                continue
+            add(str(item["id"]), symbol, kind, str(item["name"])[:120],
+                currency=str(item["currency"]), tradable=bool(item["tradable"]),
+                decimals=int(item.get("decimals", 2)))
+    except (OSError, ValueError, KeyError, TypeError):
+        return
+
+
+_restore_custom()
+
+
+def search_yahoo(query: str, limit: int = 12) -> list[dict]:
+    from fastapi import HTTPException
+    query = query.strip()
+    if not 2 <= len(query) <= 60:
+        raise HTTPException(422, detail="Search query must be 2-60 characters.")
+    try:
+        candidates = yf.Search(query, max_results=min(limit, 15),
+                               news_count=0, lists_count=0, timeout=12).quotes
+    except Exception as exc:
+        raise HTTPException(503, detail=f"Yahoo instrument lookup unavailable: {type(exc).__name__}") from exc
+    results = []
+    for row in candidates:
+        symbol = str(row.get("symbol") or "").upper()
+        quote_type = str(row.get("quoteType") or "").upper()
+        if not _SYMBOL_PATTERN.fullmatch(symbol) or quote_type not in _ALLOWED_QUOTE_TYPES:
+            continue
+        results.append({
+            "symbol": symbol,
+            "name": str(row.get("shortname") or row.get("longname") or symbol)[:120],
+            "asset_class": _ALLOWED_QUOTE_TYPES[quote_type],
+            "exchange": str(row.get("exchange") or "")[:30],
+            "currency": str(row.get("currency") or "UNVERIFIED").upper()[:8],
+        })
+    return results
+
+
+def import_yahoo(symbol: str) -> dict:
+    from fastapi import HTTPException
+    symbol = symbol.strip().upper()
+    if not _SYMBOL_PATTERN.fullmatch(symbol):
+        raise HTTPException(422, detail="Invalid market ticker format.")
+    with _CUSTOM_LOCK:
+        existing = next((i for i in INSTRUMENTS.values() if i.ticker == symbol), None)
+        if existing:
+            return list_instruments(existing.id, limit=1)[0]
+    # Verify exact ticker in authoritative provider search. Metadata can be
+    # missing, in which case the instrument is chart-only rather than guessing.
+    matches = search_yahoo(symbol, 15)
+    match = next((i for i in matches if i["symbol"] == symbol), None)
+    if match is None:
+        raise HTTPException(404, detail="Provider did not confirm this exact ticker.")
+    currency = match["currency"]
+    if currency == "UNVERIFIED":
+        try:
+            fast = yf.Ticker(symbol).fast_info
+            currency = str(fast["currency"]).upper()
+        except Exception:
+            pass
+    kind = match["asset_class"]
+    tradable = kind in ("Stocks", "ETFs") and currency == "USD"
+    identifier = "custom_" + sha256(symbol.encode()).hexdigest()[:12]
+    item = {
+        "id": identifier, "ticker": symbol, "kind": kind,
+        "name": match["name"], "currency": currency,
+        "tradable": tradable, "decimals": 2,
+    }
+    with _CUSTOM_LOCK:
+        old = []
+        if _CUSTOM_PATH.exists():
+            try:
+                old = json.loads(_CUSTOM_PATH.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                old = []
+        if len(old) >= 200:
+            raise HTTPException(409, detail="Maximum 200 imported tickers.")
+        old.append(item)
+        _CUSTOM_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temp = _CUSTOM_PATH.with_suffix(".json.tmp")
+        temp.write_text(json.dumps(old, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temp, _CUSTOM_PATH)
+        add(identifier, symbol, kind, match["name"], currency=currency, tradable=tradable)
+    return list_instruments(identifier, limit=1)[0]
