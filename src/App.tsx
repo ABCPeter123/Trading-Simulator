@@ -75,7 +75,17 @@ function App() {
     catch (error) { setBackendOnline(false); setTradeError(errorMessage(error)); }
   }, []);
 
-  useEffect(() => { void loadAccount(); }, [loadAccount]);\n\n  // Update charts periodically in market mode. Freeze the loaded dataset during replay.\n  useEffect(() => {\n    if (mode !== "market") return;\n    let cancelled = false;\n    const timer = setInterval(() => {\n      void getHistory(selectedId, range).then(next => { if (!cancelled) setHistory(next); }).catch(() => {});\n    }, 120_000);\n    return () => { cancelled = true; clearInterval(timer); };\n  }, [mode, selectedId, range]);
+  useEffect(() => { void loadAccount(); }, [loadAccount]);
+
+  // Update charts periodically in market mode. Freeze the loaded dataset during replay.
+  useEffect(() => {
+    if (mode !== "market") return;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      void getHistory(selectedId, range).then(next => { if (!cancelled) setHistory(next); }).catch(() => {});
+    }, 120_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [mode, selectedId, range]);
 
   useEffect(() => {
     let cancelled = false;
