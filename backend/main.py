@@ -80,6 +80,7 @@ class ArcadeStart(BaseModel):
     asset_id: str
     starting_point: float = Field(default=0.3, ge=0.15, le=0.75)
     period: Literal["1Y", "2Y", "5Y", "10Y", "MAX"] = "5Y"
+    start_date: str | None = Field(default=None, max_length=10)
 
 class ArcadeOrder(BaseModel):
     side: Literal["buy", "sell"]
@@ -109,7 +110,7 @@ def arcade_validate(strategy: ArcadeStrategy):
 
 @app.post("/api/arcade/new")
 def arcade_new(request: ArcadeStart):
-    return start_run(request.asset_id, request.starting_point, request.period)
+    return start_run(request.asset_id, request.starting_point, request.period, request.start_date)
 
 @app.get("/api/arcade/{run_id}")
 def arcade_get(run_id: str):
