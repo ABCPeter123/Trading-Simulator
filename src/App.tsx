@@ -6,9 +6,9 @@ import {
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
 import { ASSET_CLASSES, ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
-import { getAccount, getBacktest, getHistory, getQuote, request, resetAccount, sendOrder, supportsCashTrading } from "./api";
-import type { AccountResponse, BacktestResponse, HistoryResponse, MarketBar, QuoteResponse } from "./api";
-import { advanceReplay, NEW_REPLAY, replayFee, replayFillPrice, replayStartIndex } from "./replay";
+import { getAccount, getBacktest, getHistory, getQuote, resetAccount, sendOrder, supportsCashTrading } from "./api";
+import type { AccountResponse, BacktestResponse, HistoryResponse, QuoteResponse } from "./api";
+import { advanceReplay, NEW_REPLAY, replayFillPrice, replayStartIndex } from "./replay";
 import type { ReplayAccount } from "./replay";
 import type { Asset, AssetClass, ChartStyle, TimeRange, TradeSide } from "./types";
 
