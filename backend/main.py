@@ -14,7 +14,7 @@ from .archive import archive_stats
 from .arcade import start_run, get_run, list_runs, submit_order as submit_arcade_order, cancel_order, set_strategy, advance_run, set_risk
 from .arcade_dsl import compile_rules, EXAMPLES
 
-app = FastAPI(title="Trading Simulator Local API", version="0.5.0")
+app = FastAPI(title="Trading Simulator Local API", version="0.6.0")
 
 class NewOrder(BaseModel):
     asset_id: str
@@ -27,7 +27,7 @@ def instruments(search: str = Query("", max_length=80), category: str = Query(""
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "mode": "local", "version": "0.5.0"}
+    return {"status": "ok", "mode": "local", "version": "0.6.0"}
 
 @app.get("/api/market/{asset_id}")
 def market_history(asset_id: str, range: str = Query("1M")):
@@ -150,3 +150,54 @@ class ImportTicker(BaseModel):
 @app.post("/api/instruments/import")
 def add_instrument(request: ImportTicker):
     return import_yahoo(request.symbol)
+
+# Multi-asset Arcade lives in a separate SQLite table, preserving older saves.
+from . import portfolio_arcade as portfolio
+
+class PortfolioSeasonStart(BaseModel):
+    asset_ids: list[str] = Field(min_length=2, max_length=5)
+    period: Literal["1Y", "2Y", "5Y", "10Y", "MAX"] = "5Y"
+    starting_point: float = Field(default=0.3, ge=0.15, le=0.75)
+    start_date: str | None = Field(default=None, max_length=10)
+
+class PortfolioOrder(BaseModel):
+    asset_id: str
+    side: Literal["buy", "sell"]
+    kind: Literal["market", "limit", "stop"] = "market"
+    size: str = Field(min_length=1, max_length=40)
+    size_type: Literal["percent", "units"] = "percent"
+    price: str | None = None
+
+@app.get("/api/portfolio-seasons")
+def portfolio_runs():
+    return portfolio.list_seasons()
+
+@app.post("/api/portfolio-seasons")
+def portfolio_new(request: PortfolioSeasonStart):
+    return portfolio.create_season(request.asset_ids, request.period,
+                                    request.starting_point, request.start_date)
+
+@app.get("/api/portfolio-seasons/{run_id}")
+def portfolio_get(run_id: str):
+    return portfolio.get_season(run_id)
+
+@app.post("/api/portfolio-seasons/{run_id}/advance")
+def portfolio_step(run_id: str, request: ArcadeAdvance):
+    return portfolio.advance(run_id, request.count, request.until_action)
+
+@app.post("/api/portfolio-seasons/{run_id}/orders")
+def portfolio_order(run_id: str, request: PortfolioOrder):
+    return portfolio.order(run_id, request.asset_id, request.side,
+                           request.kind, request.size, request.size_type, request.price)
+
+@app.delete("/api/portfolio-seasons/{run_id}/orders/{order_id}")
+def portfolio_cancel(run_id: str, order_id: str):
+    return portfolio.cancel(run_id, order_id)
+
+@app.put("/api/portfolio-seasons/{run_id}/strategy")
+def portfolio_strategy(run_id: str, request: ArcadeStrategy):
+    return portfolio.strategy(run_id, request.code)
+
+@app.put("/api/portfolio-seasons/{run_id}/risk")
+def portfolio_risk(run_id: str, request: ArcadeRisk):
+    return portfolio.risk(run_id, request.stop_loss_pct, request.take_profit_pct)
