@@ -27,7 +27,7 @@ function Metric({label, value, note, positive}: {label: string; value: string; n
   return <div className="arc-metric"><span>{label}</span><strong className={positive===undefined?"":positive?"positive":"negative"}>{value}</strong>{note && <small>{note}</small>}</div>;
 }
 
-export default function TradingArcade({onExit}: {onExit:()=>void}) {
+export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void;onOpenPortfolio:()=>void}) {
   const [game, setGame] = useState<ArcadeRun|null>(null);
   const [saved, setSaved] = useState<SavedArcadeRun[]>([]);
   const [catalog, setCatalog] = useState<CatalogInstrument[]>([]);
@@ -239,6 +239,7 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
       </div>
       <div className="arc-top-right">
         <span className="arc-live"><span/> LOCAL HISTORICAL GAME</span>
+        <button className="arc-outline-button" onClick={()=>{setPlaying(false);onOpenPortfolio();}}><Wallet size={15}/> Portfolio Arcade</button>
         {q && <div className="arc-player"><div className="arc-avatar"><Trophy size={17}/></div><div><strong>LEVEL {q.level}</strong><span>{q.xp} XP · {q.score.toLocaleString()} score</span></div></div>}
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);setNewGame(true);setError("");}}><Plus size={15}/> New season</button>
       </div>
