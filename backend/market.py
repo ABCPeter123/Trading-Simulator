@@ -96,8 +96,13 @@ def yahoo_candles(asset: Instrument, window: str) -> list[dict[str, float | int]
     result = []
     for timestamp, row in data.tail(limit).iterrows():
         try:
+            # Some FX and index feeds have no exchange-reported volume.
+            # Preserve their legitimate OHLC bars with 0 volume instead of discarding them.
+            raw_volume = row.get("Volume", 0)
+            volume = float(raw_volume)
+            volume = volume if math.isfinite(volume) and volume >= 0 else 0.0
             item = {"time": int(timestamp.timestamp()), "open": f(row["Open"]), "high": f(row["High"]),
-                    "low": f(row["Low"]), "close": f(row["Close"]), "volume": f(row["Volume"])}
+                    "low": f(row["Low"]), "close": f(row["Close"]), "volume": volume}
             if all(item[k] > 0 for k in ("open", "high", "low", "close")):
                 result.append(item)
         except (ValueError, TypeError, OverflowError):
