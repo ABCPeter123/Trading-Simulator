@@ -314,3 +314,5 @@ h1, h2, p { margin: 0; }
   .backtest-results { grid-template-columns: repeat(2, 1fr); }
   .backtest-results strong { font-size: 16px; }
 }
+
+.asset-quote small { max-width: 88px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
