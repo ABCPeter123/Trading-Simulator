@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_DOWN
 import json
 import os
@@ -52,7 +52,7 @@ def event(state, message):
     state["events"] = ([message] + state["events"])[:12]
 
 
-def start_run(asset_id, starting_point=0.3, period="5Y"):
+def start_run(asset_id, starting_point=0.3, period="5Y", start_date=None):
     instrument = get_instrument(asset_id)
     if not instrument.tradable or instrument.currency != "USD":
         raise HTTPException(422, detail="This contract/currency is not supported in the USD cash arcade.")
@@ -70,9 +70,21 @@ def start_run(asset_id, starting_point=0.3, period="5Y"):
            for b in bars):
         raise HTTPException(503, detail="Invalid provider candles.")
     index = min(len(bars)-2, max(35, int(len(bars) * starting_point)))
+    if start_date:
+        try:
+            requested_day = date.fromisoformat(start_date)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(422, detail="Start date must be YYYY-MM-DD.") from exc
+        timestamp = datetime(requested_day.year, requested_day.month, requested_day.day,
+                             tzinfo=timezone.utc).timestamp()
+        index = next((i for i, candle in enumerate(bars)
+                      if candle["time"] >= timestamp), len(bars)-1)
+        if index >= len(bars)-1:
+            raise HTTPException(422, detail="Start date is after available historical prices.")
+        index = max(35, index)  # warmup for moving averages and RSI
     now = datetime.now(timezone.utc).isoformat()
     run_id = str(uuid4())
-    state = dict(index=index, start_index=index, period=period, risk={"stop_loss_pct": 0, "take_profit_pct": 0}, cash=str(INITIAL_CASH), qty="0",
+    state = dict(index=index, start_index=index, period=period, requested_start_date=start_date, risk={"stop_loss_pct": 0, "take_profit_pct": 0}, cash=str(INITIAL_CASH), qty="0",
                  avg="0", realized="0", orders=[], fills=[], strategy="",
                  curve=[{"time": bars[index]["time"], "value": float(INITIAL_CASH)}],
                  events=["Season started. Future candles are hidden."])
@@ -106,7 +118,7 @@ def public(run_id, row, bars, state):
     if i == len(bars)-1: badges.append("Season complete")
     return {
         "id": run_id, "asset_id": row["asset_id"], "source": row["source"],
-        "period": state.get("period", "1Y"), "risk": state.get("risk", {"stop_loss_pct": 0, "take_profit_pct": 0}),
+        "period": state.get("period", "1Y"), "requested_start_date": state.get("requested_start_date"), "risk": state.get("risk", {"stop_loss_pct": 0, "take_profit_pct": 0}),
         "current_bar": i, "total_bars": len(bars), "finished": i == len(bars)-1,
         "progress_pct": round(100*i/(len(bars)-1), 1),
         "bars": bars[:i+1],  # no future data leaves this API
