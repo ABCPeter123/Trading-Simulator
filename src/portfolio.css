@@ -74,3 +74,12 @@
 .port-achievements>span{font-size:11px;color:#b8a7e8}
 .port-achievements>div{display:flex;gap:7px;flex-wrap:wrap;margin-left:auto}
 .port-achievements>div span{border:1px solid #625787;background:#3a3059;border-radius:6px;padding:6px 8px;color:#dbcafa;font-size:10px;font-weight:650}
+
+.port-search-more{border:1px solid #615982;color:#d6c8ff;background:#322c4d;border-radius:7px;padding:10px;font-size:11px;font-weight:750}
+.port-discovery{border:1px solid #44526a;border-radius:9px;background:#182237;max-height:200px;overflow:auto}
+.port-discovery>div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid #304058}
+.port-discovery>div:last-child{border-bottom:0}
+.port-discovery span{display:flex;flex-direction:column;gap:4px;min-width:0}
+.port-discovery strong{font-size:11px}
+.port-discovery small{font-size:10px;color:#95aac0}
+.port-discovery button{padding:7px 9px;border-radius:6px;border:1px solid #6a6498;background:#353157;color:#e6ddff;font-size:10px;font-weight:800}
