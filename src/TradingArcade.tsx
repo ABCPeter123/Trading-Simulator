@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity, ArrowDownRight, ArrowLeft, ArrowUpRight, Award, Bot, Check,
   ChevronRight, Clock3, Code2, FastForward, Flag, Gauge, Medal, Pause,
-  Play, Plus, RotateCcw, Save, ShieldCheck, Sparkles, Target, Terminal,
+  Play, Plus, Save, ShieldCheck, Sparkles, Target, Terminal,
   Trash2, Trophy, Wallet, Zap,
 } from "lucide-react";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
@@ -176,9 +176,8 @@ export default function TradingArcade({onExit}: {onExit:()=>void}) {
 
   const asset=ASSETS.find(a=>a.id===game?.asset_id);
   const latest=game?.bars.at(-1);
-  const first=game?.bars[0];
   const q=game?.metrics;
-  const delta=latest&&game.bars.length>=2 ? latest.close-game.bars[game.bars.length-2].close : 0;
+  const delta=latest&&game&&game.bars.length>=2 ? latest.close-game.bars[game.bars.length-2].close : 0;
   const codeSaved=game?.strategy===code;
 
   return <div className="arc-page">
