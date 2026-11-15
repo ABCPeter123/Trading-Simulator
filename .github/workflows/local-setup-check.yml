@@ -1,0 +1,35 @@
+name: Validate local PowerShell launcher
+on:
+  push:
+    paths:
+      - "start-local.ps1"
+      - "scripts/*.ps1"
+      - ".github/workflows/local-setup-check.yml"
+  pull_request:
+    paths:
+      - "start-local.ps1"
+      - "scripts/*.ps1"
+      - ".github/workflows/local-setup-check.yml"
+
+jobs:
+  syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell without running installers
+        shell: powershell
+        run: |
+          $paths = @("start-local.ps1", "scripts/run-backend.ps1", "scripts/run-frontend.ps1")
+          foreach ($path in $paths) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Join-Path (Get-Location) $path),
+              [ref]$tokens, [ref]$parseErrors
+            ) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | Format-List | Out-String | Write-Output
+              throw "PowerShell parsing failed: $path"
+            }
+            Write-Output "Validated $path"
+          }
