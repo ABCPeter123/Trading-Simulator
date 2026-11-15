@@ -193,3 +193,18 @@ def test_risk_disabled_and_bad_values():
     result = client.put(f"/api/arcade/{run}/risk", json={"stop_loss_pct": 4, "take_profit_pct": 8})
     assert result.status_code == 200
     assert result.json()["risk"]["take_profit_pct"] == 8
+
+
+def test_specific_start_date_and_invalid_dates():
+    from datetime import datetime, timezone
+    candles = bars()
+    desired = datetime.fromtimestamp(candles[90]["time"], tz=timezone.utc).date().isoformat()
+    game = arcade.start_run("spy", period="MAX", start_date=desired)
+    assert game["current_bar"] >= 90
+    assert game["current_bar"] < game["total_bars"]-1
+    assert len(game["bars"]) == game["current_bar"]+1
+    assert game["requested_start_date"] == desired
+    with pytest.raises(HTTPException):
+        arcade.start_run("aapl", period="10Y", start_date="not-a-date")
+    with pytest.raises(HTTPException):
+        arcade.start_run("aapl", period="10Y", start_date="2999-01-01")
