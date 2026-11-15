@@ -170,3 +170,27 @@ def test_http_endpoints():
     step = CLIENT.post(f"/api/portfolio-seasons/{game['id']}/advance",json={"count":3})
     assert step.status_code == 200
     assert step.json()["metrics"]["cash"] < 100000
+
+
+def test_disjoint_provider_history_is_rejected():
+    def mk(start, count):
+        return [{"time": int((START+timedelta(days=start+i)).timestamp()),
+                 "open":100, "high":101, "low":99, "close":100, "volume":500}
+                for i in range(count)]
+    with pytest.raises(HTTPException) as exc:
+        pa._prepare({"spy":{"bars":mk(0,100)}, "qqq":{"bars":mk(200,100)}})
+    assert exc.value.status_code == 422
+
+
+def test_single_asset_arcade_save_survives_multi_asset_mode(monkeypatch):
+    from backend import arcade
+    monkeypatch.setattr(arcade, "GAME_DB", pa.DB_PATH)
+    monkeypatch.setattr(arcade, "history", lambda asset_id, period: {
+        "bars": fixture_bars(asset_id), "source": "test provider",
+    })
+    single = arcade.start_run("spy", period="1Y")
+    multi = pa.create_season(["spy", "qqq"], "1Y")
+    assert single["id"] != multi["id"]
+    assert arcade.get_run(single["id"])["id"] == single["id"]
+    assert pa.get_season(multi["id"])["id"] == multi["id"]
+    assert arcade.list_runs()[0]["id"] == single["id"]
