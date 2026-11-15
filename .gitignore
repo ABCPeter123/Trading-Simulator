@@ -9,3 +9,10 @@ dist/
 .vscode/
 coverage/
 data/
+
+# Local Python environment and test caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
