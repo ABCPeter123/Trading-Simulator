@@ -17,7 +17,6 @@ const formatQuantity = (n: number) => n.toLocaleString("en-US", {maximumFraction
 const dt = (timestamp: number | string) =>
   new Date(typeof timestamp === "number" ? timestamp * 1000 : timestamp).toLocaleString();
 const errorMessage = (err: unknown) => err instanceof Error ? err.message : "Unexpected error.";
-const initialCash = 100_000;
 
 function App() {
   const [assetClass, setAssetClass] = useState<AssetClass>("Stocks");
@@ -60,7 +59,6 @@ function App() {
   const high = visibleBars.length ? Math.max(...visibleBars.map(bar => bar.high)) : null;
   const low = visibleBars.length ? Math.min(...visibleBars.map(bar => bar.low)) : null;
   const quoteReady = quote?.asset_id === selectedId && quote.tradable;
-  const selectedQuote = lastQuotes[selectedId];
   const parsedQuantity = Number(quantity);
   const wholeUnits = selectedAsset.assetClass === "Stocks" || selectedAsset.assetClass === "ETFs" || selectedAsset.assetClass === "Options" || selectedAsset.assetClass === "Futures";
   const validQuantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0 && parsedQuantity <= 100_000_000 &&
