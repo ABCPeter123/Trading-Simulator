@@ -301,7 +301,7 @@ function App() {
             <div className="chart-body">
               <PriceChart asset={selectedAsset} range={range} style={chartStyle} />
             </div>
-            <div className="chart-footer"><span><span className="legend-dot up-dot" /> Up <span className="legend-dot down-dot" /> Down <span className="legend-volume" /> Volume</span><span>Illustrative data · <a href="https://www.tradingview.com/lightweight-charts/" target="_blank" rel="noreferrer">Charts by TradingView</a></span></div>
+            <div className="chart-footer"><span><span className="legend-dot up-dot" /> Up <span className="legend-dot down-dot" /> Down <span className="legend-volume" /> Volume</span><span>Illustrative data · <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a></span></div>
           </section>
 
           <section className="portfolio-card" id="portfolio-panel">
