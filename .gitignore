@@ -16,3 +16,6 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+
+# Local setup fingerprints (per machine)
+.local-state/
