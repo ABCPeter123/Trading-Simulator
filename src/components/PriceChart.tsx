@@ -11,9 +11,10 @@ interface PriceChartProps {
   range: TimeRange;
   style: ChartStyle;
   bars: MarketBar[];
+  visibleWindow?: number;
 }
 
-export function PriceChart({ asset, range, style, bars }: PriceChartProps) {
+export function PriceChart({ asset, range, style, bars, visibleWindow }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const updateRef = useRef<((bars: MarketBar[]) => void) | null>(null);
 
@@ -79,17 +80,21 @@ export function PriceChart({ asset, range, style, bars }: PriceChartProps) {
         value:bar.volume,
         color:bar.close>=bar.open ? "rgba(53,202,152,.28)" : "rgba(249,104,111,.27)",
       })));
-      chart.timeScale().fitContent();
+      if (visibleWindow && newBars.length > visibleWindow) {
+        chart.timeScale().setVisibleLogicalRange({from: newBars.length - visibleWindow, to: newBars.length + 3});
+      } else {
+        chart.timeScale().fitContent();
+      }
     };
     return () => {
       updateRef.current = null;
       chart.remove();
     };
-  }, [asset, range, style]);
+  }, [asset, range, style, visibleWindow]);
 
   useEffect(() => {
     updateRef.current?.(bars);
-  }, [bars, asset, range, style]);
+  }, [bars, asset, range, style, visibleWindow]);
 
   return <div className="chart-canvas" ref={containerRef} aria-label={`${asset.symbol} historical market price chart`}/>;
 }
