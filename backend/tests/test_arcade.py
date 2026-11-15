@@ -140,3 +140,56 @@ def test_api_endpoints_and_resume():
     assert stepped.json()["metrics"]["quantity"] > 0
     assert client.get(f"/api/arcade/{run}").json()["metrics"]["quantity"] > 0
     assert client.post(f"/api/arcade/{run}/advance", json={"count":200}).status_code == 422
+
+
+def test_long_history_and_catalog():
+    from backend.assets import list_instruments
+    instruments = list_instruments(limit=250)
+    assert len(instruments) >= 130
+    assert any(item["symbol"] == "AMZN" for item in instruments)
+    assert any(item["symbol"] == "GC=F" and not item["tradable"] for item in instruments)
+    assert any(item["symbol"] == "VFV.TO" and item["currency"] == "CAD" for item in instruments)
+    assert any(item["symbol"] == "SOL-USD" for item in instruments)
+    game = arcade.start_run("spy", period="10Y")
+    assert game["period"] == "10Y"
+    assert len(game["bars"]) < game["total_bars"]
+    assert game["source"] == "fixture-real-provider"
+
+
+def test_protective_stop_and_take_profit_priority(monkeypatch):
+    source = bars()
+    # Advance from index 50. After buying at 51, high and low of bar 52
+    # touch both profit target and loss stop. The conservative stop wins.
+    source[52] = {**source[52], "high": 120, "low": 80, "close": 100}
+    monkeypatch.setattr(arcade, "history", lambda asset_id, period: {
+        "bars": source, "source": "fixture", "asset_id": asset_id,
+    })
+    game = arcade.start_run("aapl", starting_point=0.3)
+    assert game["current_bar"] == 50
+    run = game["id"]
+    arcade.set_risk(run, stop_loss_pct=3, take_profit_pct=5)
+    arcade.submit_order(run, "buy", "market", "10", "units")
+    acquired = arcade.advance_run(run, 1)
+    assert acquired["metrics"]["quantity"] == 10
+    assert acquired["risk"]["stop_loss_pct"] == 3
+    assert acquired["fills"][0]["source"] == "manual"
+    exited = arcade.advance_run(run, 1)
+    assert exited["metrics"]["quantity"] == 0
+    assert exited["fills"][0]["source"] == "risk"
+    assert exited["fills"][0]["kind"] == "stop"
+    assert exited["fills"][0]["price"] < 100
+    assert len(exited["fills"]) == 2
+    assert exited["metrics"]["realized_pnl"] < 0
+    assert arcade.get_run(run)["risk"]["take_profit_pct"] == 5
+
+
+def test_risk_disabled_and_bad_values():
+    run = start()["id"]
+    assert arcade.get_run(run)["risk"]["stop_loss_pct"] == 0
+    with pytest.raises(HTTPException):
+        arcade.set_risk(run, -1, 4)
+    with pytest.raises(HTTPException):
+        arcade.set_risk(run, 2, 76)
+    result = client.put(f"/api/arcade/{run}/risk", json={"stop_loss_pct": 4, "take_profit_pct": 8})
+    assert result.status_code == 200
+    assert result.json()["risk"]["take_profit_pct"] == 8
