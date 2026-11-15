@@ -10,6 +10,7 @@ from .assets import get_instrument
 from .ledger import account_snapshot, reset_account, submit_order
 from .market import history, quote, market_open
 from .strategy import sma_backtest
+from .archive import archive_stats
 
 app = FastAPI(title="Trading Simulator Local API", version="0.2.0")
 
@@ -63,3 +64,7 @@ def reset():
 @app.get("/api/backtest/{asset_id}")
 def backtest(asset_id: str, fast: int = Query(10, ge=2, le=100), slow: int = Query(30, ge=3, le=100)):
     return sma_backtest(asset_id, fast, slow)
+
+@app.get("/api/archive/{asset_id}")
+def get_archive_stats(asset_id: str, range: str = Query("1Y")):
+    return archive_stats(asset_id, range)
