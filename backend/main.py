@@ -14,7 +14,7 @@ from .archive import archive_stats
 from .arcade import start_run, get_run, list_runs, submit_order as submit_arcade_order, cancel_order, set_strategy, advance_run, set_risk
 from .arcade_dsl import compile_rules, EXAMPLES
 
-app = FastAPI(title="Trading Simulator Local API", version="1.0.0")
+app = FastAPI(title="Trading Simulator Local API", version="1.1.0")
 
 class NewOrder(BaseModel):
     asset_id: str
@@ -27,7 +27,7 @@ def instruments(search: str = Query("", max_length=80), category: str = Query(""
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "mode": "local", "version": "1.0.0"}
+    return {"status": "ok", "mode": "local", "version": "1.1.0"}
 
 @app.get("/api/market/{asset_id}")
 def market_history(asset_id: str, range: str = Query("1M"), resolution: str | None = Query(None)):
@@ -282,3 +282,30 @@ def research_option_pricing(request: BlackScholesRequest):
         "method":"European Black-Scholes theoretical option value",
         "not_a_price_forecast": True,
     }
+
+# Saved strategy versions are independent of live session strategy activation.
+from . import strategy_library as saved_strategy_library
+
+class SaveStrategyRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    mode: Literal["single", "portfolio"]
+    code: str = Field(min_length=1, max_length=1800)
+    symbols: list[str] = Field(min_length=1, max_length=5)
+    source_run_id: str | None = Field(default=None, max_length=100)
+
+@app.get("/api/strategies")
+def strategy_library_list(mode: Literal["single", "portfolio"] | None = None):
+    return saved_strategy_library.list_saved(mode)
+
+@app.post("/api/strategies")
+def strategy_library_save(request: SaveStrategyRequest):
+    return saved_strategy_library.store(request.mode,request.name,request.code,
+        request.symbols,request.source_run_id)
+
+@app.get("/api/strategies/{strategy_id}")
+def strategy_library_get(strategy_id: str):
+    return saved_strategy_library.get(strategy_id)
+
+@app.delete("/api/strategies/{strategy_id}")
+def strategy_library_delete(strategy_id: str):
+    return saved_strategy_library.delete(strategy_id)
