@@ -135,6 +135,19 @@ def call_model(system: str, user: str) -> str:
             }, json={
                 "model": config["model"], "store": False,
                 "max_output_tokens": 1800,
+                "text": {"format": {
+                    "type": "json_schema", "name": "strategy_research",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "answer": {"type": "string"},
+                            "strategy": {"type": ["string", "null"]},
+                        },
+                        "required": ["answer", "strategy"],
+                        "additionalProperties": False,
+                    },
+                }},
                 "instructions": system,
                 "input": [{"role": "user", "content": user}],
             })
