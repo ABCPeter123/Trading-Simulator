@@ -48,6 +48,11 @@ export interface ArcadeRun {
   resolution: ReplayResolution;
   risk: {stop_loss_pct: number; take_profit_pct: number};
   current_bar: number;
+  history_start: number;
+  live_index: number;
+  view_index: number;
+  viewing_past: boolean;
+  checkpoint_count: number;
   total_bars: number;
   finished: boolean;
   progress_pct: number;
@@ -108,3 +113,6 @@ export const gameImportTicker = (symbol: string) =>
   request<CatalogInstrument>("/instruments/import", {
     method:"POST", body:JSON.stringify({symbol}),
   });
+
+export const gameAt = (id: string, step: number) =>
+  request<ArcadeRun>(`/arcade/${encodeURIComponent(id)}/at/${step}`);
