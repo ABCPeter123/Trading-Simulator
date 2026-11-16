@@ -1,10 +1,10 @@
 import { useI18n } from "./i18n";
 import "./workspaceTabs.css";
 
-export type WorkspaceTab = "overview"|"execution"|"strategy"|"analytics"|"scenarios"|"history";
-export const WORKSPACE_TABS: WorkspaceTab[] = ["overview","execution","strategy","analytics","scenarios","history"];
+export type WorkspaceTab = "overview"|"market"|"execution"|"strategy"|"analytics"|"scenarios"|"history";
+export const WORKSPACE_TABS: WorkspaceTab[] = ["overview","market","execution","strategy","analytics","scenarios","history"];
 const label:Record<WorkspaceTab,string> = {
-  overview:"Market Overview",execution:"Orders & Positions",strategy:"Strategy & AI",
+  overview:"Historical Replay",market:"Market Data & Paper",execution:"Orders & Positions",strategy:"Strategy & AI",
   analytics:"Performance Analytics",scenarios:"Scenario Research",history:"Trade History",
 };
 export default function WorkspaceTabs({active,onChange}:{
