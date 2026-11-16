@@ -220,13 +220,15 @@ def set_strategy(run_id, code):
     rules = compile_rules(code)
     with LOCK, closing(connection()) as db, db:
         row, bars, state = read(db, run_id)
+        previous = state["strategy"]
         state["strategy"] = code
         event(state, f"Bot saved: {len(rules)} rule(s). Signals check each revealed close.")
         save(db, run_id, state)
         response = public(run_id, row, bars, state)
     try:
         from .strategy_library import capture
-        capture("single", code, [row["asset_id"]], run_id)
+        for version in (previous, code):
+            capture("single", version, [row["asset_id"]], run_id)
     except Exception:
         import logging
         logging.getLogger(__name__).exception("Could not archive activated single strategy")
