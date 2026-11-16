@@ -201,3 +201,12 @@ def portfolio_strategy(run_id: str, request: ArcadeStrategy):
 @app.put("/api/portfolio-seasons/{run_id}/risk")
 def portfolio_risk(run_id: str, request: ArcadeRisk):
     return portfolio.risk(run_id, request.stop_loss_pct, request.take_profit_pct)
+
+@app.get("/api/portfolio-seasons/{run_id}/analytics")
+def portfolio_analytics(run_id: str):
+    return portfolio.get_analysis(run_id)
+
+@app.get("/api/arcade/{run_id}/analytics")
+def arcade_analytics(run_id: str):
+    from .arcade import get_analysis
+    return get_analysis(run_id)
