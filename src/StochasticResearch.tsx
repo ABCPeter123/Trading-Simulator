@@ -23,6 +23,16 @@ function FanChart({result}:{result:ScenarioResult}) {
       localization:{priceFormatter:(n:number)=>money(n)},
     });
     resizeRef.current=(nextWidth,nextHeight)=>chart.resize(nextWidth,nextHeight);
+    // Every simulated trajectory is loaded, not an arbitrary 1-in-16 sample.
+    // Thin transparent traces keep the full modeled distribution readable.
+    for(const trajectory of result.paths){
+      const series=chart.addSeries(LineSeries,{
+        color:"rgba(107,144,190,.055)",lineWidth:1,lastValueVisible:false,
+        priceLineVisible:false,crosshairMarkerVisible:false,
+      });
+      series.setData(trajectory.map((value,step)=>({time:(step+1) as UTCTimestamp,value})));
+    }
+    // Draw the quantiles last so their boundaries remain legible.
     const colors=["#67569b","#8086ca","#eecc79","#7fb1ce","#67569b"];
     for(const [i,key] of (["p05","p25","median","p75","p95"] as const).entries()){
       const series=chart.addSeries(LineSeries,{
@@ -32,15 +42,8 @@ function FanChart({result}:{result:ScenarioResult}) {
       });
       series.setData(result.quantiles.map(point=>({time:(point.step+1) as UTCTimestamp,value:point[key]})));
     }
-    // Show 16 sample paths for visual texture. All 256 paths were simulated
-    // and are used for percentile calculations.
-    for(let i=0;i<result.paths_count;i+=16){
-      const series=chart.addSeries(LineSeries,{
-        color:"#526b8273",lineWidth:1,lastValueVisible:false,
-        priceLineVisible:false,crosshairMarkerVisible:false,
-      });
-      series.setData(result.paths[i].map((value,step)=>({time:(step+1) as UTCTimestamp,value})));
-    }
+    element.dataset.loadedPaths=String(result.paths.length);
+    element.dataset.loadedSteps=String(result.quantiles.length);
     chart.timeScale().fitContent();
     return ()=>{resizeRef.current=null;chart.remove();};
   },[result,visible]);
@@ -104,7 +107,7 @@ export default function StochasticResearch({mode,runId,assetIds,step,viewingPast
         <div><small>{t("5%-95% modeled range")}</small><strong>{money(report.quantiles.at(-1)!.p05)} to {money(report.quantiles.at(-1)!.p95)}</strong></div>
       </div>
       <div className="forecast-legend">
-        <span>{t("256 generated paths, 16 shown; percentile curves reflect all paths.")}</span>
+        <span>{t("All 256 modeled paths shown; percentile curves reflect the full distribution.")}</span>
         <b>{t("Purple: tail percentiles")}</b><b>{t("Yellow: median")}</b>
       </div>
       <FanChart result={report}/>
