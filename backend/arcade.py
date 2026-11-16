@@ -136,6 +136,23 @@ def public(run_id, row, bars, state):
     }
 
 
+def get_analysis(run_id):
+    """Compute analytics using only the portion of the season already revealed."""
+    from .strategy_analytics import build_report
+    from datetime import datetime, timezone
+    with LOCK, closing(connection()) as db:
+        row, bars, state = read(db, run_id)
+        days = [datetime.fromtimestamp(int(b["time"]), timezone.utc).date().isoformat() for b in bars]
+        asset_id = row["asset_id"]
+        by_date = {day: bar for day, bar in zip(days, bars)}
+        report = build_report(
+            days, {asset_id: by_date}, [asset_id],
+            state["start_index"], state["index"],
+            [{**fill, "asset_id": asset_id} for fill in state["fills"]],
+        )
+        return report
+
+
 def get_run(run_id):
     with LOCK, closing(connection()) as db:
         row, bars, state = read(db, run_id)
