@@ -2,7 +2,7 @@ import { useI18n } from "./i18n";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, BarChart3, CandlestickChart,
-  Check, ChevronDown, Clock3, Database, FastForward, LineChart, PauseCircle,
+  Check, ChevronDown, ChevronLeft, Clock3, Database, FastForward, LineChart, PauseCircle,
   Play, RefreshCw, RotateCcw, Search, ShieldCheck, Wallet, X,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
@@ -19,6 +19,9 @@ const formatQuantity = (n: number) => n.toLocaleString("en-US", {maximumFraction
 const dt = (timestamp: number | string) =>
   new Date(typeof timestamp === "number" ? timestamp * 1000 : timestamp).toLocaleString();
 const errorMessage = (err: unknown) => err instanceof Error ? err.message : "Unexpected error.";
+
+type ReplayCheckpoint = {index:number;account:ReplayAccount};
+const copyReplay = (account:ReplayAccount):ReplayAccount => JSON.parse(JSON.stringify(account)) as ReplayAccount;
 
 function App({onOpenArcade}: {onOpenArcade:()=>void}) {
   const {t} = useI18n();
@@ -45,6 +48,8 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
   const [activePanel, setActivePanel] = useState<"positions" | "history">("positions");
   const [replayIndex, setReplayIndex] = useState(0);
   const [replayAccount, setReplayAccount] = useState<ReplayAccount>({...NEW_REPLAY});
+  const [replayCheckpoints,setReplayCheckpoints] = useState<ReplayCheckpoint[]>([]);
+  const [inspectState,setInspectState] = useState<ReplayCheckpoint|null>(null);
   const [showBacktest, setShowBacktest] = useState(false);
   const [fast, setFast] = useState("10");
   const [slow, setSlow] = useState("30");
@@ -100,12 +105,17 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
     setQuote(null);
     setBacktest(null);
     setReplayAccount({...NEW_REPLAY});
+    setReplayCheckpoints([]);
+    setInspectState(null);
     const load = async () => {
       const [h, q] = await Promise.allSettled([getHistory(selectedId, range, resolution), getQuote(selectedId)]);
       if (cancelled) return;
       if (h.status === "fulfilled") {
         setHistory(h.value);
-        setReplayIndex(replayStartIndex(h.value.bars.length));
+        const start=replayStartIndex(h.value.bars.length);
+        setReplayIndex(start);
+        setReplayCheckpoints([{index:start,account:copyReplay(NEW_REPLAY)}]);
+        setInspectState(null);
         setBackendOnline(true);
       } else setMarketError(errorMessage(h.reason));
       if (q.status === "fulfilled") {
@@ -146,34 +156,58 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
     setTradeError("");
     setNotice("");
     if (next === "replay") {
-      setReplayIndex(replayStartIndex(allBars.length));
+      const start=replayStartIndex(allBars.length);
+      setReplayIndex(start);
       setReplayAccount({...NEW_REPLAY});
+      setReplayCheckpoints([{index:start,account:copyReplay(NEW_REPLAY)}]);
+      setInspectState(null);
     }
   }
   function resetReplay() {
-    setReplayIndex(replayStartIndex(allBars.length));
+    const start=replayStartIndex(allBars.length);
+    setReplayIndex(start);
     setReplayAccount({...NEW_REPLAY});
+    setReplayCheckpoints([{index:start,account:copyReplay(NEW_REPLAY)}]);
+    setInspectState(null);
     setNotice("Replay reset. Previous replay orders were cleared.");
     setTradeError("");
   }
   function stepReplay(count = 1) {
-    if (!allBars.length || replayIndex >= allBars.length - 1) return;
+    if (inspectState || !allBars.length || replayIndex >= allBars.length - 1) return;
     let next = replayAccount;
     let message: string | undefined;
+    const additions:ReplayCheckpoint[]=[];
     const end = Math.min(replayIndex + count, allBars.length - 1);
     for (let i = replayIndex + 1; i <= end; i++) {
       const result = advanceReplay(next, allBars[i], selectedAsset);
       next = result.account;
+      additions.push({index:i,account:copyReplay(next)});
       if (result.message) message = result.message;
     }
     setReplayIndex(end);
     setReplayAccount(next);
+    setReplayCheckpoints(prev=>[...prev,...additions].slice(-1500));
     if (message) setNotice(message);
+    setTradeError("");
+  }
+  function inspectReplayAt(index:number) {
+    const old=replayCheckpoints.find(entry=>entry.index===index);
+    if(!old)return;
+    if(!inspectState)setInspectState({index:replayIndex,account:copyReplay(replayAccount)});
+    setReplayIndex(index);setReplayAccount(copyReplay(old.account));
+    setTradeError("");
+  }
+  function returnToLatestReplay() {
+    if(!inspectState)return;
+    setReplayIndex(inspectState.index);
+    setReplayAccount(copyReplay(inspectState.account));
+    setInspectState(null);
     setTradeError("");
   }
   async function placeOrder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTradeError("");
+    if (mode==="replay" && inspectState) {setTradeError("Historical inspection is read-only. Return to latest to trade.");return;}
     if (!validQuantity) { setTradeError(wholeUnits ? "Enter a positive whole-unit quantity." : "Enter a positive quantity with at most 8 decimals."); return; }
     if (!supported) { setTradeError("This asset is chart-only until its contract and currency rules are implemented."); return; }
     if (mode === "replay") {
@@ -181,7 +215,10 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
       if (replayAccount.pending) {setTradeError("Step forward to fill the existing pending order first."); return;}
       if (side === "sell" && parsedQuantity > replayAccount.quantity + 1e-9) {setTradeError("Not enough replay holdings."); return;}
       // Do not inspect the next bar to fill this order. It fills only when the user advances.
-      setReplayAccount(prev => ({...prev, pending: {side, quantity: parsedQuantity}}));
+      const queued={...replayAccount,pending:{side,quantity:parsedQuantity}};
+      setReplayAccount(queued);
+      setReplayCheckpoints(prev=>prev.map(entry=>entry.index===replayIndex
+        ? {index:replayIndex,account:copyReplay(queued)}:entry));
       setNotice(`Replay ${side} queued. Advance one candle to simulate execution at the next open.`);
       return;
     }
@@ -340,8 +377,13 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
             {mode==="replay" && <div className="replay-controls">
               <button type="button" onClick={resetReplay} title={t("Restart replay")}><RotateCcw size={15}/> {t("Restart")}</button>
               <div className="replay-progress"><span>BAR {visibleBars.length} / {allBars.length}</span><span>{latestCandle ? dt(latestCandle.time) : "—"}</span></div>
-              <button type="button" onClick={()=>stepReplay(1)} disabled={!allBars.length || replayIndex >= allBars.length-1}><Play size={16}/> {t("Next")}</button>
-              <button type="button" onClick={()=>stepReplay(5)} disabled={!allBars.length || replayIndex >= allBars.length-1}><FastForward size={17}/> +5</button>
+              <button type="button" disabled={replayCheckpoints.length<2||replayIndex<=replayCheckpoints[0].index}
+                onClick={()=>inspectReplayAt(replayIndex-1)}><ChevronLeft size={15}/>{t("Previous step")}</button>
+              {inspectState&&<><button type="button" disabled={replayIndex>=inspectState.index}
+                onClick={()=>inspectReplayAt(replayIndex+1)}>{t("Next recorded step")}</button>
+                <button type="button" onClick={returnToLatestReplay}>{t("Return to latest")}</button></>}
+              <button type="button" onClick={()=>stepReplay(1)} disabled={!!inspectState||!allBars.length || replayIndex >= allBars.length-1}><Play size={16}/> {t("Next")}</button>
+              <button type="button" onClick={()=>stepReplay(5)} disabled={!!inspectState||!allBars.length || replayIndex >= allBars.length-1}><FastForward size={17}/> +5</button>
             </div>}
             <div className="chart-footer"><span><span className="legend-dot up-dot"/> {t("Up")} <span className="legend-dot down-dot"/> {t("Down")} <span className="legend-volume"/> {t("Volume")}</span>
               <span>{t(mode==="replay" ? "No future bars displayed" : "Historical data, not tick-by-tick")} · <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">{t("Charts by TradingView")}</a></span>
