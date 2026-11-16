@@ -13,7 +13,3 @@ export function isEntireRangeVisible(
   return count>0&&range!==null&&range.from<=0.5&&range.to>=count-1.5;
 }
 
-/** Always keep timestamps for every bar, independent of pixel width. */
-export function chooseInitialRange(count:number): {from:number;to:number}|null {
-  return count>0?{from:-0.5,to:count-0.5}:null;
-}
