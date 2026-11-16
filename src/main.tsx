@@ -5,6 +5,7 @@ import PortfolioArcade from "./PortfolioArcade";
 import { I18nProvider, LanguageSwitcher, useI18n } from "./i18n";
 import "./styles.css";
 import "./simulatorNavigation.css";
+import "./mobile.css";
 
 function Simulator() {
   const { t } = useI18n();
