@@ -206,6 +206,18 @@ async function verifyMode(page, mode, viewport) {
         viewport+" "+mode+" equity and benchmark graph");
       await verifyFullGraph(page,selector+" .an-chart-canvas",
         curve.length,viewport+" "+mode+" analytics history");
+      if(viewport===390&&mode==="single"){
+        const select=page.locator(selector+" .an-period-row");
+        await select.getByRole("button",{name:"20 steps",exact:true}).click();
+        await page.waitForFunction(sel=>{
+          const plot=document.querySelector(sel);
+          return plot?.dataset.loadedPoints==="900"&&
+            Number(plot.dataset.visibleFrom)>800;
+        },selector+" .an-chart-canvas",{timeout:12000});
+        await select.getByRole("button",{name:"All",exact:true}).click();
+        await verifyFullGraph(page,selector+" .an-chart-canvas",
+          curve.length,"all analytics data after changing time filters");
+      }
     }
     if(name==="Scenario Research"&&mode==="single"&&viewport===390){
       await page.locator(selector+" .forecast-controls button").first().click();
