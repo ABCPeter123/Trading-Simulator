@@ -239,7 +239,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
   const q=game?.metrics;
   const delta=latest&&game&&game.bars.length>=2 ? latest.close-game.bars[game.bars.length-2].close : 0;
   const codeSaved=game?.strategy===code;
-  const chartTrades = (analyticsFills?.runId===game?.id?analyticsFills.executions:game?.fills??[])
+  const chartTrades = (analyticsFills !== null && analyticsFills.runId===game?.id?analyticsFills.executions:game?.fills??[])
     .map(fill=>({time:fill.time,side:fill.side,quantity:fill.quantity,price:fill.price,source:fill.source}));
 
   return <div className="arc-page">
