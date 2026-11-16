@@ -6,6 +6,7 @@ import {
 import type { SeriesMarker, UTCTimestamp } from "lightweight-charts";
 import type { Asset, ChartStyle, TimeRange } from "../types";
 import type { MarketBar } from "../api";
+import { useChartDimensions } from "./useChartDimensions";
 
 export interface ChartTrade {
   time: number;
@@ -41,7 +42,8 @@ export function smaOverlay(bars: MarketBar[], period: number) {
 export function PriceChart({
   asset, range, style, bars, visibleWindow, smaPeriods = [], trades = [], showCrossovers = false,
 }: PriceChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { ref: containerRef, width, height, visible } = useChartDimensions();
+  const resizeRef = useRef<((width: number, height: number) => void) | null>(null);
   const updateRef = useRef<((bars: MarketBar[], fills: ChartTrade[]) => void) | null>(null);
   const key = smaPeriods.join(",");
   const validPeriods = useMemo(
@@ -51,9 +53,11 @@ export function PriceChart({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !visible) return;
     const chart = createChart(container, {
-      autoSize: true,
+      autoSize: false,
+      width,
+      height,
       layout: {
         background: { type: ColorType.Solid, color: "#111923" },
         textColor: "#8696a9", fontFamily: "ui-sans-serif, system-ui, sans-serif",
@@ -68,6 +72,7 @@ export function PriceChart({
       },
       localization:{priceFormatter:(value:number)=>value.toFixed(asset.decimals)},
     });
+    resizeRef.current = (nextWidth, nextHeight) => chart.resize(nextWidth, nextHeight);
     const priceFormat = {
       type:"price" as const,
       precision:asset.decimals,
@@ -158,12 +163,16 @@ export function PriceChart({
         chart.timeScale().fitContent();
       }
     };
-    return ()=>{updateRef.current=null;chart.remove();};
-  },[asset,range,style,visibleWindow,key,showCrossovers]);
+    return ()=>{updateRef.current=null;resizeRef.current=null;chart.remove();};
+  },[asset,range,style,visibleWindow,key,showCrossovers,visible]);
 
   useEffect(()=>{
-    updateRef.current?.(bars,trades);
-  },[bars,trades,asset,range,style,visibleWindow,key,showCrossovers]);
+    if (visible) resizeRef.current?.(width,height);
+  },[visible,width,height]);
+
+  useEffect(()=>{
+    if (visible) updateRef.current?.(bars,trades);
+  },[bars,trades,asset,range,style,visibleWindow,key,showCrossovers,visible]);
 
   return <div className="chart-canvas" ref={containerRef}
     aria-label={`${asset.symbol} price chart with historical fills and indicators`}/>;
