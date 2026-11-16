@@ -558,6 +558,11 @@ const zh: Record<string, string> = {
   "Analytics unavailable.": "分析数据不可用。",
   "N/A": "暂无数据",
   "Historical, price-only equal-weight buy-and-hold benchmark; each asset receives an equal starting notional and is marked at last revealed close. Strategy equity reconstructs actual modeled fills and fees. Rolling returns use shared replay timeline steps, not calendar-day returns. No dividends, splits, interest, cash flows, market impact, risk-free-rate or real exchange fills.": "基准为等权价格买入并持有，不含股息。各资产初始投入金额相同，使用最新已揭示收盘价估值。策略权益通过模拟成交和费用还原。滚动收益按共用回放时间步计算，非日历日。未考虑分红、拆股、利息、外部现金流、市场冲击、无风险利率或真实交易所成交。",
+  "Custom dates": "自定义日期",
+  "From": "起始日期",
+  "To": "结束日期",
+  "No data": "暂无数据",
+  "Price return": "价格收益率",
 };
 
 const LocaleContext = createContext<{
