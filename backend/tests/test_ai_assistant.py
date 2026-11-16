@@ -259,7 +259,7 @@ def test_local_ollama_has_extended_configurable_timeout_and_keepalive(monkeypatc
     answer=ai.advise("single","run","Analyze my strategy")
     assert answer["answer"]=="Local reply."
     assert observed["timeout"].read==310
-    assert observed["payload"]["keep_alive"]=="20m"
+    assert observed["payload"]["keep_alive"]=="30m"
     assert observed["payload"]["options"]["num_predict"]<=700
 
 
