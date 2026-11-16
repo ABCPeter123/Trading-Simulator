@@ -12,6 +12,8 @@ import VisualStrategyBuilder from "./VisualStrategyBuilder";
 import StrategyAnalytics from "./StrategyAnalytics";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { PriceChart } from "./components/PriceChart";
+import { REPLAY_WINDOWS, RESOLUTIONS, aggregateBars, chartTrades as mapChartTrades, chartViewsFor, showReplayTime } from "./replayIntervals";
+import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 import {
   gameCancel, gameCatalog, gameDiscover, gameImportTicker, gameLoad, gameRuns, gameSaveCode, gameSetRisk, gameStart, gameStep,
   gameTrade, gameValidateCode,
@@ -22,7 +24,7 @@ import "./arcade.css";
 
 const SAVED_KEY = "trading-simulator-arcade-current-run";
 const QUICK_SIZES = [10, 25, 50, 100];
-const asTime = (seconds: number) => new Date(seconds*1000).toLocaleDateString("en-CA", {year:"numeric",month:"short",day:"numeric"});
+const asTime = (seconds: number, resolution: ReplayResolution = "1d") => showReplayTime(seconds,resolution);
 const errText = (error: unknown) => error instanceof Error ? error.message : "An unexpected error occurred.";
 const SAMPLE_CODE = "WHEN SMA(10) CROSSES ABOVE SMA(30) BUY 50%\nWHEN SMA(10) CROSSES BELOW SMA(30) SELL 100%";
 
@@ -40,7 +42,9 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
   const [searchingRemote, setSearchingRemote] = useState(false);
   const [importingSymbol, setImportingSymbol] = useState("");
   const [catalogClass, setCatalogClass] = useState("All");
-  const [period, setPeriod] = useState<"1Y"|"2Y"|"5Y"|"10Y"|"MAX">("5Y");
+  const [period, setPeriod] = useState<ReplayWindow>("5Y");
+  const [resolution, setResolution] = useState<ReplayResolution>("1d");
+  const [chartView,setChartView] = useState<ReplayResolution>("1d");
   const [stopPct, setStopPct] = useState("0");
   const [takePct, setTakePct] = useState("0");
   const [assetId, setAssetId] = useState("aapl");
@@ -74,6 +78,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
   const load = useCallback(async (id: string) => {
     const run = await gameLoad(id);
     setGame(run);
+    setChartView(run.resolution??"1d");
     setCode(run.strategy || SAMPLE_CODE);
     setStopPct(String(run.risk?.stop_loss_pct ?? 0));
     setTakePct(String(run.risk?.take_profit_pct ?? 0));
@@ -176,8 +181,9 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
     try {
       const selected = filteredCatalog.find(a=>a.id===assetId) ?? filteredCatalog[0];
       if (!selected) throw Error("Choose a supported instrument.");
-      const result=await gameStart(selected.id,startingPoint,period,startDate);
+      const result=await gameStart(selected.id,startingPoint,period,startDate,resolution);
       setGame(result);
+      setChartView(result.resolution??"1d");
       setCode(SAMPLE_CODE);
       setStopPct("0");
       setTakePct("0");
@@ -241,6 +247,12 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
   const latest=game?.bars.at(-1);
   const q=game?.metrics;
   const delta=latest&&game&&game.bars.length>=2 ? latest.close-game.bars[game.bars.length-2].close : 0;
+  const baseResolution=game?.resolution??"1d";
+  const activeChartView=chartViewsFor(baseResolution).includes(chartView)?chartView:baseResolution;
+  const displayedBars=useMemo(
+    ()=>aggregateBars(game?.bars??[],activeChartView),
+    [game?.bars,activeChartView]
+  );
   const codeSaved=game?.strategy===code;
   const chartTrades = (analyticsFills !== null && analyticsFills.runId===game?.id?analyticsFills.executions:game?.fills??[])
     .map(fill=>({time:fill.time,side:fill.side,quantity:fill.quantity,price:fill.price,source:fill.source}));
@@ -284,14 +296,18 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          <select id="arc-new-asset" value={filteredCatalog.some(a=>a.id===assetId)?assetId:(filteredCatalog[0]?.id??"")} onChange={e=>setAssetId(e.target.value)}>
            {filteredCatalog.map(a=><option key={a.id} value={a.id}>{a.symbol} · {a.name}</option>)}
          </select>
-         <label htmlFor="arc-historical-range">{t("Historical depth")}</label>
-         <select id="arc-historical-range" value={period} onChange={e=>setPeriod(e.target.value as typeof period)}>
-           <option value="1Y">{t("1 year · daily candles")}</option>
-           <option value="2Y">{t("2 years · daily candles")}</option>
-           <option value="5Y">{t("5 years · daily candles")}</option>
-           <option value="10Y">{t("10 years · daily candles")}</option>
-           <option value="MAX">{t("Maximum available history")}</option>
+         <label htmlFor="arc-resolution">{t("Replay candle interval")}</label>
+         <select id="arc-resolution" value={resolution} onChange={e=>{
+           const next=e.target.value as ReplayResolution;
+           setResolution(next);setPeriod(REPLAY_WINDOWS[next][0]);setStartDate("");
+         }}>
+           {RESOLUTIONS.map(i=><option key={i} value={i}>{i}</option>)}
          </select>
+         <label htmlFor="arc-historical-range">{t("Historical depth")}</label>
+         <select id="arc-historical-range" value={period} onChange={e=>setPeriod(e.target.value as ReplayWindow)}>
+           {REPLAY_WINDOWS[resolution].map(w=><option key={w} value={w}>{w==="MAX"?t("Maximum available history"):w}</option>)}
+         </select>
+         <small className="arc-date-hint">{t("Intraday data has limited provider history. Daily bars support long-term seasons. The game never invents missing minute prices.")}</small>
          <label htmlFor="arc-choose-date">{t("Historical start date (optional)")}</label>
          <input id="arc-choose-date" type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} title={t("Choose the date when the game should start. Leave blank to use the standard starting point.")}/>
          <small className="arc-date-hint">{t("Choose a date such as 2008-09-15 or 2020-03-01. Requires source coverage and indicator warmup.")}</small>
@@ -310,11 +326,11 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
        <div className="arc-main">
          <section className="arc-hero">
            <div className="arc-symbol-line">
-             <div><span className="arc-upper">{t("SEASON IN PROGRESS")}</span><h1>{asset?.symbol??game.asset_id}<span className="arc-symbol-currency"> {t("/ USD")}</span></h1><p>{asset?.name} · {game.period} · {game.source}</p></div>
+             <div><span className="arc-upper">{t("SEASON IN PROGRESS")}</span><h1>{asset?.symbol??game.asset_id}<span className="arc-symbol-currency"> {t("/ USD")}</span></h1><p>{asset?.name} · {game.period} / {baseResolution} · {game.source}</p></div>
              <div className="arc-price"><strong>{latest ? formatPrice(latest.close,asset?.decimals??2):"—"}</strong><span className={delta>=0?"positive":"negative"}>{delta>=0?<ArrowUpRight size={15}/>:<ArrowDownRight size={15}/>} {delta>=0?"+":""}{formatPrice(delta,asset?.decimals??2)} {t("last candle")}</span></div>
            </div>
            <div className="arc-progress-line">
-             <div><span><Clock3 size={13}/> {latest?asTime(latest.time):"—"}</span><span>{game.current_bar+1} / {game.total_bars} {t("candles revealed")}</span><span>{game.progress_pct.toFixed(1)}% {t("complete")}</span></div>
+             <div><span><Clock3 size={13}/> {latest?asTime(latest.time,baseResolution):"—"}</span><span>{game.current_bar+1} / {game.total_bars} {t("candles revealed")}</span><span>{game.progress_pct.toFixed(1)}% {t("complete")}</span></div>
              <div className="arc-progress"><div style={{width:`${game.progress_pct}%`}}/></div>
            </div>
          </section>
@@ -335,9 +351,17 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
                <label><input type="checkbox" checked={showCrossovers} onChange={e=>setShowCrossovers(e.target.checked)}/>{t("Crossovers")}</label></>}
              <label><input type="checkbox" checked={showTrades} onChange={e=>setShowTrades(e.target.checked)}/>{t("Trade markers")}</label>
            </div>
-           <div className="arc-chart-wrap"><PriceChart asset={asset!} range="1Y" style={chartStyle} bars={game.bars} visibleWindow={120}
+           <div className="an-chart-controls">
+             <label>{t("Chart interval")}
+               <select value={activeChartView} onChange={e=>setChartView(e.target.value as ReplayResolution)}>
+                 {chartViewsFor(baseResolution).map(i=><option key={i} value={i}>{i}</option>)}
+               </select>
+             </label>
+             <span className="an-interval-warning">{t("Signals and fills use replay resolution, not the aggregated chart view.")}</span>
+           </div>
+           <div className="arc-chart-wrap"><PriceChart asset={asset!} range="1Y" style={chartStyle} bars={displayedBars} visibleWindow={120}
              smaPeriods={showSma?[maFast,maSlow]:[]} showCrossovers={showSma&&showCrossovers}
-             trades={showTrades?chartTrades:[]}/></div>
+             trades={showTrades?mapChartTrades(chartTrades,activeChartView):[]}/></div>
            <div className="an-chart-key">
              {showSma&&<><b style={{color:"#e9bb74"}}>SMA {maFast}</b><b style={{color:"#a99dff"}}>SMA {maSlow}</b></>}
              {showTrades&&<><b style={{color:"#4ad4a0"}}>{t("Buy marker")}</b><b style={{color:"#fa7c8a"}}>{t("Sell marker")}</b></>}
@@ -386,7 +410,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
 
          <section className="arc-history">
            <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong><span className="arc-tag">{game.fills.length} {t("RECENT FILLS")}</span></div></div>
-           {game.fills.length?<div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SIDE")}</th><th>{t("TYPE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th></tr></thead><tbody>{game.fills.slice(0,20).map((fill,index)=><tr key={fill.order_id+"-"+index}><td>{asTime(fill.time)}</td><td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td><td>{fill.source==="bot"?t("BOT · "):""}{t(fill.kind.toUpperCase())}</td><td>{fill.quantity.toLocaleString("en-US",{maximumFractionDigits:8})}</td><td>{formatPrice(fill.price,asset?.decimals??2)}</td><td>{formatMoney(fill.fee)}</td></tr>)}</tbody></table></div>
+           {game.fills.length?<div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SIDE")}</th><th>{t("TYPE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th></tr></thead><tbody>{game.fills.slice(0,20).map((fill,index)=><tr key={fill.order_id+"-"+index}><td>{asTime(fill.time,baseResolution)}</td><td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td><td>{fill.source==="bot"?t("BOT · "):""}{t(fill.kind.toUpperCase())}</td><td>{fill.quantity.toLocaleString("en-US",{maximumFractionDigits:8})}</td><td>{formatPrice(fill.price,asset?.decimals??2)}</td><td>{formatMoney(fill.fee)}</td></tr>)}</tbody></table></div>
              : <div className="arc-empty">{t("No fills yet. Place a trade, then advance the timeline.")}</div>}
          </section>
        </div>
