@@ -19,6 +19,7 @@ from .assets import get_instrument
 from .ledger import dec, fee_for, positive_quantity
 from .market import history
 from .intraday import replay_history, validate_replay_window
+from .time_navigation import checkpoint, snapshot_at, history_info
 
 GAME_DB = Path(os.environ.get("TRADING_SIM_ARCADE_DB", Path(__file__).resolve().parent.parent / "data" / "arcade.sqlite3"))
 LOCK = RLock()
@@ -45,6 +46,7 @@ def read(db, run_id):
 
 
 def save(db, run_id, state):
+    checkpoint(state)
     db.execute("UPDATE game_sessions SET state=?, updated_at=? WHERE id=?",
                (json.dumps(state), datetime.now(timezone.utc).isoformat(), run_id))
 
@@ -88,6 +90,7 @@ def start_run(asset_id, starting_point=0.3, period="5Y", start_date=None, resolu
                  avg="0", realized="0", orders=[], fills=[], strategy="",
                  curve=[{"time": bars[index]["time"], "value": float(INITIAL_CASH)}],
                  events=["Season started. Future candles are hidden."])
+    checkpoint(state)
     compressed = zlib.compress(json.dumps(bars, separators=(",", ":")).encode(), level=6)
     with LOCK, closing(connection()) as db, db:
         db.execute("INSERT INTO game_sessions VALUES (?,?,?,?,?,?,?)",
@@ -119,7 +122,8 @@ def public(run_id, row, bars, state):
     return {
         "id": run_id, "asset_id": row["asset_id"], "source": row["source"],
         "period": state.get("period", "1Y"), "resolution": state.get("resolution", "1d"), "requested_start_date": state.get("requested_start_date"), "risk": state.get("risk", {"stop_loss_pct": 0, "take_profit_pct": 0}),
-        "current_bar": i, "total_bars": len(bars), "finished": i == len(bars)-1,
+        "current_bar": i, "total_bars": len(bars),
+        **history_info(state), "view_index": i, "viewing_past": False, "finished": i == len(bars)-1,
         "progress_pct": round(100*i/(len(bars)-1), 1),
         "bars": bars[:i+1],  # no future data leaves this API
         "orders": state["orders"], "fills": state["fills"][-30:][::-1],
@@ -136,12 +140,16 @@ def public(run_id, row, bars, state):
     }
 
 
-def get_analysis(run_id):
+def get_analysis(run_id, at_index=None):
     """Compute analytics using only the portion of the season already revealed."""
     from .strategy_analytics import build_report
     from datetime import datetime, timezone
     with LOCK, closing(connection()) as db:
         row, bars, state = read(db, run_id)
+        if at_index is not None:
+            if at_index > state["index"]:
+                raise HTTPException(422, detail="Cannot analyze an unrevealed step.")
+            state = snapshot_at(state, at_index)
         precision = state.get("resolution", "1d")
         days = [(datetime.fromtimestamp(int(b["time"]), timezone.utc).date().isoformat() if precision == "1d"
                  else datetime.fromtimestamp(int(b["time"]), timezone.utc).isoformat(timespec="seconds")) for b in bars]
@@ -343,6 +351,7 @@ def advance_run(run_id, count=1, until_action=False):
                     signal = True
                     break
             state["curve"].append({"time": bar["time"], "value": float(dec(state["cash"])+dec(state["qty"])*dec(bar["close"]))})
+            checkpoint(state)
             if until_action and (signal or traded):
                 break
         if state["index"] == len(bars)-1:
@@ -354,3 +363,19 @@ def advance_run(run_id, count=1, until_action=False):
                 state["completed"] = True
         save(db, run_id, state)
         return public(run_id, row, bars, state)
+
+def get_at(run_id, index: int):
+    """View a previous exact checkpoint. Never mutate or replay orders."""
+    with LOCK, closing(connection()) as db:
+        row, bars, state = read(db, run_id)
+        if not state.get("checkpoints"):
+            # Old saves have a current snapshot only; older exact state was
+            # not recorded before this release.
+            checkpoint(state)
+        if index < state["start_index"] or index > state["index"]:
+            raise HTTPException(422, detail="Cannot navigate to an unrevealed step.")
+        observed = snapshot_at(state,index)
+        result = public(run_id,row,bars,observed)
+        result.update(**history_info(state),view_index=index,
+                      viewing_past=index < state["index"])
+        return result
