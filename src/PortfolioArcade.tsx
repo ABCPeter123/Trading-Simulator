@@ -6,6 +6,8 @@ import {
   Search, ShieldCheck, ShoppingCart, Trash2, Wallet,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
+import { REPLAY_WINDOWS, RESOLUTIONS, aggregateBars, chartTrades as mapChartTrades, chartViewsFor, showReplayTime } from "./replayIntervals";
+import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 import StrategyAnalytics from "./StrategyAnalytics";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
@@ -22,10 +24,8 @@ import "./arcade.css";
 import "./portfolio.css";
 
 const SAVED = "trade-sim-active-portfolio-season";
-const HISTORY_OPTIONS = ["1Y","2Y","5Y","10Y","MAX"];
 const errorText = (e: unknown) => e instanceof Error ? e.message : "Operation failed.";
 const fmtQty = (n:number) => n.toLocaleString("en-US", {maximumFractionDigits:8});
-const fmtTime = (t:number) => new Date(t*1000).toLocaleDateString("en-CA");
 const eligible = (i: CatalogInstrument) =>
   i.tradable && i.currency === "USD" && ["Stocks","ETFs","Crypto"].includes(i.asset_class);
 
@@ -39,7 +39,9 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const [search, setSearch] = useState("");
   const [external, setExternal] = useState<DiscoveredInstrument[]>([]);
   const [searchBusy, setSearchBusy] = useState(false);
-  const [period, setPeriod] = useState("5Y");
+  const [period, setPeriod] = useState<ReplayWindow>("5Y");
+  const [resolution,setResolution] = useState<ReplayResolution>("1d");
+  const [chartView,setChartView] = useState<ReplayResolution>("1d");
   const [startDate, setStartDate] = useState("");
   const [focused, setFocused] = useState("spy");
   const [busy, setBusy] = useState(false);
@@ -83,6 +85,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
     activeSeasonRef.current = next.id;
     setSeason(next);
     if (changedRun) {
+      setChartView(next.resolution??"1d");
       setFocused(next.asset_ids[0]);
       setSource(next.asset_ids[0]);
       setTarget(next.asset_ids.at(-1)!);
@@ -149,6 +152,9 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const current = positions.find(p=>p.asset_id===focused);
   const bars = season?.bars[focused] ?? [];
   const last = bars.at(-1);
+  const baseResolution=season?.resolution??"1d";
+  const activeChartView=chartViewsFor(baseResolution).includes(chartView)?chartView:baseResolution;
+  const displayedBars=useMemo(()=>aggregateBars(bars,activeChartView),[bars,activeChartView]);
   const markers = (analyticsFills !== null && analyticsFills.runId === season?.id
     ? analyticsFills.executions : season?.fills ?? [])
     .filter(fill=>fill.asset_id===focused)
@@ -200,7 +206,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         <div className="arc-brand">{t("PORTFOLIO")} <span>{t("ARCADE")}</span><small>{t("MULTI-ASSET HISTORICAL TRADING")}</small></div>
       </div>
       <div className="arc-top-right">
-        {season && <span className="arc-live"><span/> {season.day} · LVL {season.metrics.level}</span>}
+        {season && <span className="arc-live"><span/> {showReplayTime(season.day,baseResolution)} · LVL {season.metrics.level}</span>}
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);setSetup(true);}}><Plus size={15}/> {t("New basket")}</button>
       </div>
     </header>
@@ -228,12 +234,23 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <strong>{a.symbol}</strong><small>{a.name}</small><span>{basket.includes(a.id)?t("Added"):"+"}</span>
         </button>)}</div>
         <div className="port-settings">
-          <label>{t("Historical range")}<select value={period} onChange={e=>setPeriod(e.target.value)}>{HISTORY_OPTIONS.map(v=><option key={v} value={v}>{v==="MAX"?t("Maximum available"):v}</option>)}</select></label>
+          <label>{t("Replay candle interval")}
+            <select value={resolution} onChange={e=>{
+              const next=e.target.value as ReplayResolution;
+              setResolution(next);setPeriod(REPLAY_WINDOWS[next][0]);setStartDate("");
+            }}>{RESOLUTIONS.map(i=><option key={i} value={i}>{i}</option>)}</select>
+          </label>
+          <label>{t("Historical range")}
+            <select value={period} onChange={e=>setPeriod(e.target.value as ReplayWindow)}>
+              {REPLAY_WINDOWS[resolution].map(v=><option key={v} value={v}>{v==="MAX"?t("Maximum available"):v}</option>)}
+            </select>
+          </label>
           <label>{t("Start date (optional)")}<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
         </div>
+        <small className="arc-date-hint">{t("Intraday data has limited provider history. Daily bars support long-term seasons. The game never invents missing minute prices.")}</small>
         {error&&<p className="arc-error" role="alert">{error}</p>}
         <button className="arc-cta" disabled={busy||basket.length<2}
-          onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate))}>
+          onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate,resolution))}>
           <Play size={16}/> {t(busy?"Loading real historical data...":"Start portfolio season")}
         </button>
         {saved.length>0 && <label>{t("Resume saved season")}<select defaultValue="" onChange={e=>{
@@ -255,8 +272,8 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <div><small>{t("EQUAL-WEIGHT HOLD")}</small><strong>{season.metrics.equal_weight_hold_pct.toFixed(2)}%</strong></div>
         </div>
         <div className="port-toolbar">
-          <span><Clock3 size={15}/> {season.day} · Step {season.current_step+1}/{season.total_steps}</span>
-          <div><button disabled={busy||playing||season.finished} onClick={()=>advance(1)}><ChevronRight size={16}/> {t("1 day")}</button>
+          <span><Clock3 size={15}/> {showReplayTime(season.day,baseResolution)} · {t("Step")} {season.current_step+1}/{season.total_steps}</span>
+          <div><button disabled={busy||playing||season.finished} onClick={()=>advance(1)}><ChevronRight size={16}/> {baseResolution==="1d"?t("1 day"):t("Next candle")}</button>
             <button disabled={busy||playing||season.finished} onClick={()=>advance(5)}><FastForward size={15}/> +5</button>
             <button disabled={busy||playing||season.finished} onClick={()=>advance(20)}><FastForward size={15}/> +20</button>
             <button disabled={busy||playing||season.finished||!season.strategy} onClick={()=>advance(100,true)}>{t("Next bot")}</button>
@@ -280,17 +297,25 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
               <label><input type="checkbox" checked={showCrossovers} onChange={e=>setShowCrossovers(e.target.checked)}/>{t("Crossovers")}</label></>}
             <label><input type="checkbox" checked={showTrades} onChange={e=>setShowTrades(e.target.checked)}/>{t("Trade markers")}</label>
           </div>
+          <div className="an-chart-controls">
+            <label>{t("Chart interval")}
+              <select value={activeChartView} onChange={e=>setChartView(e.target.value as ReplayResolution)}>
+                {chartViewsFor(baseResolution).map(i=><option key={i} value={i}>{i}</option>)}
+              </select>
+            </label>
+            <span className="an-interval-warning">{t("Signals and fills use replay resolution, not the aggregated chart view.")}</span>
+          </div>
           <div className="arc-chart-wrap">{bars.length>0&&
-            <PriceChart asset={chosenAsset} range="1Y" style={chartStyle} bars={bars} visibleWindow={110}
+            <PriceChart asset={chosenAsset} range="1Y" style={chartStyle} bars={displayedBars} visibleWindow={110}
               smaPeriods={showSma?[maFast,maSlow]:[]} showCrossovers={showSma&&showCrossovers}
-              trades={showTrades?markers:[]}/>}</div>
+              trades={showTrades?mapChartTrades(markers,activeChartView):[]}/>}</div>
           <div className="an-chart-key">
             {showSma&&<><b style={{color:"#e9bb74"}}>SMA {maFast}</b><b style={{color:"#a99dff"}}>SMA {maSlow}</b></>}
             {showTrades&&<><b style={{color:"#4ad4a0"}}>{t("Buy marker")}</b><b style={{color:"#fa7c8a"}}>{t("Sell marker")}</b></>}
             {showSma&&showCrossovers&&<b>{t("SMA crossover dots")}</b>}
           </div>
-          <div className="port-source">{season.sources[focused]} · {t("Last actual bar:")} {last?fmtTime(last.time):t("none")}
-            {current&&!current.has_bar_today&&<span> · {t("Market closed on")} {season.day}, {t("no orders filled for this symbol")}</span>}</div>
+          <div className="port-source">{season.sources[focused]} · {t("Last actual bar:")} {last?showReplayTime(last.time,baseResolution):t("none")}
+            {current&&!current.has_bar_today&&<span> · {t("Market closed on")} {showReplayTime(season.day,baseResolution)}, {t("no orders filled for this symbol")}</span>}</div>
         </div>
         <div className="port-positions">
           <div className="arc-box-head"><div><Wallet size={17}/><strong>{t("Portfolio positions")}</strong></div><span className="arc-tag">{t("SHARED USD ACCOUNT")}</span></div>
@@ -323,7 +348,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong></div><span>{season.fills.length} {t("recent fills")}</span></div>
           <div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SYMBOL")}</th><th>{t("SIDE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th><th>{t("ENGINE")}</th></tr></thead><tbody>
             {season.fills.slice(0,30).map((fill,i)=><tr key={fill.order_id+"-"+i}>
-              <td>{fmtTime(fill.time)}</td><td>{assetName(fill.asset_id)}</td><td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td>
+              <td>{showReplayTime(fill.time,baseResolution)}</td><td>{assetName(fill.asset_id)}</td><td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td>
               <td>{fmtQty(fill.quantity)}</td><td>{formatMoney(fill.price)}</td><td>{formatMoney(fill.fee)}</td><td>{t(fill.source)}</td>
             </tr>)}
           </tbody></table></div>
