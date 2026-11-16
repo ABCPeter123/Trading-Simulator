@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, BarChart3, CandlestickChart,
   Check, ChevronDown, Clock3, Database, FastForward, LineChart, PauseCircle,
-  Play, RefreshCw, RotateCcw, Search, ShieldCheck, Wallet, X, Trophy,
+  Play, RefreshCw, RotateCcw, Search, ShieldCheck, Wallet, X,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
 import { ASSET_CLASSES, ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
@@ -22,6 +22,7 @@ const errorMessage = (err: unknown) => err instanceof Error ? err.message : "Une
 
 function App({onOpenArcade}: {onOpenArcade:()=>void}) {
   const {t} = useI18n();
+  const [terminalTab,setTerminalTab] = useState<"market"|"portfolio"|"research">("market");
   const [assetClass, setAssetClass] = useState<AssetClass>("Stocks");
   const [selectedId, setSelectedId] = useState("aapl");
   const [search, setSearch] = useState("");
@@ -191,6 +192,7 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
       setAccount(response.account);
       setNotice(`Paper ${side} filled: ${formatQuantity(parsedQuantity)} ${selectedAsset.symbol} at ${formatPrice(response.fill.price, selectedAsset.decimals)}. Fee: ${formatMoney(response.fill.fee)}.`);
       setActivePanel("history");
+      setTerminalTab("portfolio");
       setQuantity("1");
     } catch (error) {setTradeError(errorMessage(error));}
     finally {setPlacing(false);}
@@ -240,7 +242,7 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
         <div className="topbar-divider"/>
         <nav className="topnav"><span className="nav-active"><Activity size={15}/> {t("Workspace")}</span>
           <button type="button" onClick={() => document.getElementById("portfolio-panel")?.scrollIntoView({behavior:"smooth"})}><Wallet size={15}/> {t("Portfolio")}</button>
-          <button type="button" onClick={onOpenArcade}><Trophy size={15}/> {t("Trading Arcade")}</button>
+          <button type="button" onClick={onOpenArcade}><BarChart3 size={15}/> {t("Historical Simulator")}</button>
         </nav>
         <div className="topbar-right">
           <span className="local-status"><span className={backendOnline ? "local-dot" : "offline-dot"}/>{t(backendOnline ? "LOCAL API ONLINE" : "API OFFLINE")}</span>
@@ -253,7 +255,12 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
         <span>{mode === "replay" ? "Orders fill only on the next visible candle's open." : "Public market feeds may be delayed. Fills are modeled, never actual exchange executions."}</span>
       </div><span className="notice-right">{t("LOCAL ACCOUNT · USD")}</span></div>
 
-      <main className="workspace">
+      <main className="workspace" data-terminal-tab={terminalTab}>
+        <nav className="terminal-workspace-tabs" aria-label={t("Workspace sections")}>
+          {(["market","portfolio","research"] as const).map(tab=><button type="button" key={tab}
+            className={terminalTab===tab?"selected":""} aria-current={terminalTab===tab?"page":undefined}
+            onClick={()=>setTerminalTab(tab)}>{t(tab==="market"?"Market & Charts":tab==="portfolio"?"Account & Orders":"Backtest Research")}</button>)}
+        </nav>
         <aside className="watchlist-panel">
           <div className="watchlist-heading"><div><span className="eyebrow">{t("MARKET EXPLORER")}</span><h2>{t("Watchlist")}</h2></div><span className="subtle-counter">{ASSETS.length} {t("assets")}</span></div>
           <label className="search-field"><Search size={16}/>
