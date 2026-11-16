@@ -2,6 +2,31 @@
 
 A **local-first paper trading and historical replay terminal** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Stochastic research, professional workspaces and backward replay (v1.0)
+
+- **Stochastic Scenario Research**: fit historical candle log returns and
+  generate 256 reproducible GBM scenarios per instrument with percentile
+  bands, a modeled probability-of-rise estimate and configurable horizons.
+  Includes theoretical Black-Scholes European option valuations, explicitly
+  separated from directional market forecasts.
+- **Forecast-aware rules**: `PROB_UP(20)` is now a safe historical probability
+  expression available in strategy code and the visual rule builder.
+  All strategy decisions use revealed information only.
+- **Professional tabs**: both historical simulators now organize market
+  overview, orders/positions, strategy/AI, performance analytics, stochastic
+  scenarios and execution history into six sections. The original terminal
+  also separates charts, orders and backtest research into tabs.
+  Gamification panels are hidden without changing any saved data.
+- **Backwards navigation**: inspect exact prior checkpoints using previous,
+  next-recorded and return-to-latest controls. Historic inspection is
+  read-only and never erases or silently alters an executed trade. New
+  sessions record checkpoints from the beginning, and earlier saves start
+  recording when modified after this update.
+
+See [stochastic methodology](docs/STOCHASTIC_RESEARCH.md) and
+[workspace/time navigation guide](docs/WORKSPACE_NAVIGATION.md).
+All calculations run locally; no API keys or new dependencies required.
+
 ## AI Strategy Assistant v0.9
 
 Both Trading Arcade and Portfolio Arcade now have a **bilingual AI research
