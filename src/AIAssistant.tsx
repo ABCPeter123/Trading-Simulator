@@ -31,7 +31,14 @@ export default function AIAssistant({mode,runId,onDraft}: {
     void getAIStatus().then(next=>{if(alive)setStatus(next);})
       .catch(err=>{if(alive)setStatusError(err instanceof Error?err.message:"AI status unavailable.");});
     return ()=>{alive=false;};
+    // Status reports preload progress; refresh while model is warming.
   },[]);
+
+  useEffect(()=>{
+    if(!status?.warming)return;
+    const timer=setInterval(()=>{void getAIStatus().then(setStatus).catch(()=>{});},6000);
+    return ()=>clearInterval(timer);
+  },[status?.warming]);
 
   async function send(value:string) {
     const question=value.trim();
@@ -39,7 +46,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
     const history=turns.slice(-6);
     setBusy(true);setElapsed(0);setError("");setRetryQuestion("");setMessage("");
     try {
-      const result=await askAI(mode,runId,question,history);
+      const result=await askAI(mode,runId,question,history,locale);
       setTurns(prev=>[...prev,{role:"user",content:question},{role:"assistant",content:result.answer}]);
       setAnswers(prev=>[...prev,result]);
     } catch(e) {
@@ -74,13 +81,13 @@ export default function AIAssistant({mode,runId,onDraft}: {
         <h2>{t("AI Strategy Assistant")}</h2>
         <p>{t("Ask about your actual replay results, or request an editable trading strategy.")}</p>
       </div>
-      <span className="ai-chip">{status?.provider==="openai"?"OpenAI":status?.provider==="ollama"?"Ollama":t("Not configured")} · {status?.ready?t("Connected"):t("Not ready")}</span>
+      <span className="ai-chip">{status?.provider==="openai"?"OpenAI":status?.provider==="ollama"?"Ollama":t("Not configured")} · {status?.loaded?t("Model loaded"):status?.warming?t("Loading model"):status?.ready?t("Connected"):t("Not ready")}</span>
     </div>
     <div className="ai-status">
       <ShieldCheck size={14}/>
       <span>{status?.description ? (status.provider==="ollama"&&!status.ready
         ? `${t("Ollama is unavailable or the model is missing. Run:")} ollama pull ${status.model}` : status.provider==="ollama"
-        ? t("Ollama runs locally. Install Ollama and pull the model to ask questions.")
+        ? status.warming?t("Ollama is preloading the model locally."):status.loaded?t("Ollama is loaded and ready for research."):t("Ollama runs locally. Install Ollama and pull the model to ask questions.")
         : status.provider==="openai"
         ? t("OpenAI runs remotely. Each question sends summarized historical game data.")
         : t("AI is disabled.")) : t("Checking AI connection...")}</span>
