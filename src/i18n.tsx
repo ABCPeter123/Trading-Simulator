@@ -569,6 +569,7 @@ const zh: Record<string, string> = {
   "Intraday data has limited provider history. Daily bars support long-term seasons. The game never invents missing minute prices.": "分钟级行情的可回溯时间有限，长期回测请选择日K线。系统不会编造缺失的分钟价格。",
   "No real intraday candles available for this instrument.": "当前品种没有可用的真实分钟级K线。",
   "Intraday basket requires at least two overlapping real trading dates.": "分钟级组合至少需要两个行情有重叠的交易日。",
+  "Candle interval": "K线周期",
 };
 
 const LocaleContext = createContext<{
