@@ -44,19 +44,19 @@ export default function VisualStrategyBuilder({onAdd}: Props) {
         <select aria-label={t("Left indicator")} value={left} onChange={e=>setLeft(e.target.value as Expression)}>{EXPRS.map(v=><option key={v}>{v}</option>)}</select>
       </label>
       {left!=="PRICE"&&<label>{left==="NUMBER"?"Price threshold":"Lookback period"}
-        <input aria-label="Left indicator value" type="number" value={leftValue} onChange={e=>setLeftValue(e.target.value)}/>
+        <input aria-label={t("Left indicator value")} type="number" value={leftValue} onChange={e=>setLeftValue(e.target.value)}/>
       </label>}
       <label>CONDITION
         <select aria-label={t("Strategy condition")} value={op} onChange={e=>setOp(e.target.value)}>{["CROSSES ABOVE","CROSSES BELOW","ABOVE","BELOW"].map(v=><option key={v}>{v}</option>)}</select>
       </label>
       <label>COMPARED TO
-        <select aria-label="Right indicator" value={right} onChange={e=>setRight(e.target.value as Expression)}>{EXPRS.map(v=><option key={v}>{v}</option>)}</select>
+        <select aria-label={t("Right indicator")} value={right} onChange={e=>setRight(e.target.value as Expression)}>{EXPRS.map(v=><option key={v}>{v}</option>)}</select>
       </label>
       {right!=="PRICE"&&<label>{right==="NUMBER"?"Price threshold":"Lookback period"}
         <input aria-label={t("Right indicator value")} type="number" value={rightValue} onChange={e=>setRightValue(e.target.value)}/>
       </label>}
       <label>THEN
-        <select aria-label="Trade action" value={side} onChange={e=>setSide(e.target.value)}><option value="BUY">{t("BUY")}</option><option value="SELL">SELL</option></select>
+        <select aria-label={t("Trade action")} value={side} onChange={e=>setSide(e.target.value)}><option value="BUY">{t("BUY")}</option><option value="SELL">{t("SELL")}</option></select>
       </label>
       <label>POSITION SIZE %
         <input aria-label={t("Strategy percent")} type="number" min="0.01" max="100" step="any" value={percent} onChange={e=>setPercent(e.target.value)}/>
