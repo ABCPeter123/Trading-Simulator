@@ -96,8 +96,10 @@ export function PriceChart({
       precision:asset.decimals,
       minMove:1 / 10 ** asset.decimals,
     };
-    let updatePrice: (bars:MarketBar[])=>void;
-    let updateMarkers: (markers:SeriesMarker<UTCTimestamp>[])=>void;
+    let updatePrice:(bars:MarketBar[])=>void;
+    let appendPrice:(bar:MarketBar)=>void;
+    let previousBars:MarketBar[]=[];
+    let updateMarkers:(markers:SeriesMarker<UTCTimestamp>[])=>void;
 
     if (style==="candles") {
       const series = chart.addSeries(CandlestickSeries, {
@@ -108,6 +110,9 @@ export function PriceChart({
       updatePrice = data=>series.setData(data.map(b=>({
         time:b.time as UTCTimestamp,open:b.open,high:b.high,low:b.low,close:b.close,
       })));
+      appendPrice=bar=>series.update({
+        time:bar.time as UTCTimestamp,open:bar.open,high:bar.high,low:bar.low,close:bar.close,
+      });
       updateMarkers = markers=>plugin.setMarkers(markers);
     } else {
       const series = chart.addSeries(LineSeries,{
@@ -117,6 +122,7 @@ export function PriceChart({
       updatePrice=data=>series.setData(data.map(b=>({
         time:b.time as UTCTimestamp,value:b.close,
       })));
+      appendPrice=bar=>series.update({time:bar.time as UTCTimestamp,value:bar.close});
       updateMarkers=markers=>plugin.setMarkers(markers);
     }
 
@@ -146,12 +152,41 @@ export function PriceChart({
       const lastTime = data.length ? data[data.length - 1].time : null;
       const timelineChanged = previousCount !== data.length ||
         lastTime !== previousLastTime;
-      updatePrice(data);
-      volume.setData(data.map(bar=>({
-        time:bar.time as UTCTimestamp,value:bar.volume,
-        color:bar.close>=bar.open?"rgba(53,202,152,.28)":"rgba(249,104,111,.27)",
-      })));
-      for (const {period,series} of moving) series.setData(smaOverlay(data,period));
+      const newLast=data.at(-1),oldLast=previousBars.at(-1);
+      const append=previousBars.length>0&&data.length===previousBars.length+1&&
+        data[0].time===previousBars[0].time&&
+        data[data.length-2].time===oldLast?.time&&
+        data[data.length-2].close===oldLast?.close;
+      const unchanged=previousBars.length===data.length&&
+        (data.length===0||(data[0].time===previousBars[0].time&&
+        newLast?.time===oldLast?.time&&newLast?.close===oldLast?.close&&
+        newLast?.open===oldLast?.open&&newLast?.volume===oldLast?.volume));
+      if(!unchanged){
+        if(append&&newLast){
+          // The time-series remains complete; only add the newest replay bar.
+          appendPrice(newLast);
+          volume.update({
+            time:newLast.time as UTCTimestamp,value:newLast.volume,
+            color:newLast.close>=newLast.open?"rgba(53,202,152,.28)":"rgba(249,104,111,.27)",
+          });
+          for(const {period,series} of moving){
+            if(data.length>=period){
+              let sum=0;
+              for(let j=data.length-period;j<data.length;j++)sum+=data[j].close;
+              series.update({time:newLast.time as UTCTimestamp,value:sum/period});
+            }
+          }
+        }else{
+          // Rewinding or loading a different history resets the full dataset.
+          updatePrice(data);
+          volume.setData(data.map(bar=>({
+            time:bar.time as UTCTimestamp,value:bar.volume,
+            color:bar.close>=bar.open?"rgba(53,202,152,.28)":"rgba(249,104,111,.27)",
+          })));
+          for(const {period,series} of moving)series.setData(smaOverlay(data,period));
+        }
+        previousBars=data;
+      }
       const available=new Set(data.map(b=>b.time));
       const markers:SeriesMarker<UTCTimestamp>[]=[];
       if (showCrossovers && validPeriods.length>=2) {
