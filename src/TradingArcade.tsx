@@ -242,7 +242,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
       <div className="arc-top-right">
         <span className="arc-live"><span/> {t("LOCAL HISTORICAL GAME")}</span>
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);onOpenPortfolio();}}><Wallet size={15}/> {t("Portfolio Arcade")}</button>
-        {q && <div className="arc-player"><div className="arc-avatar"><Trophy size={17}/></div><div><strong>{t("LEVEL")} {q.level}</strong><span>{q.xp} XP · {q.score.toLocaleString()} score</span></div></div>}
+        {q && <div className="arc-player"><div className="arc-avatar"><Trophy size={17}/></div><div><strong>{t("LEVEL")} {q.level}</strong><span>{q.xp} XP · {q.score.toLocaleString()} {t("score")}</span></div></div>}
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);setNewGame(true);setError("");}}><Plus size={15}/> {t("New season")}</button>
       </div>
     </header>
@@ -254,20 +254,20 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
        <h1>{t("Trade through history.")}<br/><em>{t("Beat the market.")}</em></h1>
        <p>{t("Start with $100,000 in virtual cash, reveal real historical candles, and compete against buy-and-hold. Play manually or design a trading bot. Skip weeks in seconds.")}</p>
        <div className="arc-start-form">
-         <label htmlFor="arc-market-search">Find a market · {catalog.length} instruments indexed</label>
+         <label htmlFor="arc-market-search">Find a market · {catalog.length} {t("instruments indexed")}</label>
          <input id="arc-market-search" type="search" value={catalogSearch} placeholder={t("Search symbol or company...")} onChange={e=>{setCatalogSearch(e.target.value);setRemoteResults([]);}}/>
-         <button className="arc-discover" type="button" disabled={searchingRemote||catalogSearch.trim().length<2} onClick={()=>void searchMore()}>{searchingRemote?"Searching Yahoo Finance...":"Find more instruments across Yahoo Finance"}</button>
+         <button className="arc-discover" type="button" disabled={searchingRemote||catalogSearch.trim().length<2} onClick={()=>void searchMore()}>{t(searchingRemote?"Searching Yahoo Finance...":"Find more instruments across Yahoo Finance")}</button>
          {remoteResults.length>0&&<div className="arc-remote-results">
            <strong>DISCOVERED · {remoteResults.length} RESULTS</strong>
            {remoteResults.map(item=><div key={item.symbol}>
-             <span><b>{item.symbol}</b><small>{item.name} · {item.asset_class} · {item.currency}</small></span>
-             <button type="button" disabled={!!importingSymbol} onClick={()=>void importTicker(item.symbol)}>{importingSymbol===item.symbol?"Importing...":"Add"}</button>
+             <span><b>{item.symbol}</b><small>{item.name} · {t(item.asset_class)} · {item.currency}</small></span>
+             <button type="button" disabled={!!importingSymbol} onClick={()=>void importTicker(item.symbol)}>{t(importingSymbol===item.symbol?"Importing...":"Add")}</button>
            </div>)}
          </div>}
          <select aria-label={t("Filter asset class")} value={catalogClass} onChange={e=>setCatalogClass(e.target.value)}>
            {["All","Stocks","ETFs","Crypto","Forex"].map(group=><option key={group}>{group}</option>)}
          </select>
-         <label htmlFor="arc-new-asset">Choose your market · {filteredCatalog.length} matches</label>
+         <label htmlFor="arc-new-asset">Choose your market · {filteredCatalog.length} {t("matches")}</label>
          <select id="arc-new-asset" value={filteredCatalog.some(a=>a.id===assetId)?assetId:(filteredCatalog[0]?.id??"")} onChange={e=>setAssetId(e.target.value)}>
            {filteredCatalog.map(a=><option key={a.id} value={a.id}>{a.symbol} · {a.name}</option>)}
          </select>
@@ -282,13 +282,13 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          <label htmlFor="arc-choose-date">{t("Historical start date (optional)")}</label>
          <input id="arc-choose-date" type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} title={t("Choose the date when the game should start. Leave blank to use the standard starting point.")}/>
          <small className="arc-date-hint">{t("Choose a date such as 2008-09-15 or 2020-03-01. Requires source coverage and indicator warmup.")}</small>
-         <label htmlFor="arc-start-point">{t("Starting point")} {startDate?"(ignored when date is set)":""}</label>
+         <label htmlFor="arc-start-point">{t("Starting point")} {startDate?t("(ignored when date is set)"):""}</label>
          <select id="arc-start-point" value={startingPoint} onChange={e=>setStartingPoint(Number(e.target.value))}>
            <option value={0.2}>{t("Early season · More candles to play")}</option>
            <option value={0.3}>{t("Standard season")}</option>
            <option value={0.5}>{t("Quick season")}</option>
          </select>
-         <button disabled={busy} className="arc-cta" onClick={()=>void createNew()}><Play size={18} fill="currentColor"/>{busy?"Loading market data...":"Start trading"}</button>
+         <button disabled={busy} className="arc-cta" onClick={()=>void createNew()}><Play size={18} fill="currentColor"/>{t(busy?"Loading market data...":"Start trading")}</button>
          {saved.length>0 && <><span className="arc-resume-title">{t("OR RESUME A SAVED SEASON")}</span><select aria-label={t("Resume a saved arcade run")} defaultValue="" onChange={e=>{if(e.target.value)void switchRun(e.target.value);}}><option value="">{t("Select a previous run...")}</option>{saved.map(run=><option key={run.id} value={run.id}>{ASSETS.find(a=>a.id===run.asset_id)?.symbol} · {new Date(run.updated_at).toLocaleString()}</option>)}</select></>}
          {error && <div className="arc-error" role="alert">{error}</div>}
        </div>
@@ -298,10 +298,10 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          <section className="arc-hero">
            <div className="arc-symbol-line">
              <div><span className="arc-upper">{t("SEASON IN PROGRESS")}</span><h1>{asset?.symbol??game.asset_id}<span className="arc-symbol-currency"> {t("/ USD")}</span></h1><p>{asset?.name} · {game.period} · {game.source}</p></div>
-             <div className="arc-price"><strong>{latest ? formatPrice(latest.close,asset?.decimals??2):"—"}</strong><span className={delta>=0?"positive":"negative"}>{delta>=0?<ArrowUpRight size={15}/>:<ArrowDownRight size={15}/>} {delta>=0?"+":""}{formatPrice(delta,asset?.decimals??2)} last candle</span></div>
+             <div className="arc-price"><strong>{latest ? formatPrice(latest.close,asset?.decimals??2):"—"}</strong><span className={delta>=0?"positive":"negative"}>{delta>=0?<ArrowUpRight size={15}/>:<ArrowDownRight size={15}/>} {delta>=0?"+":""}{formatPrice(delta,asset?.decimals??2)} {t("last candle")}</span></div>
            </div>
            <div className="arc-progress-line">
-             <div><span><Clock3 size={13}/> {latest?asTime(latest.time):"—"}</span><span>{game.current_bar+1} of {game.total_bars} candles revealed</span><span>{game.progress_pct.toFixed(1)}% complete</span></div>
+             <div><span><Clock3 size={13}/> {latest?asTime(latest.time):"—"}</span><span>{game.current_bar+1} / {game.total_bars} {t("candles revealed")}</span><span>{game.progress_pct.toFixed(1)}% {t("complete")}</span></div>
              <div className="arc-progress"><div style={{width:`${game.progress_pct}%`}}/></div>
            </div>
          </section>
@@ -336,12 +336,12 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          </section>
 
          <section className="arc-bot-section">
-           <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Workshop")}</strong><span className="arc-tag">{t("NO CODING EXPERIENCE NEEDED")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{editorOpen?"Collapse":"Expand"}</button></div>
+           <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Workshop")}</strong><span className="arc-tag">{t("NO CODING EXPERIENCE NEEDED")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{t(editorOpen?"Collapse":"Expand")}</button></div>
            <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Teach your trading bot what to do")}</strong><p>{t("Write rules in plain English. The engine evaluates the conditions at each revealed candle close, then queues trades for the next candle.")}</p></div></div>
            {editorOpen&&<div className="arc-editor">
              <VisualStrategyBuilder onAdd={rule=>{setCode(prev=>prev.trim()?prev.trim()+"\n"+rule:rule);setCodeError("");}}/>
-             <div className="arc-template-row"><span>{t("TRY A TEMPLATE")}</span>{game.examples.map(sample=><button key={sample.title} onClick={()=>{setCode(sample.code);setCodeError("");}}>{sample.title}</button>)}</div>
-             <div className="arc-code-head"><span><Terminal size={14}/> strategy.tradesim</span><span>{codeSaved?"SAVED TO GAME":"UNSAVED CHANGES"}</span></div>
+             <div className="arc-template-row"><span>{t("TRY A TEMPLATE")}</span>{game.examples.map(sample=><button key={sample.title} onClick={()=>{setCode(sample.code);setCodeError("");}}>{t(sample.title)}</button>)}</div>
+             <div className="arc-code-head"><span><Terminal size={14}/> strategy.tradesim</span><span>{t(codeSaved?"SAVED TO GAME":"UNSAVED CHANGES")}</span></div>
              <textarea spellCheck={false} aria-label={t("Trading strategy rules")} value={code} onChange={e=>{setCode(e.target.value);setCodeError("");}} rows={5} placeholder="WHEN SMA(10) CROSSES ABOVE SMA(30) BUY 25%" maxLength={1800}/>
              <div className="arc-editor-help">
                <strong>{t("Language cheatsheet")}</strong>
@@ -350,13 +350,13 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
                <p>{t("BUY % uses available cash. SELL % uses holdings. Rules trigger on crossing events, not every candle. No Python code or unsafe execution.")}</p>
              </div>
              {codeError&&<div role="alert" className="arc-error">{codeError}</div>}
-             <div className="arc-code-actions"><span>{game.strategy.trim()?"Bot armed":"No active strategy yet"}</span><button disabled={busy||validating||codeSaved} onClick={()=>void saveCode()}><Save size={15}/>{validating?"Validating...":"Save & arm bot"}</button></div>
+             <div className="arc-code-actions"><span>{t(game.strategy.trim()?"Bot armed":"No active strategy yet")}</span><button disabled={busy||validating||codeSaved} onClick={()=>void saveCode()}><Save size={15}/>{t(validating?"Validating...":"Save & arm bot")}</button></div>
            </div>}
          </section>
 
          <section className="arc-history">
-           <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong><span className="arc-tag">{game.fills.length} RECENT FILLS</span></div></div>
-           {game.fills.length?<div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SIDE")}</th><th>{t("TYPE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th></tr></thead><tbody>{game.fills.slice(0,20).map((fill,index)=><tr key={fill.order_id+"-"+index}><td>{asTime(fill.time)}</td><td className={fill.side==="buy"?"positive":"negative"}>{fill.side.toUpperCase()}</td><td>{fill.source==="bot"?"BOT · ":""}{fill.kind}</td><td>{fill.quantity.toLocaleString("en-US",{maximumFractionDigits:8})}</td><td>{formatPrice(fill.price,asset?.decimals??2)}</td><td>{formatMoney(fill.fee)}</td></tr>)}</tbody></table></div>
+           <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong><span className="arc-tag">{game.fills.length} {t("RECENT FILLS")}</span></div></div>
+           {game.fills.length?<div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SIDE")}</th><th>{t("TYPE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th></tr></thead><tbody>{game.fills.slice(0,20).map((fill,index)=><tr key={fill.order_id+"-"+index}><td>{asTime(fill.time)}</td><td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td><td>{fill.source==="bot"?t("BOT · "):""}{t(fill.kind.toUpperCase())}</td><td>{fill.quantity.toLocaleString("en-US",{maximumFractionDigits:8})}</td><td>{formatPrice(fill.price,asset?.decimals??2)}</td><td>{formatMoney(fill.fee)}</td></tr>)}</tbody></table></div>
              : <div className="arc-empty">{t("No fills yet. Place a trade, then advance the timeline.")}</div>}
          </section>
        </div>
@@ -367,8 +367,8 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
            <h2>{q!.score.toLocaleString()} <small>{t("POINTS")}</small></h2>
            <p>{t("Measured against buy-and-hold with a drawdown penalty.")}</p>
            <div className="arc-xp-track"><div style={{width:`${q!.xp%125/125*100}%`}}/></div>
-           <span>{q!.xp%125} / 125 XP to next level</span>
-           <div className="arc-badges">{q!.badges.map(b=><div key={b}><Award size={13}/>{b}</div>)}{!q!.badges.length&&<small>{t("Place your first fill to earn a badge.")}</small>}</div>
+           <span>{q!.xp%125} / 125 XP {t("to next level")}</span>
+           <div className="arc-badges">{q!.badges.map(b=><div key={b}><Award size={13}/>{t(b)}</div>)}{!q!.badges.length&&<small>{t("Place your first fill to earn a badge.")}</small>}</div>
          </section>
 
          <section className="arc-trade-card">
@@ -387,7 +387,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
                <div className="arc-quote-mini"><span>{t("Last candle close")}</span><strong>{latest?formatPrice(latest.close,asset?.decimals??2):"—"}</strong></div>
                <div className="arc-quote-mini"><span>{t("Units held")}</span><strong>{q!.quantity.toLocaleString("en-US",{maximumFractionDigits:8})}</strong></div>
                <div className="arc-quote-mini"><span>{t("Cash available")}</span><strong>{formatMoney(q!.cash)}</strong></div>
-               <button className={side==="buy"?"arc-buy-cta":"arc-sell-cta"} disabled={busy||playing||game.finished} type="submit">{side==="buy"?<ArrowUpRight size={17}/>:<ArrowDownRight size={17}/>} Queue {side.toUpperCase()} order</button>
+               <button className={side==="buy"?"arc-buy-cta":"arc-sell-cta"} disabled={busy||playing||game.finished} type="submit">{side==="buy"?<ArrowUpRight size={17}/>:<ArrowDownRight size={17}/>} Queue {t(side.toUpperCase())} {t("order")}</button>
              </form>
              <div className="arc-disclaimer"><ShieldCheck size={14}/><span>{t("Orders execute only as new candles reveal. Fees, spread and slippage are modeled.")}</span></div>
            </div>
@@ -411,24 +411,24 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
                if (!Number.isFinite(stop)||!Number.isFinite(take)||stop<0||stop>75||take<0||take>75) {setError("Risk percentages must be between 0 and 75.");return;}
                void action(()=>gameSetRisk(game.id,stop,take),"Protective exits updated.");
              }}><ShieldCheck size={15}/> {t("Apply protection")}</button>
-             <small>Active: stop {game.risk.stop_loss_pct||"off"}% · target {game.risk.take_profit_pct||"off"}%. If both levels are touched in one candle, the stop wins.</small>
+             <small>{t("Active: stop")} {game.risk.stop_loss_pct||t("off")}% · {t("target")} {game.risk.take_profit_pct||t("off")}%. If both levels are touched in one candle, the stop wins.</small>
            </div>
          </section>
 
          <section className="arc-pending-card">
            <div className="arc-box-head"><div><Target size={16}/><strong>{t("Pending orders")}</strong></div><span className="arc-tag">{game.orders.length}</span></div>
            {game.orders.length?game.orders.map(order=><div className="arc-pending" key={order.id}>
-             <div><strong className={order.side==="buy"?"positive":"negative"}>{order.side.toUpperCase()} {order.size}{order.size_type==="percent"?"%":" units"}</strong><span>{order.kind.toUpperCase()}{order.price?" @ "+order.price:""} · {order.source}</span></div>
+             <div><strong className={order.side==="buy"?"positive":"negative"}>{t(order.side.toUpperCase())} {order.size}{order.size_type==="percent"?"%":" units"}</strong><span>{t(order.kind.toUpperCase())}{order.price?" @ "+order.price:""} · {t(order.source)}</span></div>
              <button title={t("Cancel pending order")} disabled={busy||playing} onClick={()=>void action(()=>gameCancel(game.id,order.id))}><Trash2 size={15}/></button>
            </div>):<div className="arc-empty">{t("No pending orders.")}</div>}
          </section>
 
          <section className="arc-events">
            <div className="arc-box-head"><div><Sparkles size={17}/><strong>{t("Activity feed")}</strong></div></div>
-           {game.events.slice(0,6).map((event,i)=><p key={i}><span className="arc-feed-dot"/>{event}</p>)}
+           {game.events.slice(0,6).map((event,i)=><p key={i}><span className="arc-feed-dot"/>{t(event)}</p>)}
          </section>
-         {error&&<div role="alert" className="arc-error arc-floating-error">{error}<button onClick={()=>setError("")} aria-label={t("Dismiss error")}>{t("Dismiss")}</button></div>}
-         {note&&!error&&<div role="status" className="arc-note"><Check size={15}/>{note}<button onClick={()=>setNote("")} aria-label={t("Dismiss note")}>×</button></div>}
+         {error&&<div role="alert" className="arc-error arc-floating-error">{t(error)}<button onClick={()=>setError("")} aria-label={t("Dismiss error")}>{t("Dismiss")}</button></div>}
+         {note&&!error&&<div role="status" className="arc-note"><Check size={15}/>{t(note)}<button onClick={()=>setNote("")} aria-label={t("Dismiss note")}>×</button></div>}
        </aside>
      </main>}
      <footer className="arc-footer"><span>{t("Trading Arcade · local-first historical market simulation")}</span><span>{t("Bar-level approximations, not live exchange executions")}</span></footer>
