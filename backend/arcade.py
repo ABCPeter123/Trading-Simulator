@@ -18,6 +18,7 @@ from .arcade_dsl import EXAMPLES, compile_rules, matches
 from .assets import get_instrument
 from .ledger import dec, fee_for, positive_quantity
 from .market import history
+from .intraday import replay_history, validate_replay_window
 
 GAME_DB = Path(os.environ.get("TRADING_SIM_ARCADE_DB", Path(__file__).resolve().parent.parent / "data" / "arcade.sqlite3"))
 LOCK = RLock()
@@ -52,15 +53,14 @@ def event(state, message):
     state["events"] = ([message] + state["events"])[:12]
 
 
-def start_run(asset_id, starting_point=0.3, period="5Y", start_date=None):
+def start_run(asset_id, starting_point=0.3, period="5Y", start_date=None, resolution="1d"):
     instrument = get_instrument(asset_id)
     if not instrument.tradable or instrument.currency != "USD":
         raise HTTPException(422, detail="This contract/currency is not supported in the USD cash arcade.")
     if not 0.15 <= starting_point <= 0.75:
         raise HTTPException(422, detail="Starting point must be 15% to 75%.")
-    if period not in {"1Y", "2Y", "5Y", "10Y", "MAX"}:
-        raise HTTPException(422, detail="Game history range must be 1Y, 2Y, 5Y, 10Y, or MAX.")
-    data = history(asset_id, period)
+    validate_replay_window(period, resolution)
+    data = history(asset_id, period) if resolution == "1d" else replay_history(asset_id, period, resolution)
     bars = data["bars"]
     if len(bars) < 65:
         raise HTTPException(422, detail="Need at least 65 real historical candles.")
@@ -84,7 +84,7 @@ def start_run(asset_id, starting_point=0.3, period="5Y", start_date=None):
         index = max(35, index)  # warmup for moving averages and RSI
     now = datetime.now(timezone.utc).isoformat()
     run_id = str(uuid4())
-    state = dict(index=index, start_index=index, period=period, requested_start_date=start_date, risk={"stop_loss_pct": 0, "take_profit_pct": 0}, cash=str(INITIAL_CASH), qty="0",
+    state = dict(index=index, start_index=index, period=period, resolution=resolution, requested_start_date=start_date, risk={"stop_loss_pct": 0, "take_profit_pct": 0}, cash=str(INITIAL_CASH), qty="0",
                  avg="0", realized="0", orders=[], fills=[], strategy="",
                  curve=[{"time": bars[index]["time"], "value": float(INITIAL_CASH)}],
                  events=["Season started. Future candles are hidden."])
@@ -118,7 +118,7 @@ def public(run_id, row, bars, state):
     if i == len(bars)-1: badges.append("Season complete")
     return {
         "id": run_id, "asset_id": row["asset_id"], "source": row["source"],
-        "period": state.get("period", "1Y"), "requested_start_date": state.get("requested_start_date"), "risk": state.get("risk", {"stop_loss_pct": 0, "take_profit_pct": 0}),
+        "period": state.get("period", "1Y"), "resolution": state.get("resolution", "1d"), "requested_start_date": state.get("requested_start_date"), "risk": state.get("risk", {"stop_loss_pct": 0, "take_profit_pct": 0}),
         "current_bar": i, "total_bars": len(bars), "finished": i == len(bars)-1,
         "progress_pct": round(100*i/(len(bars)-1), 1),
         "bars": bars[:i+1],  # no future data leaves this API
@@ -142,13 +142,16 @@ def get_analysis(run_id):
     from datetime import datetime, timezone
     with LOCK, closing(connection()) as db:
         row, bars, state = read(db, run_id)
-        days = [datetime.fromtimestamp(int(b["time"]), timezone.utc).date().isoformat() for b in bars]
+        precision = state.get("resolution", "1d")
+        days = [(datetime.fromtimestamp(int(b["time"]), timezone.utc).date().isoformat() if precision == "1d"
+                 else datetime.fromtimestamp(int(b["time"]), timezone.utc).isoformat(timespec="seconds")) for b in bars]
         asset_id = row["asset_id"]
         by_date = {day: bar for day, bar in zip(days, bars)}
         report = build_report(
             days, {asset_id: by_date}, [asset_id],
             state["start_index"], state["index"],
             [{**fill, "asset_id": asset_id} for fill in state["fills"]],
+            resolution=precision,
         )
         return report
 
