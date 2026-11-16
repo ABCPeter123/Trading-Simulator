@@ -29,6 +29,18 @@ export interface Attribution {
   price_return_pct: number | null;
   last_observed_day: string;
 }
+export interface StrategyExecution {
+  day: string;
+  time: number;
+  asset_id: string;
+  side: "buy" | "sell";
+  quantity: number;
+  price: number;
+  fee: number;
+  notional: number;
+  source: string;
+  cash_change: number;
+}
 export interface StrategyReport {
   start_day: string;
   end_day: string;
@@ -52,6 +64,7 @@ export interface StrategyReport {
   };
   rolling: Record<string, RollingResult | null>;
   allocations: Attribution[];
+  executions: StrategyExecution[];
   methodology: string;
 }
 
