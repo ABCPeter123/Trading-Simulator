@@ -262,7 +262,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate,resolution))}>
           <Play size={16}/> {t(busy?"Loading real historical data...":"Create portfolio session")}
         </button>
-        {saved.length>0 && <label>{t("Resume saved season")}<select defaultValue="" onChange={e=>{
+        {saved.length>0 && <label>{t("Resume saved session")}<select defaultValue="" onChange={e=>{
           if(e.target.value) void update(()=>loadPortfolioSeason(e.target.value));
         }}><option value="">{t("Select a saved basket")}</option>{saved.map(x=>
           <option key={x.id} value={x.id}>{x.asset_ids.map(assetName).join(" + ")} · {x.period}</option>)}</select></label>}
