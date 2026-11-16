@@ -71,6 +71,18 @@ function csv(data:StrategyReport) {
   link.download=`strategy-analytics-${data.end_day}.csv`;link.click();
   URL.revokeObjectURL(url);
 }
+function tradesCsv(data:StrategyReport) {
+  const header=["day","symbol_id","side","quantity","fill_price","notional_usd","fee_usd","cash_delta_usd","origin"];
+  const rows=data.executions.map(fill=>[
+    fill.day,fill.asset_id,fill.side,fill.quantity,fill.price,
+    fill.notional,fill.fee,fill.cash_change,fill.source,
+  ].join(","));
+  const blob=new Blob([header.join(",")+"\\n"+rows.join("\\n")+"\\n"],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const anchor=document.createElement("a");anchor.href=url;
+  anchor.download=`strategy-executions-${data.end_day}.csv`;anchor.click();
+  URL.revokeObjectURL(url);
+}
 function Metric({name,value,note}: {name:string;value:string;note?:string}) {
   return <div className="an-metric"><small>{name}</small><strong>{value}</strong>{note&&<span>{note}</span>}</div>;
 }
@@ -78,8 +90,9 @@ const toSeries=(data:AnalyticsPoint[],key:keyof AnalyticsPoint)=>data.map(p=>({
   time:epoch(p.day),value:Number(p[key]),
 }));
 
-export default function StrategyAnalytics({runId,step,mode,assetName}:{
+export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
   runId:string;step:number;mode:"portfolio"|"single";assetName:(id:string)=>string;
+  onReport?:(report:StrategyReport)=>void;
 }) {
   const {t}=useI18n();
   const [report,setReport]=useState<StrategyReport|null>(null);
@@ -90,7 +103,7 @@ export default function StrategyAnalytics({runId,step,mode,assetName}:{
     let cancelled=false;
     setLoading(true);
     void getStrategyReport(mode,runId).then(value=>{
-      if(!cancelled){setReport(value);setError("");}
+      if(!cancelled){setReport(value);onReport?.(value);setError("");}
     }).catch(e=>{
       if(!cancelled)setError(e instanceof Error?e.message:"Analytics unavailable.");
     }).finally(()=>{if(!cancelled)setLoading(false);});
@@ -128,7 +141,7 @@ export default function StrategyAnalytics({runId,step,mode,assetName}:{
       </div>
       <div className="an-actions">
         {loading&&<span className="an-loading"><RefreshCcw size={14}/>{t("Updating")}</span>}
-        {report&&<button onClick={()=>csv(report)}><Download size={15}/>{t("Export CSV")}</button>}
+        {report&&<><button onClick={()=>csv(report)}><Download size={15}/>{t("Export CSV")}</button><button onClick={()=>tradesCsv(report)}><Download size={15}/>{t("Export trades")}</button></>}
       </div>
     </div>
     {error&&<div className="arc-error" role="alert">{t(error)}</div>}
@@ -199,6 +212,21 @@ export default function StrategyAnalytics({runId,step,mode,assetName}:{
           </table></div>
         </section>
       </div>
+      <section className="an-executions">
+        <header><Activity size={16}/><strong>{t("Execution audit")}</strong><span>{report.executions.length} {t("fills")}</span></header>
+        <div className="arc-table-scroll"><table>
+          <thead><tr><th>{t("DATE")}</th><th>{t("SYMBOL")}</th><th>{t("SIDE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("Notional USD")}</th><th>{t("FEE")}</th><th>{t("Cash change")}</th><th>{t("ENGINE")}</th></tr></thead>
+          <tbody>{report.executions.length===0
+            ? <tr><td colSpan={9}>{t("No fills yet. Place a trade, then advance the timeline.")}</td></tr>
+            : report.executions.slice().reverse().map((fill,i)=><tr key={fill.day+"-"+fill.asset_id+"-"+i}>
+              <td>{fill.day}</td><td>{assetName(fill.asset_id)}</td>
+              <td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td>
+              <td>{shortNum(fill.quantity)}</td><td>{formatMoney(fill.price)}</td>
+              <td>{formatMoney(fill.notional)}</td><td>{formatMoney(fill.fee)}</td>
+              <td>{formatMoney(fill.cash_change)}</td><td>{t(fill.source)}</td>
+            </tr>)}</tbody>
+        </table></div>
+      </section>
       <p className="an-method"><strong>{t("Methodology")}:</strong> {t(report.methodology)}</p>
     </>}
   </section>;
