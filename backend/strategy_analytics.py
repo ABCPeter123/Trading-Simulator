@@ -58,6 +58,7 @@ def build_report(days, daily, asset_ids, start_index, end_index, fills):
     losing_exits = 0
     trade_count = 0
     series = []
+    executions = []
     benchmark_start = float(INITIAL_CASH)
     asset_baselines = {asset_id: 0.0 for asset_id in asset_ids}
 
@@ -96,6 +97,12 @@ def build_report(days, daily, asset_ids, start_index, end_index, fills):
             cumulative_fees += fee
             gross_notional += notional
             trade_count += 1
+            executions.append({
+                "day": day, "time": int(fill["time"]), "asset_id": asset_id,
+                "side": fill["side"], "quantity": qty, "price": price,
+                "fee": fee, "notional": notional, "source": fill.get("source", "unknown"),
+                "cash_change": -notional-fee if fill["side"] == "buy" else notional-fee,
+            })
 
         exposure = sum(quantities[a] * last_marks[a] for a in asset_ids)
         equity = cash + exposure
@@ -180,6 +187,7 @@ def build_report(days, daily, asset_ids, start_index, end_index, fills):
         },
         "rolling": intervals,
         "allocations": allocations,
+        "executions": executions,
         "methodology": (
             "Historical, price-only equal-weight buy-and-hold benchmark; each "
             "asset receives an equal starting notional and is marked at last "
