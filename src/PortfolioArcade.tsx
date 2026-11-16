@@ -345,7 +345,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             <span className="an-interval-warning">{t("Signals and fills use replay resolution, not the aggregated chart view.")}</span>
           </div>
           <div className="arc-chart-wrap">{bars.length>0&&
-            <PriceChart asset={chosenAsset} range="1Y" style={chartStyle} bars={displayedBars} visibleWindow={110}
+            <PriceChart asset={chosenAsset} range="1Y" style={chartStyle} bars={displayedBars}
               smaPeriods={showSma?[maFast,maSlow]:[]} showCrossovers={showSma&&showCrossovers}
               trades={showTrades?mapChartTrades(markers,activeChartView):[]}/>}</div>
           <div className="an-chart-key">
