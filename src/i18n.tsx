@@ -360,6 +360,74 @@ const zh: Record<string, string> = {
   "Not available": "不可用",
   "Stop / Take": "止损 / 止盈",
   "Please choose supported symbols.": "请选择受支持的证券。",
+  "Unpriced": "暂无估值",
+  "Submitting...": "提交中...",
+  "Queue replay": "排队回放订单",
+  "Paper": "模拟",
+  "score": "分",
+  "instruments indexed": "个证券已收录",
+  "matches": "个匹配项",
+  "(ignored when date is set)": "（设置日期后忽略）",
+  "last candle": "上一根K线",
+  "candles revealed": "根K线已揭示",
+  "complete": "完成",
+  "RECENT FILLS": "近期成交",
+  "BOT · ": "机器人 · ",
+  "to next level": "可升至下一级",
+  "order": "订单",
+  "Active: stop": "已启用：止损",
+  "off": "关闭",
+  "target": "止盈",
+  "Last actual bar:": "最新实际K线：",
+  "Market closed on": "休市日期：",
+  "no orders filled for this symbol": "此品种当日无成交",
+  "None": "无",
+  "recent fills": "笔近期成交",
+  "Trade": "交易",
+  "Held:": "持仓：",
+  "Cash:": "现金：",
+  "(bot)": "（机器人）",
+  "Find a market ·": "查找市场 ·",
+  "Choose your market ·": "选择市场 ·",
+  "DISCOVERED ·": "已发现 ·",
+  "Running...": "运行中...",
+  "Run backtest": "运行回测",
+  "Configure": "配置",
+  "NEXT-BAR EXECUTION": "下一根K线成交",
+  "PAPER EXECUTION": "模拟成交",
+  "Next-bar open (replay)": "下一根开盘（回放）",
+  "Market (modeled)": "市价单（模拟）",
+  "(whole units)": "（整数单位）",
+  "(base units)": "（基础单位）",
+  "Est. fill at current close": "按当前收盘价估算成交",
+  "Estimated fill price": "预计成交价格",
+  "Model spread": "模拟点差",
+  "Modeled spread": "模拟点差",
+  "Illustrative order value": "参考订单金额",
+  "Estimated order value": "预计订单金额",
+  "ONLINE": "在线",
+  "OFFLINE": "离线",
+  "REAL": "真实",
+  "NONE": "无",
+  "Historical replay": "历史回放",
+  "Quote freshness": "报价时效",
+  "Step-by-step, next-open fills": "逐步回放，下次开盘成交",
+  "Fresh enough for paper model": "报价新鲜度符合模拟要求",
+  "Stale or unavailable": "报价过期或不可用",
+  "Choose a real dated contract in a future options-chain release.": "需在后续期权链功能中选择具有到期日的真实合约。",
+  "Chart-only until multiplier, margin, and settlement rules are implemented.": "合约乘数、保证金及结算规则实现前仅支持图表。",
+  "CAD-to-USD conversion is not implemented.": "尚未实现加元兑美元换算。",
+  "No fresh market quote. Orders are blocked.": "没有有效的最新报价，暂时禁止下单。",
+  "Importing...": "正在导入...",
+  "Back to single-asset Arcade": "返回单资产竞技场",
+  "Season started. Future candles are hidden.": "赛季已开始。未来K线已隐藏。",
+  "Multi-asset season started. No future candles are visible.": "组合赛季已开始。未来行情已隐藏。",
+  "Season complete. Your final score is locked.": "赛季已完成，最终得分已确定。",
+  "Portfolio season complete.": "组合赛季已完成。",
+  "End of historical data: unfilled orders expired.": "历史行情已结束，未成交订单已过期。",
+  "Order cancelled.": "订单已取消。",
+  "Pending order cancelled.": "已取消待成交订单。",
+  "Risk controls updated. Protections apply from the next candle.": "风险控制已更新，将从下一根K线生效。",
 };
 
 const LocaleContext = createContext<{
@@ -370,7 +438,18 @@ const LocaleContext = createContext<{
 
 export function translate(english: string, locale: Locale): string {
   if (locale === "en") return english;
-  return zh[english] ?? english;
+  const exact = zh[english];
+  if (exact) return exact;
+  // Event messages include symbols and prices. Translate known formats only.
+  const filled = /^(PROTECTIVE EXIT: )?FILLED: (BUY|SELL) ([\d.]+) at ([\d.]+); fee ([\d.]+) USD$/.exec(english);
+  if (filled) return (filled[1] ? "保护性平仓：" : "") + (filled[2] === "BUY" ? "买入 " : "卖出 ") + filled[3] + "，成交价 " + filled[4] + "，手续费 " + filled[5] + " 美元";
+  const queued = /^(BUY|SELL) order queued; only future candles can fill it\.$/.exec(english);
+  if (queued) return (queued[1] === "BUY" ? "买入" : "卖出") + "订单已排队，只有后续K线才能成交。";
+  const bot = /^BOT: ([a-z0-9_.-]+) signal queued (BUY|SELL) for ([a-z0-9_.-]+)\.$/.exec(english);
+  if (bot) return "机器人：" + bot[1].toUpperCase() + " 信号已排队，在 " + bot[3].toUpperCase() + " 上" + (bot[2] === "BUY" ? "买入" : "卖出") + "。";
+  const armed = /^Cross-asset bot armed with (\d+) rules\.$/.exec(english);
+  if (armed) return "跨资产机器人已启用，含 " + armed[1] + " 条规则。";
+  return english;
 }
 
 function initialLocale(): Locale {
