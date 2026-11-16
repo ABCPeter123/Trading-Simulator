@@ -1,0 +1,41 @@
+.an-dashboard{background:#101b28;border:1px solid #344356;border-radius:13px;overflow:hidden;padding:0 0 15px;min-width:0}
+.an-heading{padding:20px;display:flex;justify-content:space-between;align-items:center;gap:13px;flex-wrap:wrap;border-bottom:1px solid #2a3b4d;background:linear-gradient(110deg,#19243c,#111e2b)}
+.an-heading h2{display:flex;align-items:center;gap:9px;font-size:19px;letter-spacing:-.03em;margin:8px 0}
+.an-heading h2 svg{color:#b49aff}
+.an-heading p{font-size:11px;color:#90a6ba;line-height:1.6}
+.an-actions{display:flex;align-items:center;gap:10px}
+.an-actions button{display:flex;align-items:center;gap:7px;padding:10px 12px;background:#2e304f;color:#ddceff;border:1px solid #65608b;border-radius:7px;font-size:11px;font-weight:800}
+.an-loading{display:flex;align-items:center;gap:6px;font-size:10px;color:#9cb0c5}
+.an-period-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:15px 18px}
+.an-period-row>span:first-child{font-size:10px;color:#96a6b5;font-weight:800;margin-right:5px}
+.an-period-row button{border:1px solid #34495e;color:#a8bbce;background:#1b2b3c;padding:8px 10px;border-radius:6px;font-size:10px;font-weight:750}
+.an-period-row button.active{color:#eee9ff;background:#3e3761;border-color:#9983dd}
+.an-range{margin-left:auto;font-size:10px;color:#7e92a5}
+.an-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 18px 15px}
+.an-metric{display:flex;flex-direction:column;gap:7px;padding:13px 12px;background:#162534;border:1px solid #2b4356;border-radius:9px;min-width:0}
+.an-metric small{color:#8ea4b6;letter-spacing:.025em;font-size:10px;font-weight:750}
+.an-metric strong{font-size:clamp(15px,1.5vw,20px);white-space:nowrap;letter-spacing:-.035em}
+.an-metric span{font-size:9px;color:#72879c;line-height:1.4}
+.an-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding:0 18px 14px}
+.an-plot{min-width:0;border:1px solid #2c3c4e;border-radius:10px;background:#111c29;overflow:hidden}
+.an-plot:first-child{grid-column:span 2}
+.an-plot>header,.an-detail-grid>section>header{display:flex;align-items:center;gap:8px;padding:13px;border-bottom:1px solid #263749;font-size:12px;font-weight:750}
+.an-plot>header svg,.an-detail-grid header svg{color:#afa1f4}
+.an-legend{display:flex;gap:13px;align-items:center;flex-wrap:wrap;padding:8px 13px;color:#97a9bf;font-size:10px;font-weight:800}
+.an-chart-canvas{height:260px;width:100%;min-width:0}
+.an-plot:first-child .an-chart-canvas{height:280px}
+.an-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;padding:0 18px}
+.an-detail-grid>section{background:#111e2b;border:1px solid #2d4255;border-radius:9px;min-width:0;overflow:hidden}
+.an-detail-grid table{border-collapse:collapse;min-width:440px;width:100%;text-align:left;font-size:11px}
+.an-detail-grid th{font-size:9px;letter-spacing:.04em;color:#7f98aa;padding:11px 12px;background:#172737}
+.an-detail-grid td{color:#c7d5e4;border-top:1px solid #263849;padding:12px}
+.an-method{color:#7f96a9;font-size:10px;line-height:1.6;padding:13px 18px 2px}
+.an-method strong{color:#9eb3c6}
+.an-chart-controls{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;padding:10px 16px;background:#192636;border-bottom:1px solid #2a3c50}
+.an-chart-controls label{display:flex;align-items:center;gap:5px;color:#acbed2;font-size:10px;white-space:nowrap}
+.an-chart-controls select{padding:6px 8px;font-size:10px;max-width:80px;min-height:30px}
+.an-chart-controls input{margin-right:5px;accent-color:#bda3ff}
+.an-chart-key{display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:#93aabc;padding:8px 15px;border-top:1px solid #28394b}
+.an-chart-key b{font-weight:700}
+@media(max-width:850px){.an-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.an-detail-grid{grid-template-columns:1fr}.an-charts{grid-template-columns:1fr}.an-plot:first-child{grid-column:span 1}.an-range{margin-left:0}}
+@media(max-width:500px){.an-heading{padding:15px}.an-period-row,.an-method{padding-left:12px;padding-right:12px}.an-metrics,.an-charts,.an-detail-grid{padding-left:10px;padding-right:10px}.an-metric{padding:11px 9px}.an-metric strong{font-size:15px}.an-chart-canvas{height:220px}.an-plot:first-child .an-chart-canvas{height:240px}}
