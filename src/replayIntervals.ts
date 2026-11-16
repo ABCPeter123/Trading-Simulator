@@ -49,8 +49,9 @@ export function showReplayTime(value:string|number,resolution:ReplayResolution) 
   const instant=typeof value==="number"?new Date(value*1000):
     value.length===10?new Date(value+"T00:00:00Z"):new Date(value);
   if(Number.isNaN(instant.valueOf()))return String(value);
+  const locale=typeof document!=="undefined"&&document.documentElement.lang==="zh-CN"?"zh-CN":"en-CA";
   return resolution==="1d"
-    ? instant.toLocaleDateString("en-CA",{year:"numeric",month:"short",day:"numeric",timeZone:"UTC"})
-    : instant.toLocaleString("en-CA",{year:"numeric",month:"short",day:"numeric",
+    ? instant.toLocaleDateString(locale,{year:"numeric",month:"short",day:"numeric",timeZone:"UTC"})
+    : instant.toLocaleString(locale,{year:"numeric",month:"short",day:"numeric",
         hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"America/Toronto"})+" ET";
 }
