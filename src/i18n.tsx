@@ -662,6 +662,14 @@ const zh: Record<string, string> = {
   "Create portfolio session": "创建投资组合会话",
   "Cross-asset Strategy Editor": "跨资产策略编辑器",
   "Not enough revealed candles for this lookback.": "当前已揭示K线不足，无法计算所选回看区间。",
+  "AI research uses the latest session. Return to latest to ask questions.": "AI研究基于最新会话。请返回最新时间点后提问。",
+  "Deterministic replay": "可复现的历史回放",
+  "Historical trading research · Local simulation": "历史交易研究 · 本地模拟",
+  "Run": "运行",
+  "Multi-asset Historical Simulator": "多资产历史模拟器",
+  "Forecast horizon": "预测跨度",
+  "SMA/RSI periods must be 2-100; PROB_UP horizon 1-60; order percent 0-100.": "SMA和RSI周期必须为2至100，PROB_UP模拟跨度为1至60，交易比例为0至100。",
+  "PROB_UP(1-60)": "PROB_UP(1-60)",
 };
 
 const LocaleContext = createContext<{
