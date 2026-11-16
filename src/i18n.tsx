@@ -750,6 +750,15 @@ const zh: Record<string, string> = {
   "units. Advance replay to fill.": "单位。推进历史回放以模拟成交。",
   "Return to current session": "返回当前会话",
   "MAX source coverage varies by symbol. Existing runs remain unchanged; create a new session for longer history.": "最大历史覆盖期因交易品种而异。已有会话不会改变，如需更长历史请新建会话。",
+  "AI suggestion did not pass the strategy validator. No rules were applied.": "AI 提议未通过策略语法验证，未应用任何规则。",
+  "AI output is not an answer object.": "AI 输出格式不正确。",
+  "AI provider returned no answer.": "AI 模型没有返回回答。",
+  "Local AI inference timed out": "本地AI推理超时",
+  "AI provider timed out. Please retry.": "AI 提供方超时，请重试。",
+  "Unsupported replay resolution/window": "不支持的回放周期或区间",
+  "Historical replay started. Unrevealed candles remain hidden.": "历史回放已开始，未来行情保持隐藏。",
+  "Multi-asset historical replay started. Future candles remain hidden.": "多资产历史回放已开始，未来行情保持隐藏。",
+  "Invalid season starting point.": "模拟开始位置无效。",
 };
 
 const LocaleContext = createContext<{
@@ -794,6 +803,10 @@ export function translate(english: string, locale: Locale): string {
   if (replayQueued) return "历史回放" + (replayQueued[1]==="buy"?"买入":"卖出") + "订单已排队；推进一根K线以模拟下一开盘价成交。";
   const paperFilled = /^Paper (buy|sell) filled: ([\d.]+) ([A-Za-z0-9._-]+) at ([\d.]+)\. Fee: (.+)$/.exec(english);
   if (paperFilled) return "模拟" + (paperFilled[1]==="buy"?"买入":"卖出") + "已成交：" + paperFilled[2] + " " + paperFilled[3] + "，成交价 " + paperFilled[4] + "，手续费 " + paperFilled[5];
+  const timeout = /^Local AI inference timed out after (\d+) seconds\.(.*)$/.exec(english);
+  if (timeout) return "本地AI推理在 " + timeout[1] + " 秒后超时。可尝试较小的模型或释放电脑内存，不需要付费API。";
+  const backendError = /^AI provider HTTP (\d+)$/.exec(english);
+  if (backendError) return "AI 服务返回 HTTP " + backendError[1] + " 错误。";
   return english;
 }
 
