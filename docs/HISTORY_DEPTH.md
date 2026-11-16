@@ -52,3 +52,32 @@ The selected candles are frozen in the local SQLite simulation snapshot.
 Changing a session's resolution does not silently rewrite saved orders,
 existing historical decisions or downloaded source prices. The archive
 and replay execution controls operate using observed data only.
+
+## Full-data chart rendering
+
+Chart timeframes are now **viewports** over the complete observed dataset,
+not requests to discard candles from the graph. All loaded, revealed OHLCV
+bars, SMA values, execution markers, and analytics observations remain in
+their respective chart series. The chart library draws the visible portion,
+which lets you inspect a few candles on a phone or many years on a desktop
+without permanently trimming the underlying series.
+
+The historical replay and market price charts provide **Fit all data**
+and **Latest candles** controls. They initially fit the full known history,
+then support scrolling and zooming without deleting candles. When the
+chart is still showing the full range, new replay candles expand that range.
+If you have panned into a specific historical period, the chart preserves
+your manual position.
+
+Analytics range buttons (last 5/20/60/126/252 steps or custom dates) focus
+the horizontal chart window. They never remove earlier equity, benchmark,
+drawdown, or capital points. Click **All** to return to the complete
+revealed history. Trade markers also no longer stop after 250 executions.
+
+The stochastic fan chart now draws every available simulated path, with
+transparent strokes and percentile curves on top. These paths are model
+scenarios and never count as historical market observations.
+
+The simulator still withholds genuinely unrevealed future replay candles,
+and it cannot show historical prices the upstream provider did not supply.
+These restrictions are separate from chart viewport rendering.
