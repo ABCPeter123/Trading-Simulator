@@ -14,7 +14,7 @@ translations = {key for key, _ in entries}
 assert len(entries) == len(translations), "Duplicate keys in localization catalog"
 assert len(translations) >= 300, "Unexpectedly incomplete Simplified Chinese catalog"
 missing: dict[str, list[str]] = {}
-for relative in ["App.tsx", "TradingArcade.tsx", "PortfolioArcade.tsx", "VisualStrategyBuilder.tsx", "StrategyAnalytics.tsx", "AIAssistant.tsx"]:
+for relative in ["App.tsx", "TradingArcade.tsx", "PortfolioArcade.tsx", "VisualStrategyBuilder.tsx", "StrategyAnalytics.tsx", "AIAssistant.tsx", "WorkspaceTabs.tsx", "StochasticResearch.tsx"]:
     file = ROOT / "src" / relative
     content = file.read_text(encoding="utf-8")
     assert 'useI18n' in content, f"Missing locale hook in {relative}"
