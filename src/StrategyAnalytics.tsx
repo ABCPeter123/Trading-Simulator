@@ -67,11 +67,32 @@ function LinePlot({data,format="money",area=false,viewport,focusKey}:{
       return s;
     });
     let previousKey="";
+    let previousLines:PlotLine[]=[];
     updateRef.current=(lines,windowRange,selectedKey)=>{
       const scale=chart.timeScale();
-      const wasAll=isEntireRangeVisible(scale.getVisibleLogicalRange(),lastCount);
-      lines.forEach((line,i)=>plots[i].setData(line.points));
+      const priorRange=scale.getVisibleLogicalRange();
+      const wasAll=isEntireRangeVisible(priorRange,lastCount);
+      const wasNearRight=priorRange!==null&&priorRange.to>=lastCount-1.5;
       const count=lines[0]?.points.length??0;
+      const append=lastCount>0&&count===lastCount+1&&
+        lines.every((line,i)=>{
+          const old=previousLines[i]?.points;
+          const tail=line.points[count-2];
+          return old&&old.length===lastCount&&tail&&
+            old[lastCount-1].time===tail.time&&old[lastCount-1].value===tail.value;
+        });
+      const unchanged=count===lastCount&&lines.every((line,i)=>{
+        const old=previousLines[i]?.points;
+        const last=line.points.at(-1),past=old?.at(-1);
+        return old&&old.length===count&&
+          (!count||(last?.time===past?.time&&last?.value===past?.value));
+      });
+      if(append){
+        lines.forEach((line,i)=>plots[i].update(line.points[count-1]));
+      }else if(!unchanged){
+        lines.forEach((line,i)=>plots[i].setData(line.points));
+      }
+      previousLines=lines;
       element.dataset.loadedPoints=String(count);
       scale.applyOptions({minBarSpacing:minBarSpacingFor(element.clientWidth,count)});
       // Period selection only changes the VIEWPORT. All historic observations
@@ -81,6 +102,9 @@ function LinePlot({data,format="money",area=false,viewport,focusKey}:{
         else scale.fitContent();
       }else if(count>lastCount&&wasAll){
         scale.fitContent();
+      }else if(count>lastCount&&windowRange&&wasNearRight){
+        // Follow the selected rolling range only while already at its right edge.
+        scale.setVisibleLogicalRange(windowRange);
       }
       previousKey=selectedKey;
       lastCount=count;
