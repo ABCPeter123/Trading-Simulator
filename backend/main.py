@@ -30,8 +30,11 @@ def health():
     return {"status": "ok", "mode": "local", "version": "0.6.0"}
 
 @app.get("/api/market/{asset_id}")
-def market_history(asset_id: str, range: str = Query("1M")):
-    return history(asset_id, range)
+def market_history(asset_id: str, range: str = Query("1M"), resolution: str | None = Query(None)):
+    if resolution is None:
+        return history(asset_id, range)  # existing consumers keep their original range behavior
+    from .intraday import replay_history
+    return replay_history(asset_id, range, resolution)
 
 @app.get("/api/quotes/{asset_id}")
 def market_quote(asset_id: str):
