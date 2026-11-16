@@ -11,9 +11,10 @@ import { getAccount, getBacktest, getHistory, getQuote, resetAccount, sendOrder,
 import type { AccountResponse, BacktestResponse, HistoryResponse, QuoteResponse } from "./api";
 import { advanceReplay, NEW_REPLAY, replayFillPrice, replayStartIndex } from "./replay";
 import type { ReplayAccount } from "./replay";
-import type { Asset, AssetClass, ChartStyle, TimeRange, TradeSide } from "./types";
+import type { Asset, AssetClass, ChartStyle, TradeSide } from "./types";
+import { REPLAY_WINDOWS, RESOLUTIONS } from "./replayIntervals";
+import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 
-const RANGES: TimeRange[] = ["1D", "1W", "1M", "3M", "1Y"];
 const formatQuantity = (n: number) => n.toLocaleString("en-US", {maximumFractionDigits: 8});
 const dt = (timestamp: number | string) =>
   new Date(typeof timestamp === "number" ? timestamp * 1000 : timestamp).toLocaleString();
@@ -24,7 +25,8 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
   const [assetClass, setAssetClass] = useState<AssetClass>("Stocks");
   const [selectedId, setSelectedId] = useState("aapl");
   const [search, setSearch] = useState("");
-  const [range, setRange] = useState<TimeRange>("1M");
+  const [resolution, setResolution] = useState<ReplayResolution>("1d");
+  const [range, setRange] = useState<ReplayWindow>("1Y");
   const [chartStyle, setChartStyle] = useState<ChartStyle>("candles");
   const [mode, setMode] = useState<"market" | "replay">("market");
   const [side, setSide] = useState<TradeSide>("buy");
@@ -84,10 +86,10 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
     if (mode !== "market") return;
     let cancelled = false;
     const timer = setInterval(() => {
-      void getHistory(selectedId, range).then(next => { if (!cancelled) setHistory(next); }).catch(() => {});
+      void getHistory(selectedId, range, resolution).then(next => { if (!cancelled) setHistory(next); }).catch(() => {});
     }, 120_000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [mode, selectedId, range]);
+  }, [mode, selectedId, range, resolution]);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +100,7 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
     setBacktest(null);
     setReplayAccount({...NEW_REPLAY});
     const load = async () => {
-      const [h, q] = await Promise.allSettled([getHistory(selectedId, range), getQuote(selectedId)]);
+      const [h, q] = await Promise.allSettled([getHistory(selectedId, range, resolution), getQuote(selectedId)]);
       if (cancelled) return;
       if (h.status === "fulfilled") {
         setHistory(h.value);
@@ -125,7 +127,7 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
       }
     }, 45_000);
     return () => { cancelled = true; clearInterval(poll); };
-  }, [selectedId, range]);
+  }, [selectedId, range, resolution]);
 
   function selectAsset(asset: Asset) {
     setSelectedId(asset.id);
@@ -301,7 +303,13 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
             <div className="chart-toolbar">
               <div className="chart-toolbar-label"><CandlestickChart size={17}/><strong>{t("Price chart")}</strong><span className="demo-pill">{t(history ? "HISTORICAL OHLCV" : "NO DATA")}</span></div>
               <div className="chart-actions">
-                <div className="timeframe-control" aria-label={t("Timeframe")}>{RANGES.map(period =>
+                <label className="terminal-interval-picker">{t("Candle interval")}
+                  <select value={resolution} onChange={e=>{
+                    const next=e.target.value as ReplayResolution;
+                    setResolution(next);setRange(REPLAY_WINDOWS[next][0]);
+                  }}>{RESOLUTIONS.map(i=><option key={i} value={i}>{i}</option>)}</select>
+                </label>
+                <div className="timeframe-control" aria-label={t("Timeframe")}>{REPLAY_WINDOWS[resolution].map(period =>
                   <button type="button" key={period} className={range===period ? "control-active" : ""} aria-pressed={range===period} onClick={() => setRange(period)}>{period}</button>)}
                 </div><div className="toolbar-separator"/>
                 <div className="style-control"><button type="button" className={chartStyle==="candles"?"control-active":""} title={t("Candlesticks")} aria-label={t("Candlestick view")} onClick={()=>setChartStyle("candles")}><CandlestickChart size={17}/></button>
@@ -316,7 +324,7 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
               <span>{history ? `${history.source} · latest bar ${dt(history.bars.at(-1)!.time)}` : t("Connect local API for market history")}</span>
             </div>
             <div className="chart-body">
-              {visibleBars.length ? <PriceChart asset={selectedAsset} range={range} style={chartStyle} bars={visibleBars}/> :
+              {visibleBars.length ? <PriceChart asset={selectedAsset} range="1Y" style={chartStyle} bars={visibleBars}/> :
                 <div className="chart-placeholder">{loadingMarket ? <RefreshCw size={26} className="spin"/> : <Database size={26}/>}
                   <strong>{t(loadingMarket ? "Fetching market history" : "Chart not available")}</strong>
                   <span>{t(marketError || "Start the Python API and select an available instrument.")}</span>
