@@ -1,8 +1,9 @@
+import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 import type { AssetClass, TimeRange, TradeSide } from "./types";
 
 export interface MarketBar { time: number; open: number; high: number; low: number; close: number; volume: number }
 export interface HistoryResponse {
-  asset_id: string; range: TimeRange; source: string; currency: string;
+  asset_id: string; range: string; source: string; currency: string;
   bars: MarketBar[]; as_of: string; is_demo: boolean; delayed_or_indicative: boolean;
 }
 export interface QuoteResponse {
@@ -47,8 +48,8 @@ export async function request<T>(route: string, options?: RequestInit): Promise<
   }
   return payload as T;
 }
-export function getHistory(assetId: string, range: TimeRange) {
-  return request<HistoryResponse>(`/market/${assetId}?range=${range}`);
+export function getHistory(assetId: string, range: TimeRange | ReplayWindow, resolution?: ReplayResolution) {
+  return request<HistoryResponse>(`/market/${assetId}?range=${range}${resolution ? `&resolution=${resolution}` : ""}`);
 }
 export function getQuote(assetId: string) {
   return request<QuoteResponse>(`/quotes/${assetId}`);
