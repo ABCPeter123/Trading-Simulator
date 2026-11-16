@@ -6,8 +6,8 @@
 import { chromium } from "playwright";
 
 const base = "http://127.0.0.1:5173";
-const first = Date.UTC(2024, 0, 1) / 1000;
-const bars = Array.from({ length: 70 }, (_, i) => {
+const first = Date.UTC(2020, 0, 1) / 1000;
+const bars = Array.from({ length: 900 }, (_, i) => {
   const close = 100 + i * 0.3 + Math.sin(i / 4) * 2;
   return { time: first + i * 86400, open: close - 0.6, high: close + 1.4,
     low: close - 1.5, close, volume: 400000 + i * 600 };
@@ -21,9 +21,9 @@ const instruments = ["aapl", "spy", "qqq"].map(id => ({
 const single = {
   id: "parity-single", asset_id: "aapl", source: "test", period: "1Y",
   resolution: "1d", risk: {stop_loss_pct: 0, take_profit_pct: 0},
-  current_bar: 69, history_start: 0, live_index: 69, view_index: 69,
-  viewing_past: false, checkpoint_count: 70, total_bars: 100,
-  finished: false, progress_pct: 69, bars, orders: [], fills: [], events: [],
+  current_bar: 899, history_start: 0, live_index: 899, view_index: 899,
+  viewing_past: false, checkpoint_count: 900, total_bars: 1000,
+  finished: false, progress_pct: 89.9, bars, orders: [], fills: [], events: [],
   strategy: "", equity_curve: bars.map(b => ({time: b.time, value: 100000})),
   metrics: {
     cash: 100000, quantity: 0, average_cost: 0, equity: 100000,
@@ -37,9 +37,9 @@ const single = {
 const portfolio = {
   id: "parity-portfolio", asset_ids: ["spy", "qqq"], period: "1Y",
   resolution: "1d", sources: {spy: "test", qqq: "test"}, day,
-  current_step: 69, history_start: 0, live_index: 69, view_index: 69,
-  viewing_past: false, checkpoint_count: 70, total_steps: 100,
-  progress_pct: 69, finished: false, bars: {spy: bars, qqq: bars},
+  current_step: 899, history_start: 0, live_index: 899, view_index: 899,
+  viewing_past: false, checkpoint_count: 900, total_steps: 1000,
+  progress_pct: 89.9, finished: false, bars: {spy: bars, qqq: bars},
   metrics: {
     cash: 100000, exposure: 0, equity: 100000, return_pct: 0,
     equal_weight_hold_pct: 0, max_drawdown_pct: 0,
@@ -140,6 +140,32 @@ async function chartVisible(page, selector, where) {
   }
 }
 
+async function verifyFullGraph(page, selector, count, description) {
+  const plotted=page.locator(selector);
+  await page.waitForFunction(({selector,count})=>{
+    const element=document.querySelector(selector);
+    if(!element)return false;
+    const from=Number(element.dataset.visibleFrom),to=Number(element.dataset.visibleTo);
+    return Number(element.dataset.loadedBars??element.dataset.loadedPoints)===count &&
+      Number.isFinite(from)&&Number.isFinite(to)&&from<=0.5&&to>=count-1.5;
+  },{selector,count},{timeout:12000}).catch(error=>{
+    throw new Error(description+" did not fit every loaded candle at first render: "+error.message);
+  });
+  if(selector.includes(".chart-canvas")){
+    const surface=plotted.locator("xpath=..");
+    await surface.getByRole("button",{name:"Latest candles"}).click();
+    const now=await plotted.getAttribute("data-loaded-bars");
+    if(Number(now)!==count)throw new Error(description+" cut data when zooming to latest");
+    await surface.getByRole("button",{name:"Fit all data"}).click();
+    await page.waitForFunction(({selector,count})=>{
+      const element=document.querySelector(selector);
+      if(!element)return false;
+      return Number(element.dataset.visibleFrom)<=0.5 &&
+        Number(element.dataset.visibleTo)>=count-1.5;
+    },{selector,count},{timeout:12000});
+  }
+}
+
 async function verifyMode(page, mode, viewport) {
   const selector = mode === "single" ? ".arc-layout" : ".port-layout";
   await visible(page, selector + '[data-tab="overview"]', viewport + " " + mode);
@@ -158,10 +184,14 @@ async function verifyMode(page, mode, viewport) {
     if (name === "Historical Replay") {
       await chartVisible(page, selector+" .arc-chart-wrap .chart-canvas",
         viewport+" "+mode+" historical price graph");
+      await verifyFullGraph(page,selector+" .arc-chart-wrap .chart-canvas",
+        bars.length,viewport+" "+mode+" price history");
     }
     if (name === "Performance Analytics") {
       await chartVisible(page, selector+" .an-chart-canvas",
         viewport+" "+mode+" equity and benchmark graph");
+      await verifyFullGraph(page,selector+" .an-chart-canvas",
+        curve.length,viewport+" "+mode+" analytics history");
     }
     const active = await page.locator(selector).getAttribute("data-tab");
     const expected = ({
@@ -187,6 +217,8 @@ async function verifyMode(page, mode, viewport) {
         if (label === "Market & Charts") {
           await chartVisible(page, ".market-desk .chart-card .chart-canvas",
             viewport + " market price graph");
+          await verifyFullGraph(page,".market-desk .chart-card .chart-canvas",
+            bars.length,viewport+" market price history");
         }
         if (label === "Account & Orders") {
           const symbolSelect = page.locator(".terminal-order-asset-picker select");
