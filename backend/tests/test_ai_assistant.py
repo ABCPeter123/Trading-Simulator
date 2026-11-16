@@ -205,3 +205,35 @@ def test_ollama_is_localhost_and_plain_text_cannot_propose_code(monkeypatch):
     assert captured["url"]=="http://127.0.0.1:11434/api/chat"
     assert captured["options"]["trust_env"] is False
     assert captured["payload"]["stream"] is False
+
+
+def test_ollama_connection_status_checks_installed_model(monkeypatch):
+    class Response:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"models":[{"name":"other:latest"},{"name":"test-small:latest"}]}
+    class Client:
+        def __init__(self,**kwargs):assert kwargs["trust_env"] is False
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def get(self,url):
+            assert url=="http://127.0.0.1:11434/api/tags"
+            return Response()
+    monkeypatch.setattr(ai.httpx,"Client",Client)
+    assert ai.provider_status()["ready"] is True
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL","missing-model")
+    result=ai.provider_status()
+    assert result["ready"] is False
+    assert "ollama pull" in result["description"]
+
+
+def test_openai_status_requires_server_side_key(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER","openai")
+    monkeypatch.delenv("OPENAI_API_KEY",raising=False)
+    info=ai.provider_status()
+    assert info["ready"] is False
+    assert info["configured"] is False
+    monkeypatch.setenv("OPENAI_API_KEY","SECRET_TEST_KEY")
+    info=ai.provider_status()
+    assert info["ready"] is True
+    assert "SECRET_TEST_KEY" not in json.dumps(info)
