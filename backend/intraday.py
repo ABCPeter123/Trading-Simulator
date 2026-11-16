@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from math import isfinite
+from time import monotonic, sleep
 from fastapi import HTTPException
 import httpx
 import logging
@@ -78,18 +79,31 @@ def fetch_coinbase(asset, start, end, resolution):
     step = SECONDS[resolution]
     rows = {}
     cursor = end
+    earliest_next_request = monotonic()
     # Limit outbound requests: 5000 candles + one partial page. No infinite
     # pagination across years of 1-minute data.
     while cursor > start and len(rows) < MAX_INTRADAY_BARS:
         previous = max(start, cursor - timedelta(seconds=step*290))
         try:
-            response = market._client.get(
-                f"https://api.exchange.coinbase.com/products/{asset.ticker}/candles",
-                params={"granularity": step,
-                        "start": previous.isoformat(), "end": cursor.isoformat()},
-            )
-            response.raise_for_status()
-            candles = response.json()
+            params = {"granularity": step,
+                      "start": previous.isoformat(), "end": cursor.isoformat()}
+            for attempt in range(3):
+                remaining = earliest_next_request - monotonic()
+                if remaining > 0:
+                    sleep(remaining)
+                earliest_next_request = monotonic() + 0.12
+                response = market._client.get(
+                    f"https://api.exchange.coinbase.com/products/{asset.ticker}/candles",
+                    params=params,
+                )
+                # Coinbase anonymous requests can be throttled. Retry a
+                # bounded number of times, never silently forge missing bars.
+                if getattr(response, "status_code", 200) == 429 and attempt < 2:
+                    sleep(0.5 * (attempt+1))
+                    continue
+                response.raise_for_status()
+                candles = response.json()
+                break
         except (httpx.HTTPError, ValueError) as exc:
             raise HTTPException(503, detail=f"Coinbase intraday service unavailable: {type(exc).__name__}") from exc
         if not isinstance(candles, list):
