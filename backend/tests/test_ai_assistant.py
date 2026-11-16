@@ -237,3 +237,47 @@ def test_openai_status_requires_server_side_key(monkeypatch):
     info=ai.provider_status()
     assert info["ready"] is True
     assert "SECRET_TEST_KEY" not in json.dumps(info)
+
+
+def test_local_ollama_has_extended_configurable_timeout_and_keepalive(monkeypatch):
+    observed={}
+    class Response:
+        def raise_for_status(self):pass
+        def json(self):return {"message":{"content":'{"answer":"Local reply.","strategy":null}'}}
+    class Client:
+        def __init__(self,**kwargs):
+            observed["timeout"]=kwargs["timeout"]
+            assert kwargs["trust_env"] is False
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def post(self,url,json):
+            observed["payload"]=json
+            return Response()
+    monkeypatch.setattr(ai.httpx,"Client",Client)
+    monkeypatch.setenv("TRADING_SIM_AI_TIMEOUT_SECONDS","310")
+    assert ai.ollama_timeout_seconds()==310
+    answer=ai.advise("single","run","Analyze my strategy")
+    assert answer["answer"]=="Local reply."
+    assert observed["timeout"].read==310
+    assert observed["payload"]["keep_alive"]=="20m"
+    assert observed["payload"]["options"]["num_predict"]<=700
+
+
+def test_local_ollama_timeout_explains_free_model_alternatives(monkeypatch):
+    class Client:
+        def __init__(self,**kwargs):pass
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def post(self,url,json):
+            raise ai.httpx.ReadTimeout("slow local hardware")
+    monkeypatch.setattr(ai.httpx,"Client",Client)
+    response=client.post("/api/ai/ask",json={
+        "mode":"single","run_id":"existing","question":"Explain performance",
+    })
+    assert response.status_code==503
+    assert "timed out after 240 seconds" in response.json()["detail"]
+    assert "llama3.2:1b" in response.json()["detail"]
+    monkeypatch.setenv("TRADING_SIM_AI_TIMEOUT_SECONDS","700")
+    assert ai.ollama_timeout_seconds()==600
+    monkeypatch.setenv("TRADING_SIM_AI_TIMEOUT_SECONDS","not_a_number")
+    assert ai.ollama_timeout_seconds()==240
