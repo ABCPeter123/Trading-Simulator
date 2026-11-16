@@ -44,3 +44,12 @@
 /* Market chart and top-line figures belong to Overview, not every tab. */
 .arc-layout[data-tab]:not([data-tab="overview"]) .arc-main>.arc-stat-grid,
 .arc-layout[data-tab]:not([data-tab="overview"]) .arc-main>.arc-chart-box{display:none!important}
+
+/* Saved strategy library is available in Strategy & AI only. */
+.arc-layout[data-tab]:not([data-tab="strategy"]) .arc-main>.sl-library,
+.port-layout[data-tab]:not([data-tab="strategy"]) .port-main>.sl-library{display:none!important}
+.port-layout[data-tab="market"]{grid-template-columns:minmax(0,1fr)}
+.port-layout[data-tab="market"] .port-main,.port-layout[data-tab="market"] .port-side{display:none!important}
+.port-layout[data-tab="market"] .market-desk{grid-column:1/-1}
+.arc-layout[data-tab="market"]{grid-template-columns:minmax(0,1fr)}
+.arc-layout[data-tab="market"] .market-desk{grid-column:1/-1}
