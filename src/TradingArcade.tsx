@@ -380,7 +380,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          </section>
 
          <section className="arc-time-panel">
-           <div className="arc-box-head"><div><FastForward size={17}/><strong>{t("Replay timeline")}</strong><span className="arc-tag">{t("NO WAITING")}</span></div>{game.finished&&<span className="arc-complete"><Flag size={14}/> {t("REPLAY COMPLETE")}</span>}</div>
+           <div className="arc-box-head"><div><FastForward size={17}/><strong>{t("Replay timeline")}</strong><span className="arc-tag">{t("Deterministic replay")}</span></div>{game.finished&&<span className="arc-complete"><Flag size={14}/> {t("REPLAY COMPLETE")}</span>}</div>
            <p>{t("Every step advances the historical market, checks your pending orders, and executes active strategy rules. No real-time waiting.")}</p>
            
            <div className="ts-time-actions">
@@ -401,7 +401,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
            <div className="arc-auto">
              <div><strong><Gauge size={16}/> {t("Autoplay")}</strong><span>{t("Automatically reveal history while you watch.")}</span></div>
              <select aria-label={t("Autoplay step speed")} value={speed} onChange={e=>setSpeed(Number(e.target.value))}><option value={1}>{t("1 bar / tick")}</option><option value={5}>{t("5 bars / tick")}</option><option value={10}>{t("10 bars / tick")}</option><option value={25}>{t("25 bars / tick")}</option><option value={50}>{t("50 bars / tick")}</option></select>
-             <button className={playing?"arc-playing":""} disabled={game.finished||viewingPast} onClick={()=>setPlaying(p=>!p)}>{playing?<><Pause size={15}/> {t("Pause")}</>:<><Play size={15}/> {t("Play")}</>}</button>
+             <button className={playing?"arc-playing":""} disabled={game.finished||viewingPast} onClick={()=>setPlaying(p=>!p)}>{playing?<><Pause size={15}/> {t("Pause")}</>:<><Play size={15}/> {t("Run")}</>}</button>
            </div>
          </section>
 
@@ -413,8 +413,9 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
              step={game.current_bar} viewingPast={viewingPast}
              onStrategy={draft=>{setCode(draft);setEditorOpen(true);setCodeError("");setWorkspaceTab("strategy");}}/>}
          </div>
-         <AIAssistant key={game.id} mode="single" runId={game.id}
+         {!viewingPast?<AIAssistant key={game.id} mode="single" runId={game.id}
            onDraft={draft=>{setCode(draft);setEditorOpen(true);setCodeError("");setWorkspaceTab("strategy");}}/>
+           :<p className="ts-past-note">{t("AI research uses the latest session. Return to latest to ask questions.")}</p>}
          <section className="arc-bot-section">
            <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Editor")}</strong><span className="arc-tag">{t("NO CODING EXPERIENCE NEEDED")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{t(editorOpen?"Collapse":"Expand")}</button></div>
            <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Define algorithmic trading rules")}</strong><p>{t("Write rules in plain English. The engine evaluates the conditions at each revealed candle close, then queues trades for the next candle.")}</p></div></div>
@@ -511,6 +512,6 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          {note&&!error&&<div role="status" className="arc-note"><Check size={15}/>{t(note)}<button onClick={()=>setNote("")} aria-label={t("Dismiss note")}>×</button></div>}
        </aside>
      </main>}
-     <footer className="arc-footer"><span>{t("Trading Arcade · local-first historical market simulation")}</span><span>{t("Bar-level approximations, not live exchange executions")}</span></footer>
+     <footer className="arc-footer"><span>{t("Historical trading research · Local simulation")}</span><span>{t("Bar-level approximations, not live exchange executions")}</span></footer>
   </div>;
 }
