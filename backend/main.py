@@ -14,7 +14,7 @@ from .archive import archive_stats
 from .arcade import start_run, get_run, list_runs, submit_order as submit_arcade_order, cancel_order, set_strategy, advance_run, set_risk
 from .arcade_dsl import compile_rules, EXAMPLES
 
-app = FastAPI(title="Trading Simulator Local API", version="0.8.0")
+app = FastAPI(title="Trading Simulator Local API", version="0.9.0")
 
 class NewOrder(BaseModel):
     asset_id: str
@@ -27,7 +27,7 @@ def instruments(search: str = Query("", max_length=80), category: str = Query(""
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "mode": "local", "version": "0.8.0"}
+    return {"status": "ok", "mode": "local", "version": "0.9.0"}
 
 @app.get("/api/market/{asset_id}")
 def market_history(asset_id: str, range: str = Query("1M"), resolution: str | None = Query(None)):
@@ -215,3 +215,26 @@ def portfolio_analytics(run_id: str):
 def arcade_analytics(run_id: str):
     from .arcade import get_analysis
     return get_analysis(run_id)
+
+# AI advisor is read-only. Proposals must pass the same DSL validator and
+# are NEVER saved to a game or submitted as orders by this endpoint.
+from .ai_assistant import advise as ai_advise, configuration as ai_configuration
+
+class AITurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=1000)
+
+class AIQuestion(BaseModel):
+    mode: Literal["single", "portfolio"]
+    run_id: str = Field(min_length=1, max_length=100)
+    question: str = Field(min_length=1, max_length=1200)
+    history: list[AITurn] = Field(default_factory=list, max_length=6)
+
+@app.get("/api/ai/status")
+def ai_status():
+    return ai_configuration()
+
+@app.post("/api/ai/ask")
+def ai_ask(request: AIQuestion):
+    return ai_advise(request.mode, request.run_id, request.question,
+                     [turn.model_dump() for turn in request.history])
