@@ -115,7 +115,18 @@ export function PriceChart({
     });
     volume.priceScale().applyOptions({scaleMargins:{top:.78,bottom:.01}});
 
+    let previousCount = 0;
+    let previousLastTime: number | null = null;
     updateRef.current=(data,fills)=>{
+      const scale = chart.timeScale();
+      const currentRange = scale.getVisibleLogicalRange();
+      // Preserve a user's manual zoom and leftward scroll on new candles.
+      // Only follow live replay when the view was already near its right edge.
+      const atRightEdge = currentRange === null ||
+        currentRange.to >= previousCount - 1.5;
+      const lastTime = data.length ? data[data.length - 1].time : null;
+      const timelineChanged = previousCount !== data.length ||
+        lastTime !== previousLastTime;
       updatePrice(data);
       volume.setData(data.map(bar=>({
         time:bar.time as UTCTimestamp,value:bar.volume,
@@ -155,13 +166,23 @@ export function PriceChart({
       }
       markers.sort((a,b)=>(a.time as number)-(b.time as number));
       updateMarkers(markers);
-      if (visibleWindow && data.length>visibleWindow) {
-        chart.timeScale().setVisibleLogicalRange({
-          from:data.length-visibleWindow,to:data.length+3,
-        });
-      } else {
-        chart.timeScale().fitContent();
+      if (data.length > 0) {
+        if (previousCount === 0) {
+          if (visibleWindow && data.length > visibleWindow) {
+            scale.setVisibleLogicalRange({
+              from: data.length - visibleWindow, to: data.length + 3,
+            });
+          } else {
+            scale.fitContent();
+          }
+        } else if (timelineChanged &&
+                   (atRightEdge || (currentRange !== null &&
+                                    currentRange.from >= data.length))) {
+          scale.scrollToRealTime();
+        }
       }
+      previousCount = data.length;
+      previousLastTime = lastTime;
     };
     return ()=>{updateRef.current=null;resizeRef.current=null;chart.remove();};
   },[asset,range,style,visibleWindow,key,showCrossovers,visible]);
