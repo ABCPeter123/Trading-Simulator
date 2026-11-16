@@ -49,13 +49,13 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
   const [searchingRemote, setSearchingRemote] = useState(false);
   const [importingSymbol, setImportingSymbol] = useState("");
   const [catalogClass, setCatalogClass] = useState("All");
-  const [period, setPeriod] = useState<ReplayWindow>("5Y");
+  const [period, setPeriod] = useState<ReplayWindow>("MAX");
   const [resolution, setResolution] = useState<ReplayResolution>("1d");
   const [chartView,setChartView] = useState<ReplayResolution>("1d");
   const [stopPct, setStopPct] = useState("0");
   const [takePct, setTakePct] = useState("0");
   const [assetId, setAssetId] = useState("aapl");
-  const [startingPoint, setStartingPoint] = useState(0.3);
+  const [startingPoint, setStartingPoint] = useState(0.15);
   const [startDate, setStartDate] = useState("");
   const [newGame, setNewGame] = useState(false);
   const [initializing, setInitializing] = useState(true);
@@ -295,27 +295,27 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
        <p>{t("Start with $100,000 in simulated capital. Analyze real historical candles, test rule-based strategies, and compare performance with a benchmark.")}</p>
        <button type="button" className="arc-outline-button" onClick={()=>setWorkspaceTab("market")}>{t("Open market data and paper account")}</button>
        <div className="arc-start-form">
-         <label htmlFor="arc-market-search">Find a market · {catalog.length} {t("instruments indexed")}</label>
+         <label htmlFor="arc-market-search">{t("Find a market")} · {catalog.length} {t("instruments indexed")}</label>
          <input id="arc-market-search" type="search" value={catalogSearch} placeholder={t("Search symbol or company...")} onChange={e=>{setCatalogSearch(e.target.value);setRemoteResults([]);}}/>
          <button className="arc-discover" type="button" disabled={searchingRemote||catalogSearch.trim().length<2} onClick={()=>void searchMore()}>{t(searchingRemote?"Searching Yahoo Finance...":"Find more instruments across Yahoo Finance")}</button>
          {remoteResults.length>0&&<div className="arc-remote-results">
-           <strong>DISCOVERED · {remoteResults.length} RESULTS</strong>
+           <strong>{t("DISCOVERED")} · {remoteResults.length} {t("RESULTS")}</strong>
            {remoteResults.map(item=><div key={item.symbol}>
              <span><b>{item.symbol}</b><small>{item.name} · {t(item.asset_class)} · {item.currency}</small></span>
              <button type="button" disabled={!!importingSymbol} onClick={()=>void importTicker(item.symbol)}>{t(importingSymbol===item.symbol?"Importing...":"Add")}</button>
            </div>)}
          </div>}
          <select aria-label={t("Filter asset class")} value={catalogClass} onChange={e=>setCatalogClass(e.target.value)}>
-           {["All","Stocks","ETFs","Crypto","Forex"].map(group=><option key={group}>{group}</option>)}
+           {["All","Stocks","ETFs","Crypto","Forex"].map(group=><option key={group} value={group}>{t(group)}</option>)}
          </select>
-         <label htmlFor="arc-new-asset">Choose your market · {filteredCatalog.length} {t("matches")}</label>
+         <label htmlFor="arc-new-asset">{t("Choose your market")} · {filteredCatalog.length} {t("matches")}</label>
          <select id="arc-new-asset" value={filteredCatalog.some(a=>a.id===assetId)?assetId:(filteredCatalog[0]?.id??"")} onChange={e=>setAssetId(e.target.value)}>
            {filteredCatalog.map(a=><option key={a.id} value={a.id}>{a.symbol} · {a.name}</option>)}
          </select>
          <label htmlFor="arc-resolution">{t("Replay candle interval")}</label>
          <select id="arc-resolution" value={resolution} onChange={e=>{
            const next=e.target.value as ReplayResolution;
-           setResolution(next);setPeriod(REPLAY_WINDOWS[next][0]);setStartDate("");
+           setResolution(next);setPeriod(next==="1d"?"MAX":REPLAY_WINDOWS[next][0]);setStartDate("");
          }}>
            {RESOLUTIONS.map(i=><option key={i} value={i}>{i}</option>)}
          </select>
@@ -329,13 +329,14 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
          <small className="arc-date-hint">{t("Choose a date such as 2008-09-15 or 2020-03-01. Requires source coverage and indicator warmup.")}</small>
          <label htmlFor="arc-start-point">{t("Starting point")} {startDate?t("(ignored when date is set)"):""}</label>
          <select id="arc-start-point" value={startingPoint} onChange={e=>setStartingPoint(Number(e.target.value))}>
+           <option value={0.15}>{t("Longest replay · More history")}</option>
            <option value={0.2}>{t("Long replay · More history")}</option>
            <option value={0.3}>{t("Standard replay")}</option>
            <option value={0.5}>{t("Short replay")}</option>
          </select>
          <button disabled={busy} className="arc-cta" onClick={()=>void createNew()}><Play size={18} fill="currentColor"/>{t(busy?"Loading market data...":"Start trading")}</button>
          {saved.length>0 && <><span className="arc-resume-title">{t("RESUME PREVIOUS SESSION")}</span><select aria-label={t("Resume a saved simulation")} defaultValue="" onChange={e=>{if(e.target.value)void switchRun(e.target.value);}}><option value="">{t("Select a previous run...")}</option>{saved.map(run=><option key={run.id} value={run.id}>{ASSETS.find(a=>a.id===run.asset_id)?.symbol} · {new Date(run.updated_at).toLocaleString()}</option>)}</select></>}
-         {error && <div className="arc-error" role="alert">{error}</div>}
+         {error && <div className="arc-error" role="alert">{t(error)}</div>}
        </div>
        <div className="arc-intro-foot"><ShieldCheck size={15}/> {t("Uses actual historical candles when available. All trading is simulated.")}</div>
      </main> : <main className="arc-layout" data-tab={workspaceTab}>
