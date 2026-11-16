@@ -12,6 +12,13 @@ export default function WorkspaceTabs({active,onChange}:{
 }) {
   const {t}=useI18n();
   return <nav className="ts-workspace-tabs" aria-label={t("Workspace sections")}>
+    <label className="ts-mobile-section">
+      <span>{t("Workspace sections")}</span>
+      <select aria-label={t("Workspace sections")} value={active}
+        onChange={event=>onChange(event.currentTarget.value as WorkspaceTab)}>
+        {WORKSPACE_TABS.map(tab=><option key={tab} value={tab}>{t(label[tab])}</option>)}
+      </select>
+    </label>
     {WORKSPACE_TABS.map(tab=><button type="button" key={tab}
       aria-current={active===tab?"page":undefined}
       className={active===tab?"selected":""} onClick={()=>onChange(tab)}>{t(label[tab])}</button>)}
