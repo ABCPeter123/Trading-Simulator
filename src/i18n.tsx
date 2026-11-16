@@ -12,6 +12,9 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Simulation mode": "模拟模式",
+  "Single-asset research": "单资产研究",
+  "Retry question": "重试问题",
   "English": "英语",
   "简体中文": "简体中文",
   "Workspace": "工作台",
