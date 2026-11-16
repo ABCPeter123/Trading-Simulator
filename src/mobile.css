@@ -1,0 +1,135 @@
+/* Responsive overrides shared by historical replay, portfolio, and market research.
+   Keep complex tables scrollable rather than hiding financial data on narrow screens. */
+.ts-mobile-section{display:none}
+html,body,#root{max-width:100%}
+@media (max-width: 900px){
+  .arc-top{position:relative;flex-wrap:wrap;gap:9px}
+  .arc-top-right{flex-wrap:wrap;min-width:0}
+  .arc-layout,.port-layout{min-width:0}
+  .arc-main,.arc-side,.port-main,.port-side,.an-dashboard,.forecast-panel{min-width:0;max-width:100%}
+  .arc-box-head{flex-wrap:wrap}
+  .arc-chart-box .arc-box-head>div,.port-chart-wrap .arc-box-head>div{flex-wrap:wrap}
+  .arc-chart-wrap,.chart-body,.an-chart-canvas,.forecast-plot{width:100%;min-width:0}
+  .arc-table-scroll,.an-executions,.an-detail-grid>section,.port-positions,.port-history{
+    overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch
+  }
+  .arc-table-scroll table,.an-executions table,.an-detail-grid table,.port-positions table,.port-history table{
+    width:max-content;min-width:100%
+  }
+  .market-desk .workspace[data-terminal-tab]{min-width:0}
+}
+@media (max-width: 740px){
+  /* Two explicit navigation levels: simulator mode and workspace section. */
+  .sim-mode-tabs{position:sticky;top:0;z-index:30;padding:8px max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left));gap:6px}
+  .sim-mode-title{margin:0 0 2px;font-size:11px;flex-basis:100%}
+  .sim-mode-tabs button{padding:10px 7px;min-height:44px;font-size:12px;min-width:0;white-space:normal;text-align:center}
+  .arc-top{padding:10px 12px;min-height:0}
+  .arc-top-left{min-width:0}
+  .arc-top-right{width:100%;gap:8px}
+  .arc-top-right .arc-outline-button{min-height:44px;flex:1 1 auto;justify-content:center;white-space:normal;text-align:center;font-size:12px}
+  .arc-top-right .arc-portfolio-shortcut{display:none}
+  .arc-brand{white-space:normal;line-height:1.2;font-size:16px}
+  .arc-brand small{letter-spacing:.06em;line-height:1.4}
+  .arc-logo{flex-shrink:0}
+  .arc-layout,.port-layout{padding:10px 9px calc(80px + env(safe-area-inset-bottom));gap:10px}
+  .ts-workspace-tabs{grid-column:1/-1;display:block;overflow:visible;white-space:normal;padding:0 0 11px;margin:0}
+  .ts-workspace-tabs>button{display:none}
+  .ts-mobile-section{display:flex;flex-direction:column;gap:6px;width:100%;font-size:11px;color:#9db4cd;font-weight:750}
+  .ts-mobile-section select{appearance:auto;display:block;width:100%;min-height:46px;border:1px solid #677695;border-radius:9px;
+    background:#1b2a3e;color:#f2f5ff;font:650 16px ui-sans-serif,system-ui,sans-serif;padding:10px 13px}
+  .ts-mobile-section select:focus-visible{outline:2px solid #a99dff;outline-offset:2px}
+  .arc-hero{padding:15px 12px}
+  .arc-symbol-line{align-items:flex-start;gap:10px;flex-wrap:wrap}
+  .arc-symbol-line h1{font-size:clamp(19px,5vw,26px);overflow-wrap:anywhere}
+  .arc-price{min-width:0;text-align:left;align-items:flex-start}
+  .arc-price strong{font-size:clamp(20px,5vw,26px)}
+  .arc-progress-line{margin-top:15px}
+  .arc-stat-grid,.port-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .arc-metric,.port-metrics>div{min-width:0;padding:12px 10px}
+  .arc-metric strong,.port-metrics strong,.an-metric strong{font-size:clamp(14px,4vw,20px);white-space:normal;overflow-wrap:anywhere}
+  .arc-box-head{padding:12px;align-items:flex-start}
+  .arc-box-head strong{white-space:normal;overflow-wrap:anywhere}
+  .arc-tag{white-space:normal;line-height:1.4}
+  .arc-chart-view{max-width:100%;overflow-x:auto;scrollbar-width:thin}
+  .arc-chart-view button{min-height:40px;flex-shrink:0}
+  .arc-chart-wrap,.port-chart-wrap .arc-chart-wrap{height:clamp(260px,78vw,380px);min-height:260px}
+  .chart-body{height:clamp(265px,75vw,350px)}
+  .arc-chart-bottom{padding:10px 12px}
+  .arc-time-actions{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px;gap:7px}
+  .arc-time-actions button{min-width:0;min-height:46px;white-space:normal;line-height:1.35;font-size:11px}
+  .arc-auto{padding:12px;align-items:stretch}
+  .arc-auto>div{flex:1 1 100%}
+  .arc-auto button{min-height:44px;flex:1 1 auto}
+  .arc-auto select{min-height:44px;max-width:none;flex:1 1 auto}
+  .arc-template-row button,.arc-visual-add,.arc-code-actions button,.arc-risk-presets button,
+  .arc-side-toggle button,.arc-size-presets button,.arc-buy-cta,.arc-sell-cta{min-height:44px}
+  .arc-code-actions{align-items:stretch;flex-direction:column}
+  .arc-code-actions button{justify-content:center}
+  .arc-editor textarea,.port-strategy textarea{min-height:170px}
+  .arc-side{display:flex;flex-direction:column;min-width:0}
+  .arc-side>section,.port-side>section{width:100%;min-width:0}
+  .arc-side-body form input,.arc-side-body form select,.port-trade form input,.port-trade form select,.port-risk input{height:46px}
+  .arc-risk-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .arc-visual-grid label{min-width:0}
+  .arc-visual-head{flex-wrap:wrap}
+  .arc-start-form,.port-picker{width:100%;max-width:100%;padding:15px}
+  .arc-intro{padding:26px 12px 80px;min-height:0}
+  .arc-intro>h1{font-size:clamp(29px,9vw,47px)}
+  .port-setup{padding:24px 12px 80px}
+  .port-settings{grid-template-columns:1fr}
+  .port-catalog{grid-template-columns:1fr}
+  .port-asset-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .port-toolbar>div{min-width:0}
+  .port-toolbar button,.port-rule-row button{min-height:44px;white-space:normal}
+  .port-rule-row label{flex:1 1 140px;min-width:0}
+  .port-rule-row select{width:100%;min-width:0;min-height:44px}
+  .port-speed select{min-height:44px}
+  .port-percent button,.port-toggle button,.port-submit,.port-risk>button{min-height:44px}
+  .port-layout[data-tab="execution"] .port-side{display:flex;flex-direction:column}
+  .market-desk .workspace[data-terminal-tab]{display:flex;flex-direction:column}
+  .market-desk .workspace[data-terminal-tab] .watchlist-panel,
+  .market-desk .workspace[data-terminal-tab] .center-column,
+  .market-desk .workspace[data-terminal-tab] .ticket-column{min-width:0;width:100%}
+  .market-desk-head{padding:14px;gap:12px}
+  .market-desk-actions{width:100%;gap:8px}
+  .market-desk-actions button{min-height:44px}
+  .market-desk .terminal-workspace-tabs{width:100%;overflow-x:auto;scrollbar-width:thin}
+  .market-desk .terminal-workspace-tabs button{min-height:44px}
+  .chart-toolbar{gap:8px}
+  .chart-actions{gap:6px;overflow-x:auto;justify-content:flex-start}
+  .timeframe-control,.style-control{flex-shrink:0}
+  .timeframe-control button,.style-control button{min-width:40px;min-height:40px}
+  .portfolio-metrics strong{font-size:clamp(14px,4vw,19px);white-space:normal;overflow-wrap:anywhere}
+  .an-chart-controls{justify-content:flex-start;padding:10px}
+  .an-chart-controls select{min-height:44px;max-width:none}
+  .an-period-row button,.an-actions button{min-height:42px}
+  .an-executions{margin-left:10px;margin-right:10px}
+  .an-chart-canvas{height:240px}
+  .forecast-controls label{flex:1 1 140px;min-width:0}
+  .forecast-controls select,.forecast-controls input{min-width:0;max-width:100%;width:100%;min-height:44px}
+  .forecast-controls button,.forecast-dsl button{min-height:44px}
+  .sl-save{padding:12px;gap:8px}
+  .sl-save label{min-width:0;flex-basis:100%}
+  .sl-save button{min-height:44px;width:100%;justify-content:center}
+  .sl-preview button{min-height:44px;max-width:100%;margin-left:0}
+  .ai-suggestions button,.ai-proposal-actions button,.ai-form>button,.ai-refresh{min-height:44px}
+  .ai-form>button{align-self:stretch}
+  .ai-turn.user{max-width:100%}
+  .arc-page input,.arc-page select,.arc-page textarea,.market-desk input,.market-desk select,.market-desk textarea{font-size:16px}
+  .arc-page input[type=checkbox],.market-desk input[type=checkbox]{width:auto;height:auto}
+  .ts-lang-switch{bottom:max(10px,env(safe-area-inset-bottom));right:max(10px,env(safe-area-inset-right))}
+  .arc-footer{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
+}
+@media (max-width: 390px){
+  .arc-stat-grid,.port-metrics,.an-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .arc-risk-grid{grid-template-columns:1fr}
+  .arc-symbol-line{flex-direction:column}
+  .arc-price{align-items:flex-start}
+  .arc-top-right .arc-outline-button{font-size:11px}
+  .arc-chart-wrap,.port-chart-wrap .arc-chart-wrap{height:265px}
+  .port-asset-tabs{gap:6px}
+  .port-asset-tabs button{padding:9px}
+}
+@media (prefers-reduced-motion: reduce){
+  .arc-progress div{transition:none}
+}
