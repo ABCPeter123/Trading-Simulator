@@ -86,6 +86,10 @@ export function PriceChart({
       scale.applyOptions({minBarSpacing:minBarSpacingFor(nextWidth,loadedCount)});
       if(wasAll)scale.fitContent();
     };
+    const syncVisibleRange=(next:{from:number;to:number}|null)=>{
+      if(next){container.dataset.visibleFrom=String(next.from);container.dataset.visibleTo=String(next.to);}
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(syncVisibleRange);
     fitAllRef.current=()=>chart.timeScale().fitContent();
     latestRef.current=()=>{
       if(!loadedCount)return;
