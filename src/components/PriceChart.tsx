@@ -7,6 +7,8 @@ import type { SeriesMarker, UTCTimestamp } from "lightweight-charts";
 import type { Asset, ChartStyle, TimeRange } from "../types";
 import type { MarketBar } from "../api";
 import { useChartDimensions } from "./useChartDimensions";
+import { minBarSpacingFor, isEntireRangeVisible } from "./chartViewport";
+import { useI18n } from "../i18n";
 
 export interface ChartTrade {
   time: number;
@@ -20,7 +22,6 @@ interface PriceChartProps {
   range: TimeRange;
   style: ChartStyle;
   bars: MarketBar[];
-  visibleWindow?: number;
   smaPeriods?: number[];
   trades?: ChartTrade[];
   showCrossovers?: boolean;
@@ -40,9 +41,13 @@ export function smaOverlay(bars: MarketBar[], period: number) {
 }
 
 export function PriceChart({
-  asset, range, style, bars, visibleWindow, smaPeriods = [], trades = [], showCrossovers = false,
+  asset, range, style, bars, smaPeriods = [], trades = [], showCrossovers = false,
 }: PriceChartProps) {
+  const {t} = useI18n();
   const { ref: containerRef, width, height, visible } = useChartDimensions();
+  const fitAllRef=useRef<(()=>void)|null>(null);
+  const latestRef=useRef<(()=>void)|null>(null);
+  const savedRangeRef=useRef<{from:number;to:number}|null>(null);
   const resizeRef = useRef<((width: number, height: number) => void) | null>(null);
   const updateRef = useRef<((bars: MarketBar[], fills: ChartTrade[]) => void) | null>(null);
   const key = smaPeriods.join(",");
@@ -68,11 +73,24 @@ export function PriceChart({
       rightPriceScale:{borderColor:"#25323f",scaleMargins:{top:.11,bottom:.23}},
       timeScale:{
         borderColor:"#25323f",timeVisible:true,secondsVisible:false,
-        rightOffset:4,barSpacing:range==="1D"?7:5,
+        rightOffset:0,barSpacing:range==="1D"?7:5,
+        minBarSpacing:minBarSpacingFor(width,bars.length),
       },
       localization:{priceFormatter:(value:number)=>value.toFixed(asset.decimals)},
     });
-    resizeRef.current = (nextWidth, nextHeight) => chart.resize(nextWidth, nextHeight);
+    let loadedCount=0;
+    resizeRef.current = (nextWidth, nextHeight) => {
+      const scale=chart.timeScale();
+      const wasAll=isEntireRangeVisible(scale.getVisibleLogicalRange(),loadedCount);
+      chart.resize(nextWidth,nextHeight);
+      scale.applyOptions({minBarSpacing:minBarSpacingFor(nextWidth,loadedCount)});
+      if(wasAll)scale.fitContent();
+    };
+    fitAllRef.current=()=>chart.timeScale().fitContent();
+    latestRef.current=()=>{
+      if(!loadedCount)return;
+      chart.timeScale().setVisibleLogicalRange({from:Math.max(-0.5,loadedCount-120.5),to:loadedCount-0.5});
+    };
     const priceFormat = {
       type:"price" as const,
       precision:asset.decimals,
@@ -154,7 +172,7 @@ export function PriceChart({
           previous=difference;
         }
       }
-      for(const fill of fills.slice(-250)){
+      for(const fill of fills){
         if(!available.has(fill.time))continue;
         markers.push({
           time:fill.time as UTCTimestamp,
@@ -166,6 +184,9 @@ export function PriceChart({
       }
       markers.sort((a,b)=>(a.time as number)-(b.time as number));
       updateMarkers(markers);
+      container.dataset.loadedBars=String(data.length);
+      container.dataset.loadedTradeMarkers=String(fills.filter(f=>available.has(f.time)).length);
+      scale.applyOptions({minBarSpacing:minBarSpacingFor(container.clientWidth,data.length)});
       if (data.length > 0) {
         if (previousCount === 0) {
           if (visibleWindow && data.length > visibleWindow) {
@@ -184,8 +205,13 @@ export function PriceChart({
       previousCount = data.length;
       previousLastTime = lastTime;
     };
-    return ()=>{updateRef.current=null;resizeRef.current=null;chart.remove();};
-  },[asset,range,style,visibleWindow,key,showCrossovers,visible]);
+    return ()=>{
+      const range=chart.timeScale().getVisibleLogicalRange();
+      if(range)savedRangeRef.current={from:range.from,to:range.to};
+      updateRef.current=null;resizeRef.current=null;
+      fitAllRef.current=null;latestRef.current=null;chart.remove();
+    };
+  },[asset,range,style,key,showCrossovers,visible]);
 
   useEffect(()=>{
     if (visible) resizeRef.current?.(width,height);
@@ -193,8 +219,14 @@ export function PriceChart({
 
   useEffect(()=>{
     if (visible) updateRef.current?.(bars,trades);
-  },[bars,trades,asset,range,style,visibleWindow,key,showCrossovers,visible]);
+  },[bars,trades,asset,range,style,key,showCrossovers,visible]);
 
-  return <div className="chart-canvas" ref={containerRef}
-    aria-label={`${asset.symbol} price chart with historical fills and indicators`}/>;
+  return <div className="ts-chart-surface">
+    <div className="chart-canvas" ref={containerRef}
+      aria-label={`${asset.symbol} price chart with all available history and trade markers`}/>
+    <div className="ts-chart-viewport-actions">
+      <button type="button" onClick={()=>fitAllRef.current?.()}>{t("Fit all data")}</button>
+      <button type="button" onClick={()=>latestRef.current?.()}>{t("Latest candles")}</button>
+    </div>
+  </div>;
 }
