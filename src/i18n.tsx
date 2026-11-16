@@ -671,6 +671,10 @@ const zh: Record<string, string> = {
   "SMA/RSI periods must be 2-100; PROB_UP horizon 1-60; order percent 0-100.": "SMA和RSI周期必须为2至100，PROB_UP模拟跨度为1至60，交易比例为0至100。",
   "PROB_UP(1-60)": "PROB_UP(1-60)",
   "Annual volatility (manual assumption)": "年化波动率（手动假设）",
+  "Historical Simulator": "历史模拟器",
+  "Market & Charts": "行情与图表",
+  "Account & Orders": "账户与订单",
+  "Backtest Research": "策略回测研究",
 };
 
 const LocaleContext = createContext<{
