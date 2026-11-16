@@ -1,0 +1,17 @@
+
+.market-desk{width:100%;min-width:0;grid-column:1/-1;color:#e7eef8;background:#101b28;border:1px solid #344354;border-radius:12px;overflow:hidden}
+.market-desk-head{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;padding:22px 24px;background:linear-gradient(130deg,#162e2e,#1b273f);border-bottom:1px solid #3b5264}
+.market-desk-kicker{font-size:10px;font-weight:850;letter-spacing:.09em;color:#8ee2c4}
+.market-desk-head h2{font-size:23px;color:#f6faff;margin:7px 0}
+.market-desk-head p{font-size:11px;color:#a5b8cc;max-width:680px;line-height:1.5;margin:0}
+.market-desk-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.market-desk-actions strong{font-size:18px;color:#fafcff}
+.market-desk-actions button{display:flex;align-items:center;gap:6px;border:1px solid #54766f;background:#1f4846;color:#d5fff2;border-radius:8px;padding:10px 13px;font-size:11px}
+.market-desk-online,.market-desk-offline{font-weight:800;font-size:10px;color:#99edcf}
+.market-desk-offline{color:#f3aaa6}
+.market-desk-notice{display:flex;align-items:center;gap:9px;background:#202c3a;padding:10px 23px;color:#a8bacb;font-size:11px}
+.market-desk .workspace{max-width:none;min-height:0}
+.market-desk .center-column{min-width:0}
+.market-desk .watchlist-panel,.market-desk .ticket-column{background:#101a27}
+.market-desk .terminal-workspace-tabs{grid-column:1/-1}
+@media(max-width:740px){.market-desk-head{padding:15px}.market-desk-head h2{font-size:20px}.market-desk-notice{padding:10px 15px}.market-desk .center-column{padding:14px}}
