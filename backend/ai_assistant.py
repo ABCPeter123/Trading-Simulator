@@ -32,12 +32,12 @@ Return ONLY JSON: {"answer":"specific research answer", "strategy":null}.
 If asked for a strategy, put valid complete DSL rules in the strategy field.
 Single rules: WHEN SMA(20) CROSSES ABOVE SMA(50) BUY 25%
 Portfolio rules: WHEN spy SMA(20) CROSSES ABOVE SMA(50) BUY 25% qqq
-Use only the exact provided symbol IDs, and only PRICE, SMA(2-100), RSI(2-100),
+Use only the exact provided symbol IDs, and only PRICE, SMA(2-100), RSI(2-100), PROB_UP(1-60),
 ABOVE, BELOW, CROSSES ABOVE, CROSSES BELOW, BUY or SELL a percent (0,100].
 Provide both entry and exit rules if asked for a trading system.
 BUY percentage is of available cash at fill, not target portfolio weight.
 Multiple buy rules are not guaranteed simultaneous fills or target weights.
-Do not return markdown code fences. Be honest about model limitations.
+PROB_UP(h) is a historical GBM modeled probability (0-100%), not advance knowledge of the future. Do not return markdown code fences. Be honest about model limitations.
 """
 
 
