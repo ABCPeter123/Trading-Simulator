@@ -185,7 +185,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       <div className="arc-top-left">
         <button className="arc-back" onClick={()=>{setPlaying(false);onExit();}} aria-label="Back to single-asset Arcade"><ArrowLeft size={18}/></button>
         <div className="arc-logo"><BarChart3 size={23}/></div>
-        <div className="arc-brand">{t("PORTFOLIO")} <span>ARCADE</span><small>MULTI-ASSET HISTORICAL TRADING</small></div>
+        <div className="arc-brand">{t("PORTFOLIO")} <span>{t("ARCADE")}</span><small>{t("MULTI-ASSET HISTORICAL TRADING")}</small></div>
       </div>
       <div className="arc-top-right">
         {season && <span className="arc-live"><span/> {season.day} · LVL {season.metrics.level}</span>}
@@ -193,14 +193,14 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       </div>
     </header>
     {setup || !season ? <main className="port-setup">
-      <span className="arc-upper">MULTI-ASSET CHALLENGE</span>
-      <h1>{t("One portfolio.")} <em>Multiple markets.</em></h1>
+      <span className="arc-upper">{t("MULTI-ASSET CHALLENGE")}</span>
+      <h1>{t("One portfolio.")} <em>{t("Multiple markets.")}</em></h1>
       <p>{t("Choose 2 to 5 instruments. All positions use a shared $100,000 USD account. Prices come from synchronized historical daily candles, with no future information revealed.")}</p>
       <div className="port-picker">
         <div className="port-selected"><strong>YOUR BASKET ({basket.length}/5)</strong>
           <div>{basket.map(id=><button key={id} onClick={()=>setBasket(prev=>prev.filter(x=>x!==id))}>{assetName(id)} ×</button>)}</div>
         </div>
-        <label htmlFor="port-search"><Search size={15}/> Search instruments</label>
+        <label htmlFor="port-search"><Search size={15}/> {t("Search instruments")}</label>
         <input id="port-search" type="search" value={search} onChange={e=>{setSearch(e.target.value);setExternal([]);}} placeholder={t("Apple, SPY, BTC ...")}/>
         <button className="port-search-more" disabled={searchBusy||search.trim().length<2} onClick={()=>void discover()}>
           {searchBusy?"Searching provider...":"Discover more instruments on Yahoo Finance"}
@@ -232,14 +232,14 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
     </main> : <main className="port-layout">
       <section className="port-main">
         <div className="port-achievements">
-          <strong>{t("LEVEL")} {season.metrics.level} · {season.metrics.score.toLocaleString()} POINTS</strong>
+          <strong>{t("LEVEL")} {season.metrics.level} · {season.metrics.score.toLocaleString()} {t("POINTS")}</strong>
           <span>{season.metrics.xp} XP</span>
           <div>{season.metrics.badges.map(badge=><span key={badge}>{badge}</span>)}</div>
         </div>
         <div className="port-metrics">
-          <div><small>EQUITY</small><strong>{formatMoney(season.metrics.equity)}</strong></div>
+          <div><small>{t("EQUITY")}</small><strong>{formatMoney(season.metrics.equity)}</strong></div>
           <div><small>{t("CASH")}</small><strong>{formatMoney(season.metrics.cash)}</strong></div>
-          <div><small>YOUR RETURN</small><strong className={season.metrics.return_pct>=0?"positive":"negative"}>{season.metrics.return_pct.toFixed(2)}%</strong></div>
+          <div><small>{t("YOUR RETURN")}</small><strong className={season.metrics.return_pct>=0?"positive":"negative"}>{season.metrics.return_pct.toFixed(2)}%</strong></div>
           <div><small>{t("EQUAL-WEIGHT HOLD")}</small><strong>{season.metrics.equal_weight_hold_pct.toFixed(2)}%</strong></div>
         </div>
         <div className="port-toolbar">
@@ -247,7 +247,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <div><button disabled={busy||playing||season.finished} onClick={()=>advance(1)}><ChevronRight size={16}/> {t("1 day")}</button>
             <button disabled={busy||playing||season.finished} onClick={()=>advance(5)}><FastForward size={15}/> +5</button>
             <button disabled={busy||playing||season.finished} onClick={()=>advance(20)}><FastForward size={15}/> +20</button>
-            <button disabled={busy||playing||season.finished||!season.strategy} onClick={()=>advance(100,true)}>Next bot</button>
+            <button disabled={busy||playing||season.finished||!season.strategy} onClick={()=>advance(100,true)}>{t("Next bot")}</button>
             <button disabled={busy||season.finished} onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={15}/>:<Play size={15}/>} {playing?"Pause":"Autoplay"}</button>
           </div>
         </div>
@@ -258,8 +258,8 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         <div className="port-chart-wrap">
           <div className="arc-box-head"><div><BarChart3 size={17}/><strong>{assetName(focused)} · {chosenAsset.name}</strong>
             <span className="arc-tag">{t("FUTURE HIDDEN")}</span></div>
-            <div className="arc-chart-view"><button className={chartStyle==="candles"?"selected":""} onClick={()=>setChartStyle("candles")}>Candles</button>
-              <button className={chartStyle==="line"?"selected":""} onClick={()=>setChartStyle("line")}>Line</button></div>
+            <div className="arc-chart-view"><button className={chartStyle==="candles"?"selected":""} onClick={()=>setChartStyle("candles")}>{t("Candles")}</button>
+              <button className={chartStyle==="line"?"selected":""} onClick={()=>setChartStyle("line")}>{t("Line")}</button></div>
           </div>
           <div className="arc-chart-wrap">{bars.length>0&&
             <PriceChart asset={chosenAsset} range="1Y" style={chartStyle} bars={bars} visibleWindow={110}/>}</div>
@@ -267,8 +267,8 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             {current&&!current.has_bar_today&&<span> · Market closed on {season.day}, no orders filled for this symbol</span>}</div>
         </div>
         <div className="port-positions">
-          <div className="arc-box-head"><div><Wallet size={17}/><strong>{t("Portfolio positions")}</strong></div><span className="arc-tag">SHARED USD ACCOUNT</span></div>
-          <div className="arc-table-scroll"><table><thead><tr><th>SYMBOL</th><th>QTY</th><th>{t("AVG COST")}</th><th>{t("MARKET VALUE")}</th><th>UNREALIZED P&L</th><th>MARK DATE</th></tr></thead><tbody>
+          <div className="arc-box-head"><div><Wallet size={17}/><strong>{t("Portfolio positions")}</strong></div><span className="arc-tag">{t("SHARED USD ACCOUNT")}</span></div>
+          <div className="arc-table-scroll"><table><thead><tr><th>{t("SYMBOL")}</th><th>{t("QTY")}</th><th>{t("AVG COST")}</th><th>{t("MARKET VALUE")}</th><th>{t("UNREALIZED P&L")}</th><th>{t("MARK DATE")}</th></tr></thead><tbody>
             {positions.map(p=><tr key={p.asset_id} onClick={()=>setFocused(p.asset_id)} className="port-clickrow">
               <td>{assetName(p.asset_id)}</td><td>{fmtQty(p.quantity)}</td><td>{formatMoney(p.average_cost)}</td>
               <td>{formatMoney(p.market_value)}</td><td className={(p.unrealized_pnl??0)>=0?"positive":"negative"}>{formatMoney(p.unrealized_pnl??0)}</td><td>{p.mark_day??"None"}</td>
@@ -280,10 +280,10 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <p>{t("A signal from one instrument can trade another. Orders queue after the signal candle closes and fill no earlier than the target symbol's next actual session.")}</p>
           <div className="port-rule-row">
             <label>{t("Signal symbol")}<select value={source} onChange={e=>setSource(e.target.value)}>{season.asset_ids.map(id=><option key={id} value={id}>{assetName(id)}</option>)}</select></label>
-            <label>Trade symbol<select value={target} onChange={e=>setTarget(e.target.value)}>{season.asset_ids.map(id=><option key={id} value={id}>{assetName(id)}</option>)}</select></label>
+            <label>{t("Trade symbol")}<select value={target} onChange={e=>setTarget(e.target.value)}>{season.asset_ids.map(id=><option key={id} value={id}>{assetName(id)}</option>)}</select></label>
             <button onClick={addRule}><Plus size={16}/> {t("Add crossover rule")}</button>
           </div>
-          <textarea aria-label="Cross-asset strategy rules" rows={5} spellCheck={false} value={strategy}
+          <textarea aria-label={t("Cross-asset strategy rules")} rows={5} spellCheck={false} value={strategy}
             onChange={e=>setStrategy(e.target.value)} placeholder="WHEN spy SMA(10) CROSSES ABOVE SMA(30) BUY 25% qqq"/>
           <div className="port-rule-row"><button onClick={()=>setStrategy(
             `WHEN ${source} SMA(10) CROSSES ABOVE SMA(30) BUY 25% ${target}\nWHEN ${source} SMA(10) CROSSES BELOW SMA(30) SELL 100% ${target}`
@@ -293,7 +293,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         </div>
         <div className="port-history">
           <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong></div><span>{season.fills.length} recent fills</span></div>
-          <div className="arc-table-scroll"><table><thead><tr><th>DATE</th><th>SYMBOL</th><th>SIDE</th><th>QTY</th><th>PRICE</th><th>FEE</th><th>ENGINE</th></tr></thead><tbody>
+          <div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SYMBOL")}</th><th>{t("SIDE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th><th>{t("ENGINE")}</th></tr></thead><tbody>
             {season.fills.slice(0,30).map((fill,i)=><tr key={fill.order_id+"-"+i}>
               <td>{fmtTime(fill.time)}</td><td>{assetName(fill.asset_id)}</td><td className={fill.side==="buy"?"positive":"negative"}>{fill.side.toUpperCase()}</td>
               <td>{fmtQty(fill.quantity)}</td><td>{formatMoney(fill.price)}</td><td>{formatMoney(fill.fee)}</td><td>{fill.source}</td>
@@ -306,13 +306,13 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <div className="arc-box-head"><div><ShoppingCart size={17}/><strong>Trade {assetName(focused)}</strong></div></div>
           <form onSubmit={trade}>
             <div className="port-toggle"><button type="button" className={side==="buy"?"active-buy":""} onClick={()=>setSide("buy")}><ArrowUpRight size={15}/> {t("Buy")}</button>
-              <button type="button" className={side==="sell"?"active-sell":""} onClick={()=>setSide("sell")}><ArrowDownRight size={15}/> Sell</button></div>
-            <label>Order type<select value={kind} onChange={e=>setKind(e.target.value as typeof kind)}>
-              <option value="market">{t("Market · next available open")}</option><option value="limit">{t("Limit")}</option><option value="stop">Stop</option>
+              <button type="button" className={side==="sell"?"active-sell":""} onClick={()=>setSide("sell")}><ArrowDownRight size={15}/> {t("Sell")}</button></div>
+            <label>{t("Order type")}<select value={kind} onChange={e=>setKind(e.target.value as typeof kind)}>
+              <option value="market">{t("Market · next available open")}</option><option value="limit">{t("Limit")}</option><option value="stop">{t("Stop")}</option>
             </select></label>
-            {kind!=="market"&&<label>Trigger price<input type="number" min="0.000001" step="any" required value={trigger} onChange={e=>setTrigger(e.target.value)}/></label>}
-            <label>{t("Size type")}<select value={sizeType} onChange={e=>setSizeType(e.target.value as typeof sizeType)}><option value="percent">% of cash / holdings</option><option value="units">{t("Exact units")}</option></select></label>
-            <label>Quantity<input type="number" min="0.00000001" step="any" required value={size} onChange={e=>setSize(e.target.value)}/></label>
+            {kind!=="market"&&<label>{t("Trigger price")}<input type="number" min="0.000001" step="any" required value={trigger} onChange={e=>setTrigger(e.target.value)}/></label>}
+            <label>{t("Size type")}<select value={sizeType} onChange={e=>setSizeType(e.target.value as typeof sizeType)}><option value="percent">{t("% of cash / holdings")}</option><option value="units">{t("Exact units")}</option></select></label>
+            <label>{t("Quantity")}<input type="number" min="0.00000001" step="any" required value={size} onChange={e=>setSize(e.target.value)}/></label>
             {sizeType==="percent"&&<div className="port-percent">{[10,25,50,100].map(n=><button key={n} type="button" onClick={()=>setSize(String(n))}>{n}%</button>)}</div>}
             <p>Held: {fmtQty(current?.quantity??0)} · Cash: {formatMoney(season.metrics.cash)}</p>
             <button className="port-submit" disabled={busy||playing||season.finished} type="submit">{side==="buy"?"Queue Buy":"Queue Sell"}</button>
@@ -322,7 +322,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <div className="arc-box-head"><div><ShieldCheck size={17}/><strong>{t("Portfolio risk controls")}</strong></div></div>
           <p>{t("Applies the same percentages to each held symbol using its own average cost.")}</p>
           <label>{t("Stop loss %")}<input type="number" value={stop} min="0" max="75" step="0.1" onChange={e=>setStop(e.target.value)}/></label>
-          <label>Take profit %<input type="number" value={take} min="0" max="75" step="0.1" onChange={e=>setTake(e.target.value)}/></label>
+          <label>{t("Take profit %")}<input type="number" value={take} min="0" max="75" step="0.1" onChange={e=>setTake(e.target.value)}/></label>
           <button disabled={busy||playing} onClick={()=>void update(()=>savePortfolioRisk(season.id,Number(stop),Number(take)))}><ShieldCheck size={15}/> {t("Apply risk limits")}</button>
         </section>
         <section className="port-queue">
