@@ -273,11 +273,6 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       <WorkspaceTabs active={workspaceTab} onChange={setWorkspaceTab}/>
       {workspaceTab==="market"&&<MarketDesk/>}
       <section className="port-main">
-        <div className="port-achievements">
-          <strong>{t("LEVEL")} {season.metrics.level} · {season.metrics.score.toLocaleString()} {t("POINTS")}</strong>
-          <span>{season.metrics.xp} XP</span>
-          <div>{season.metrics.badges.map(badge=><span key={badge}>{t(badge)}</span>)}</div>
-        </div>
         <div className="port-metrics">
           <div><small>{t("EQUITY")}</small><strong>{formatMoney(season.metrics.equity)}</strong></div>
           <div><small>{t("CASH")}</small><strong>{formatMoney(season.metrics.cash)}</strong></div>
