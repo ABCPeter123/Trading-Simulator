@@ -324,6 +324,7 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
            {REPLAY_WINDOWS[resolution].map(w=><option key={w} value={w}>{w==="MAX"?t("Maximum available history"):w}</option>)}
          </select>
          <small className="arc-date-hint">{t("Intraday providers have limited historical coverage. Daily bars support longer backtests; missing minute prices are never manufactured.")}</small>
+         {resolution==="1d"&&<small className="arc-date-hint">{t("MAX source coverage varies by symbol. Existing runs remain unchanged; create a new session for longer history.")}</small>}
          <label htmlFor="arc-choose-date">{t("Historical start date (optional)")}</label>
          <input id="arc-choose-date" type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} title={t("Choose the replay start date. Leave blank to use the configured starting point.")}/>
          <small className="arc-date-hint">{t("Choose a date such as 2008-09-15 or 2020-03-01. Requires source coverage and indicator warmup.")}</small>
