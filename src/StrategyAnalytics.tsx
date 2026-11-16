@@ -10,7 +10,7 @@ import type { StrategyReport, AnalyticsPoint } from "./strategyAnalyticsApi";
 import { useI18n } from "./i18n";
 import "./analytics.css";
 
-type Window = "ALL" | "5" | "20" | "60" | "126" | "252";
+type Window = "ALL" | "5" | "20" | "60" | "126" | "252" | "CUSTOM";
 const WINDOWS:Window[]=["ALL","5","20","60","126","252"];
 const shortNum=(n:number)=>n.toLocaleString("en-US",{maximumFractionDigits:2});
 const pct=(n:number|null)=>n===null?"N/A":`${n>=0?"+":""}${n.toFixed(2)}%`;
@@ -99,6 +99,8 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
   const [window,setWindow]=useState<Window>("ALL");
+  const [fromDay,setFromDay]=useState("");
+  const [toDay,setToDay]=useState("");
   useEffect(()=>{
     let cancelled=false;
     setLoading(true);
@@ -111,8 +113,10 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
   },[mode,runId,step]);
   const data=useMemo(()=>{
     if(!report)return [];
-    return window==="ALL"?report.curve:report.curve.slice(-(Number(window)+1));
-  },[report,window]);
+    if (window==="ALL") return report.curve;
+    if (window==="CUSTOM") return report.curve.filter(p=>(!fromDay||p.day>=fromDay)&&(!toDay||p.day<=toDay));
+    return report.curve.slice(-(Number(window)+1));
+  },[report,window,fromDay,toDay]);
   const plots=useMemo(()=>({
     equity:[
       {name:t("Strategy equity"),color:"#55d0a6",points:toSeries(data,"equity")},
@@ -150,7 +154,12 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
         <span>{t("Show last")}</span>
         {WINDOWS.map(k=><button key={k} className={k===window?"active":""}
           onClick={()=>setWindow(k)}>{k==="ALL"?t("All"):k+" "+t("steps")}</button>)}
-        <span className="an-range">{data[0]?.day} / {data.at(-1)?.day}</span>
+        <button className={window==="CUSTOM"?"active":""} onClick={()=>setWindow("CUSTOM")}>{t("Custom dates")}</button>
+        {window==="CUSTOM"&&<><label className="an-date-label">{t("From")}<input type="date" min={report.start_day} max={report.end_day}
+          value={fromDay} onChange={e=>setFromDay(e.target.value)}/></label>
+          <label className="an-date-label">{t("To")}<input type="date" min={report.start_day} max={report.end_day}
+            value={toDay} onChange={e=>setToDay(e.target.value)}/></label></>}
+        <span className="an-range">{data[0]?.day??t("No data")} / {data.at(-1)?.day??t("No data")}</span>
       </div>
       <div className="an-metrics">
         <Metric name={t("Strategy return")} value={pct(windowResult?.own??report.summary.total_return_pct)}
@@ -202,10 +211,11 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
         <section>
           <header><Layers size={16}/><strong>{t("Position attribution")}</strong></header>
           <div className="arc-table-scroll"><table>
-            <thead><tr><th>{t("Asset")}</th><th>{t("Invested")}</th><th>{t("Weight")}</th><th>{t("Unrealized P&L")}</th><th>{t("Realized P&L")}</th></tr></thead>
+            <thead><tr><th>{t("Asset")}</th><th>{t("Invested")}</th><th>{t("Weight")}</th><th>{t("Price return")}</th><th>{t("Unrealized P&L")}</th><th>{t("Realized P&L")}</th></tr></thead>
             <tbody>{report.allocations.map(a=><tr key={a.asset_id}>
               <td>{assetName(a.asset_id)}</td><td>{formatMoney(a.invested)}</td>
               <td>{a.weight_pct.toFixed(1)}%</td>
+              <td>{pct(a.price_return_pct)}</td>
               <td>{formatMoney(a.unrealized_pnl)}</td>
               <td>{formatMoney(a.realized_pnl)}</td>
             </tr>)}</tbody>
