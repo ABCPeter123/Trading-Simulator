@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Plus, WandSparkles } from "lucide-react";
 
 interface Props { onAdd: (rule: string) => void }
-const EXPRS = ["PRICE","SMA","RSI","NUMBER"] as const;
+const EXPRS = ["PRICE","SMA","RSI","PROB_UP","NUMBER"] as const;
 type Expression = typeof EXPRS[number];
 
 export default function VisualStrategyBuilder({onAdd}: Props) {
@@ -22,6 +22,7 @@ export default function VisualStrategyBuilder({onAdd}: Props) {
     const number = Number(raw);
     if (!Number.isFinite(number)) return null;
     if (kind === "NUMBER") return number >= 0 && number <= 1_000_000_000 ? String(number) : null;
+    if (kind === "PROB_UP") return Number.isInteger(number) && number >= 1 && number <= 60 ? `PROB_UP(${number})` : null;
     return Number.isInteger(number) && number >= 2 && number <= 100 ? `${kind}(${number})` : null;
   }
 
@@ -30,7 +31,7 @@ export default function VisualStrategyBuilder({onAdd}: Props) {
     const second = expression(right, rightValue);
     const pct = Number(percent);
     if (!first || !second || !Number.isFinite(pct) || pct <= 0 || pct > 100) {
-      setError("Indicator periods must be 2-100. Trade percentage must be 0-100.");
+      setError("SMA/RSI periods must be 2-100; PROB_UP horizon 1-60; order percent 0-100.");
       return;
     }
     setError("");
@@ -43,7 +44,7 @@ export default function VisualStrategyBuilder({onAdd}: Props) {
       <label>WHEN
         <select aria-label={t("Left indicator")} value={left} onChange={e=>setLeft(e.target.value as Expression)}>{EXPRS.map(v=><option key={v} value={v}>{v}</option>)}</select>
       </label>
-      {left!=="PRICE"&&<label>{t(left==="NUMBER"?"Price threshold":"Lookback period")}
+      {left!=="PRICE"&&<label>{t(left==="NUMBER"?"Price threshold":left==="PROB_UP"?"Forecast horizon":"Lookback period")}
         <input aria-label={t("Left indicator value")} type="number" value={leftValue} onChange={e=>setLeftValue(e.target.value)}/>
       </label>}
       <label>CONDITION
@@ -52,7 +53,7 @@ export default function VisualStrategyBuilder({onAdd}: Props) {
       <label>COMPARED TO
         <select aria-label={t("Right indicator")} value={right} onChange={e=>setRight(e.target.value as Expression)}>{EXPRS.map(v=><option key={v} value={v}>{v}</option>)}</select>
       </label>
-      {right!=="PRICE"&&<label>{t(right==="NUMBER"?"Price threshold":"Lookback period")}
+      {right!=="PRICE"&&<label>{t(right==="NUMBER"?"Price threshold":right==="PROB_UP"?"Forecast horizon":"Lookback period")}
         <input aria-label={t("Right indicator value")} type="number" value={rightValue} onChange={e=>setRightValue(e.target.value)}/>
       </label>}
       <label>THEN
