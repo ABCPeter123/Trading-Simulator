@@ -377,11 +377,12 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
              <button disabled={busy||playing||game.finished} onClick={()=>void action(()=>gameStep(game.id,1))}><ChevronRight size={17}/> {t("Next candle")}</button>
              <button disabled={busy||playing||game.finished} onClick={()=>void action(()=>gameStep(game.id,5))}><FastForward size={15}/> {t("+5 candles")}</button>
              <button disabled={busy||playing||game.finished} onClick={()=>void action(()=>gameStep(game.id,20))}><FastForward size={16}/> {t("+20 candles")}</button>
+             <button disabled={busy||playing||game.finished} onClick={()=>void action(()=>gameStep(game.id,100))}><FastForward size={16}/> {t("+100 candles")}</button>
              <button disabled={busy||playing||game.finished||!game.strategy.trim()} onClick={()=>void action(()=>gameStep(game.id,100,true))}><Target size={16}/> {t("Next bot action")}</button>
            </div>
            <div className="arc-auto">
              <div><strong><Gauge size={16}/> {t("Autoplay")}</strong><span>{t("Automatically reveal history while you watch.")}</span></div>
-             <select aria-label={t("Autoplay step speed")} value={speed} onChange={e=>setSpeed(Number(e.target.value))}><option value={1}>{t("1 bar / tick")}</option><option value={5}>{t("5 bars / tick")}</option><option value={10}>{t("10 bars / tick")}</option></select>
+             <select aria-label={t("Autoplay step speed")} value={speed} onChange={e=>setSpeed(Number(e.target.value))}><option value={1}>{t("1 bar / tick")}</option><option value={5}>{t("5 bars / tick")}</option><option value={10}>{t("10 bars / tick")}</option><option value={25}>{t("25 bars / tick")}</option><option value={50}>{t("50 bars / tick")}</option></select>
              <button className={playing?"arc-playing":""} disabled={game.finished} onClick={()=>setPlaying(p=>!p)}>{playing?<><Pause size={15}/> {t("Pause")}</>:<><Play size={15}/> {t("Play")}</>}</button>
            </div>
          </section>
