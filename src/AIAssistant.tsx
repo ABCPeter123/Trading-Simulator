@@ -22,6 +22,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
   const [turns,setTurns]=useState<AIMessage[]>([]);
   const [answers,setAnswers]=useState<AIAnswer[]>([]);
   const [busy,setBusy]=useState(false);
+  const [elapsed,setElapsed]=useState(0);
   const [error,setError]=useState("");
 
   useEffect(()=>{
@@ -35,7 +36,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
     const question=value.trim();
     if(!question||busy)return;
     const history=turns.slice(-6);
-    setBusy(true);setError("");setMessage("");
+    setBusy(true);setElapsed(0);setError("");setMessage("");
     try {
       const result=await askAI(mode,runId,question,history);
       setTurns(prev=>[...prev,{role:"user",content:question},{role:"assistant",content:result.answer}]);
@@ -47,6 +48,13 @@ export default function AIAssistant({mode,runId,onDraft}: {
       setBusy(false);
     }
   }
+
+  useEffect(()=>{
+    if(!busy){return;}
+    const started=Date.now();
+    const ticker=setInterval(()=>setElapsed(Math.floor((Date.now()-started)/1000)),1000);
+    return ()=>clearInterval(ticker);
+  },[busy]);
 
   const suggestions = locale==="zh-CN"
     ? [
@@ -103,6 +111,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
           </div>}
       </div>)}
     </div>}
+    {busy&&<p className="ai-processing" role="status">{t("Local AI is processing your request.")} {elapsed}s · {t("First response may take longer while Ollama loads the model.")}</p>}
     {error&&<p role="alert" className="ai-error">{error}</p>}
     <form className="ai-form" onSubmit={e=>{e.preventDefault();void send(message);}}>
       <textarea rows={2} maxLength={1200} value={message} onChange={e=>setMessage(e.target.value)}
