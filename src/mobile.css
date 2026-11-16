@@ -32,8 +32,9 @@ html,body,#root{max-width:100%}
   .arc-brand small{letter-spacing:.06em;line-height:1.4}
   .arc-logo{flex-shrink:0}
   .arc-layout,.port-layout{padding:10px 9px calc(80px + env(safe-area-inset-bottom));gap:10px}
-  .ts-workspace-tabs{grid-column:1/-1;display:block;overflow:visible;white-space:normal;padding:0 0 11px;margin:0}
-  .ts-workspace-tabs>button{display:none}
+  .ts-workspace-tabs{grid-column:1/-1;display:flex;flex-direction:column;align-items:stretch;gap:9px;overflow:visible;white-space:normal;padding:0 0 11px;margin:0}
+  .ts-workspace-tabs .ts-tab-strip{display:flex;width:100%;min-width:0;gap:7px;overflow-x:auto;scrollbar-width:thin;overscroll-behavior-x:contain;scroll-snap-type:x proximity;padding:1px 0 5px}
+  .ts-workspace-tabs .ts-tab-strip>button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;flex:0 0 auto;padding:10px 12px;scroll-snap-align:start}
   .ts-mobile-section{display:flex;flex-direction:column;gap:6px;width:100%;font-size:11px;color:#9db4cd;font-weight:750}
   .ts-mobile-section select{appearance:auto;display:block;width:100%;min-height:46px;border:1px solid #677695;border-radius:9px;
     background:#1b2a3e;color:#f2f5ff;font:650 16px ui-sans-serif,system-ui,sans-serif;padding:10px 13px}
