@@ -223,7 +223,14 @@ def set_strategy(run_id, code):
         state["strategy"] = code
         event(state, f"Bot saved: {len(rules)} rule(s). Signals check each revealed close.")
         save(db, run_id, state)
-        return public(run_id, row, bars, state)
+        response = public(run_id, row, bars, state)
+    try:
+        from .strategy_library import capture
+        capture("single", code, [row["asset_id"]], run_id)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Could not archive activated single strategy")
+    return response
 
 
 def set_risk(run_id, stop_loss_pct=0, take_profit_pct=0):
