@@ -89,7 +89,7 @@ def start_run(asset_id, starting_point=0.3, period="5Y", start_date=None, resolu
     state = dict(index=index, start_index=index, period=period, resolution=resolution, requested_start_date=start_date, risk={"stop_loss_pct": 0, "take_profit_pct": 0}, cash=str(INITIAL_CASH), qty="0",
                  avg="0", realized="0", orders=[], fills=[], strategy="",
                  curve=[{"time": bars[index]["time"], "value": float(INITIAL_CASH)}],
-                 events=["Season started. Future candles are hidden."])
+                 events=["Historical replay started. Unrevealed candles remain hidden."])
     checkpoint(state)
     compressed = zlib.compress(json.dumps(bars, separators=(",", ":")).encode(), level=6)
     with LOCK, closing(connection()) as db, db:
@@ -222,7 +222,7 @@ def set_strategy(run_id, code):
         row, bars, state = read(db, run_id)
         previous = state["strategy"]
         state["strategy"] = code
-        event(state, f"Bot saved: {len(rules)} rule(s). Signals check each revealed close.")
+        event(state, f"Strategy activated: {len(rules)} rule(s). Signals check each revealed close.")
         save(db, run_id, state)
         response = public(run_id, row, bars, state)
     try:
@@ -368,7 +368,7 @@ def advance_run(run_id, count=1, until_action=False):
                 event(state, "End of historical data: unfilled orders expired.")
                 state["orders"] = []
             if not state.get("completed"):
-                event(state, "Season completed. Your final score is locked.")
+                event(state, "Historical replay completed. All remaining orders expired.")
                 state["completed"] = True
         save(db, run_id, state)
         return public(run_id, row, bars, state)
