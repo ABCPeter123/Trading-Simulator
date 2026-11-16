@@ -759,6 +759,8 @@ const zh: Record<string, string> = {
   "Historical replay started. Unrevealed candles remain hidden.": "历史回放已开始，未来行情保持隐藏。",
   "Multi-asset historical replay started. Future candles remain hidden.": "多资产历史回放已开始，未来行情保持隐藏。",
   "Invalid season starting point.": "模拟开始位置无效。",
+  "Fit all data": "显示全部历史数据",
+  "Latest candles": "最近K线",
 };
 
 const LocaleContext = createContext<{
