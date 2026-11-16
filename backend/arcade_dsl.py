@@ -19,7 +19,7 @@ from fastapi import HTTPException
 
 MAX_CODE = 1800
 MAX_RULES = 12
-_EXPRESSION = r"(?:PRICE|SMA\(\d{1,3}\)|RSI\(\d{1,2}\)|\d+(?:\.\d+)?)"
+_EXPRESSION = r"(?:PRICE|SMA\(\d{1,3}\)|RSI\(\d{1,2}\)|PROB_UP\(\d{1,2}\)|\d+(?:\.\d+)?)"
 _RULE = re.compile(
     rf"^WHEN\s+({_EXPRESSION})\s+(CROSSES\s+ABOVE|CROSSES\s+BELOW|ABOVE|BELOW)\s+"
     rf"({_EXPRESSION})\s+(BUY|SELL)\s+(\d{{1,3}}(?:\.\d{{1,2}})?)%$",
@@ -62,6 +62,10 @@ def compile_rules(program: str) -> list[Rule]:
             period = re.fullmatch(r"(?:SMA|RSI)\((\d+)\)", expr)
             if period and not 2 <= int(period.group(1)) <= 100:
                 raise HTTPException(422, detail=f"Line {lineno}: indicator period must be from 2 to 100.")
+        for expr in (left, right):
+            forecast = re.fullmatch(r"PROB_UP\((\d+)\)", expr)
+            if forecast and not 1 <= int(forecast.group(1)) <= 60:
+                raise HTTPException(422, detail=f"Line {lineno}: PROB_UP horizon must be 1-60 candles.")
         rules.append(Rule(left, operation, right, side.lower(), pct_float, lineno))
         if len(rules) > MAX_RULES:
             raise HTTPException(422, detail=f"Only {MAX_RULES} strategy rules are supported.")
@@ -78,6 +82,10 @@ def indicator(expr: str, bars: list[dict], index: int) -> float | None:
         if index + 1 < period:
             return None
         return sum(float(bar["close"]) for bar in bars[index-period+1:index+1]) / period
+    if expr.startswith("PROB_UP("):
+        from .stochastic import probability_up
+        horizon = int(expr[8:-1])
+        return probability_up(bars[:index+1], horizon)
     if expr.startswith("RSI("):
         period = int(expr[4:-1])
         if index < period:
