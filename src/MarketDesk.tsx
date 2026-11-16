@@ -285,7 +285,7 @@ export default function MarketDesk() {
       </header>
       <div className="market-desk-notice"><Database size={14}/>{t("Public quotes may be delayed. Orders are simulated. Historical replay remains isolated from the paper account.")}</div>
 
-      <main className="workspace" data-terminal-tab={terminalTab}>
+      <div className="workspace" data-terminal-tab={terminalTab}>
         <nav className="terminal-workspace-tabs" aria-label={t("Workspace sections")}>
           {(["market","portfolio","research"] as const).map(tab=><button type="button" key={tab}
             className={terminalTab===tab?"selected":""} aria-current={terminalTab===tab?"page":undefined}
@@ -491,7 +491,7 @@ export default function MarketDesk() {
           </section>
           <div className="build-note"><span className="build-dot"/> {t("Trading Simulator")} <span>{t("v0.2 · LOCAL ENGINE")}</span></div>
         </aside>
-      </main>
+      </div>
       {notice && <div className="toast" role="status"><Check size={17}/><span>{notice}</span><button type="button" onClick={()=>setNotice("")} aria-label={t("Dismiss message")}><X size={16}/></button></div>}
     </div>
   );
