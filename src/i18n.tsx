@@ -722,6 +722,30 @@ const zh: Record<string, string> = {
   "VALIDATED STRATEGY DSL": "已验证的策略规则语言",
   "AUTOMATED · ": "自动策略 · ",
   "(automated)": "（自动策略）",
+  "Longest replay · More history": "最长回放 · 更多历史数据",
+  "DISCOVERED": "已发现",
+  "RESULTS": "个结果",
+  "Changing the replay interval starts a new session. The existing session stays saved.": "更改K线周期会新建模拟会话，当前会话继续保留。",
+  "Back to single-asset simulator": "返回单资产模拟器",
+  "Model loaded": "模型已加载",
+  "Loading model": "正在加载模型",
+  "Ollama is preloading the model locally.": "Ollama 正在本地预加载模型。",
+  "Ollama is loaded and ready for research.": "Ollama 模型已加载，可以开始分析。",
+  "Saved.": "已保存。",
+  "New season started. The market will reveal one candle at a time.": "新的模拟会话已开始，行情将逐根K线揭示。",
+  "Replay reset. Previous replay orders were cleared.": "历史回放已重置，之前的回放订单已清除。",
+  "Pending": "待处理",
+  "BAR": "K线",
+  "latest bar": "最新K线",
+  "Historical replay completed. All remaining orders expired.": "历史回放已结束，剩余订单全部失效。",
+  "Portfolio historical replay completed.": "投资组合历史回放已完成。",
+  "Cannot navigate to an unrevealed step.": "不能跳转到尚未揭示的历史时点。",
+  "Cannot analyze an unrevealed step.": "无法分析尚未揭示的时间点。",
+  "Quote is stale": "报价已过期",
+  "Market session closed": "市场已休市",
+  "Contract/currency not supported": "不支持该合约或币种",
+  "Basket intraday histories are not recent enough to align.": "组合中各资产的分钟历史无法对齐。",
+  "Max available": "全部可用",
 };
 
 const LocaleContext = createContext<{
@@ -743,6 +767,29 @@ export function translate(english: string, locale: Locale): string {
   if (bot) return "机器人：" + bot[1].toUpperCase() + " 信号已排队，在 " + bot[3].toUpperCase() + " 上" + (bot[2] === "BUY" ? "买入" : "卖出") + "。";
   const armed = /^Cross-asset bot armed with (\d+) rules\.$/.exec(english);
   if (armed) return "跨资产机器人已启用，含 " + armed[1] + " 条规则。";
+  // Translate numeric event messages without changing symbols, prices or DSL.
+  const imported = /^([A-Za-z0-9._-]+) (added to your local instruments\.|imported for research, but is chart-only until currency and contract rules are supported\.|imported and saved locally\.|is available for research but is not eligible for USD cash portfolio trading\.)$/.exec(english);
+  if (imported) {
+    const phrases: Record<string,string> = {
+      "added to your local instruments.": "已添加到本地品种列表。",
+      "imported for research, but is chart-only until currency and contract rules are supported.": "已导入供研究使用，目前仅支持图表。",
+      "imported and saved locally.": "已导入并在本地保存。",
+      "is available for research but is not eligible for USD cash portfolio trading.": "可以用于研究，但不能用于美元现金组合交易。",
+    };
+    return imported[1] + " " + phrases[imported[2]];
+  }
+  const queuedPortfolio = /^Queued (BUY|SELL) on ([A-Za-z0-9._-]+)\. Wait for this symbol's next candle\.$/.exec(english);
+  if (queuedPortfolio) return "已为 " + queuedPortfolio[2].toUpperCase() + " 排队" + (queuedPortfolio[1]==="BUY"?"买入":"卖出") + "订单，等待该资产的下一根K线。";
+  const activated = /^Strategy activated: (\d+) rule\(s\)\. Signals check each revealed close\.$/.exec(english);
+  if (activated) return "策略已启用，包含 " + activated[1] + " 条规则；每根已揭示K线收盘时检查信号。";
+  const crossActivated = /^Cross-asset strategy activated with (\d+) rules\.$/.exec(english);
+  if (crossActivated) return "跨资产策略已启用，包含 " + crossActivated[1] + " 条规则。";
+  const botSignal = /^BOT SIGNAL: (BUY|SELL) ([\d.]+)%; order queues for the next open\.$/.exec(english);
+  if (botSignal) return "自动策略信号：" + (botSignal[1]==="BUY"?"买入 ":"卖出 ") + botSignal[2] + "%；订单等待下一根K线开盘。";
+  const replayQueued = /^Replay (buy|sell) queued\. Advance one candle to simulate execution at the next open\.$/.exec(english);
+  if (replayQueued) return "历史回放" + (replayQueued[1]==="buy"?"买入":"卖出") + "订单已排队；推进一根K线以模拟下一开盘价成交。";
+  const paperFilled = /^Paper (buy|sell) filled: ([\d.]+) ([A-Za-z0-9._-]+) at ([\d.]+)\. Fee: (.+)$/.exec(english);
+  if (paperFilled) return "模拟" + (paperFilled[1]==="buy"?"买入":"卖出") + "已成交：" + paperFilled[2] + " " + paperFilled[3] + "，成交价 " + paperFilled[4] + "，手续费 " + paperFilled[5];
   return english;
 }
 
