@@ -259,11 +259,13 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <label>{t("Start date (optional)")}<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
         </div>
         <small className="arc-date-hint">{t("Intraday providers have limited historical coverage. Daily bars support longer backtests; missing minute prices are never manufactured.")}</small>
-        {error&&<p className="arc-error" role="alert">{error}</p>}
+        {resolution==="1d"&&<small className="arc-date-hint">{t("MAX source coverage varies by symbol. Existing runs remain unchanged; create a new session for longer history.")}</small>}
+        {error&&<p className="arc-error" role="alert">{t(error)}</p>}
         <button className="arc-cta" disabled={busy||basket.length<2}
           onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate,resolution,0.15))}>
           <Play size={16}/> {t(busy?"Loading real historical data...":"Create portfolio session")}
         </button>
+        {season&&<button className="port-search-more" type="button" onClick={()=>{setSetup(false);setError("");}}>{t("Return to current session")}</button>}
         {saved.length>0 && <label>{t("Resume saved session")}<select defaultValue="" onChange={e=>{
           if(e.target.value) void update(()=>loadPortfolioSeason(e.target.value));
         }}><option value="">{t("Select a saved basket")}</option>{saved.map(x=>
