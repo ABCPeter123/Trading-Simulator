@@ -157,7 +157,7 @@ def create_season(symbols, period="5Y", starting_point=0.3, start_date=None, res
         "index": index, "start_index": index, "resolution": resolution, "cash": str(INITIAL_CASH),
         "positions": initial_positions, "orders": [], "fills": [],
         "strategy": "", "risk": {"stop_loss_pct": 0, "take_profit_pct": 0},
-        "events": ["Multi-asset season started. No future candles are visible."],
+        "events": ["Multi-asset historical replay started. Future candles remain hidden."],
         "curve": [{"day": days[index], "value": float(INITIAL_CASH)}],
     }
     checkpoint(state)
@@ -345,7 +345,7 @@ def strategy(run_id, code):
         rules = compile_portfolio_rules(code, set(json.loads(row["basket"])))
         previous = state["strategy"]
         state["strategy"] = code
-        event(state, f"Cross-asset bot armed with {len(rules)} rules.")
+        event(state, f"Cross-asset strategy activated with {len(rules)} rules.")
         _save(db, run_id, state)
         response = public(run_id, row, snap, state)
     try:
@@ -469,7 +469,7 @@ def advance(run_id, count=1, until_action=False):
         if state["index"] == len(days)-1:
             state["orders"] = []
             if not state.get("completed"):
-                event(state, "Portfolio season complete.")
+                event(state, "Portfolio historical replay completed.")
                 state["completed"] = True
         _save(db, run_id, state)
         return public(run_id, row, snap, state)
