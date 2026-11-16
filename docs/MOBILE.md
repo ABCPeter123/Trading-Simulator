@@ -34,10 +34,12 @@ powershell -ExecutionPolicy Bypass -File .\start-local.ps1
 ## Touch layout
 
 - Use the two mode buttons at the top to switch between single-asset and portfolio simulations.
-- Use the **Workspace sections** selector to open Historical Replay, Market Data & Paper, Orders & Positions, Strategy & AI, Performance Analytics, Scenario Research, or Trade History.
+- All seven **workspace tabs stay available** in a horizontally scrollable row. Swipe the row to reach later tabs, or use the **Workspace sections** selector for direct access: Historical Replay, Market Data & Paper, Orders & Positions, Strategy & AI, Performance Analytics, Scenario Research, and Trade History.
 - Charts resize with the phone screen. Touch drag and pinch behavior depends on the underlying lightweight-charts interaction mode.
-- Replay steps, order sizing, strategy editing, saved-strategy versions, AI questions, and date controls remain accessible.
+- The **Market Data & Paper** section has three directly visible subviews: **Market & Charts**, **Account & Orders**, and **Backtest Research**. The paper order ticket also includes a symbol selector, so you do not need to return to the watchlist to change instruments.
+- Replay steps, order sizing, risk controls, strategy editing, saved-strategy versions, AI questions, and date controls remain accessible.
 - Wider trade history, execution, and analytics tables scroll horizontally within their own panels rather than clipping columns.
+- Desktop and phone use the same React components, API routes, order validation, strategy logic, and persistent account data. Mobile navigation changes only presentation.
 - Strategy and order fields have larger touch targets and mobile-safe text sizes.
 
 ## Screen sizes to check
@@ -45,3 +47,7 @@ powershell -ExecutionPolicy Bypass -File .\start-local.ps1
 Use real devices or responsive browser emulation at widths such as **320, 375, 390, 430, 768, and 1024 px**. Check both portrait and landscape orientations. For each simulation mode, verify switching all workspace sections, viewing charts, entering a strategy, reviewing analytics, and scrolling any wide tables. Mobile layout changes are presentation-only and should preserve simulation and saved data.
 
 This is a responsive web application, not a native iOS or Android app. Local access requires the Windows host to remain online.
+
+## Automated parity checks
+
+The `Validate desktop and mobile feature parity` GitHub Actions workflow starts the frontend with mocked API responses and uses Chromium at 320, 390, 768, and 1440 px. It checks both single-asset and portfolio navigation, seven workspace destinations, all three market/paper subviews, the order instrument selector, and global horizontal overflow. It cannot replace manual testing of a running backend or physical-device browser behavior.
