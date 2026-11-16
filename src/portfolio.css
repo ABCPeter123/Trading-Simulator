@@ -83,3 +83,6 @@
 .port-discovery strong{font-size:11px}
 .port-discovery small{font-size:10px;color:#95aac0}
 .port-discovery button{padding:7px 9px;border-radius:6px;border:1px solid #6a6498;background:#353157;color:#e6ddff;font-size:10px;font-weight:800}
+
+.port-speed{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#a9b6d3;font-size:10px}
+.port-speed select{background:#28284b;color:#e2dbff;border:1px solid #555b83;border-radius:6px;padding:8px 9px;font-size:10px;min-height:34px}
