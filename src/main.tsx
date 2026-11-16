@@ -23,7 +23,7 @@ function Simulator() {
     {mode === "portfolio"
       ? <PortfolioArcade onExit={() => setMode("single")} />
       : <TradingArcade onOpenPortfolio={() => setMode("portfolio")} />}
-    <LanguageSwitcher />
+    <LanguageSwitcher/>
   </>;
 }
 
