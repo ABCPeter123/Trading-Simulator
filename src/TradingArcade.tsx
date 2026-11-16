@@ -9,6 +9,8 @@ import {
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import type { Asset } from "./types";
 import VisualStrategyBuilder from "./VisualStrategyBuilder";
+import StrategyAnalytics from "./StrategyAnalytics";
+import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { PriceChart } from "./components/PriceChart";
 import {
   gameCancel, gameCatalog, gameDiscover, gameImportTicker, gameLoad, gameRuns, gameSaveCode, gameSetRisk, gameStart, gameStep,
@@ -62,6 +64,12 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
   const [validating, setValidating] = useState(false);
   const [editorOpen, setEditorOpen] = useState(true);
   const [chartStyle, setChartStyle] = useState<"candles"|"line">("candles");
+  const [maFast, setMaFast] = useState(20);
+  const [maSlow, setMaSlow] = useState(100);
+  const [showSma, setShowSma] = useState(true);
+  const [showCrossovers, setShowCrossovers] = useState(true);
+  const [showTrades, setShowTrades] = useState(true);
+  const [analyticsFills,setAnalyticsFills] = useState<{runId:string;executions:StrategyExecution[]}|null>(null);
 
   const load = useCallback(async (id: string) => {
     const run = await gameLoad(id);
@@ -231,6 +239,8 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
   const q=game?.metrics;
   const delta=latest&&game&&game.bars.length>=2 ? latest.close-game.bars[game.bars.length-2].close : 0;
   const codeSaved=game?.strategy===code;
+  const chartTrades = (analyticsFills?.runId===game?.id?analyticsFills.executions:game?.fills??[])
+    .map(fill=>({time:fill.time,side:fill.side,quantity:fill.quantity,price:fill.price,source:fill.source}));
 
   return <div className="arc-page">
     <header className="arc-top">
@@ -315,7 +325,21 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
 
          <section className="arc-chart-box">
            <div className="arc-box-head"><div><Activity size={17}/><strong>{t("Historical market")}</strong><span className="arc-tag">{t("FUTURE HIDDEN")}</span></div><div className="arc-chart-view"><button className={chartStyle==="candles"?"selected":""} onClick={()=>setChartStyle("candles")}>{t("Candles")}</button><button className={chartStyle==="line"?"selected":""} onClick={()=>setChartStyle("line")}>{t("Line")}</button></div></div>
-           <div className="arc-chart-wrap"><PriceChart asset={asset!} range="1Y" style={chartStyle} bars={game.bars} visibleWindow={120}/></div>
+           <div className="an-chart-controls">
+             <label><input type="checkbox" checked={showSma} onChange={e=>setShowSma(e.target.checked)}/>{t("SMA overlays")}</label>
+             {showSma&&<><label>{t("Fast SMA")} <select value={maFast} onChange={e=>setMaFast(Number(e.target.value))}>{[5,10,20,30,50,100,150,200].map(p=><option key={p} value={p}>{p}</option>)}</select></label>
+               <label>{t("Slow SMA")} <select value={maSlow} onChange={e=>setMaSlow(Number(e.target.value))}>{[10,20,30,50,100,150,200].map(p=><option key={p} value={p}>{p}</option>)}</select></label>
+               <label><input type="checkbox" checked={showCrossovers} onChange={e=>setShowCrossovers(e.target.checked)}/>{t("Crossovers")}</label></>}
+             <label><input type="checkbox" checked={showTrades} onChange={e=>setShowTrades(e.target.checked)}/>{t("Trade markers")}</label>
+           </div>
+           <div className="arc-chart-wrap"><PriceChart asset={asset!} range="1Y" style={chartStyle} bars={game.bars} visibleWindow={120}
+             smaPeriods={showSma?[maFast,maSlow]:[]} showCrossovers={showSma&&showCrossovers}
+             trades={showTrades?chartTrades:[]}/></div>
+           <div className="an-chart-key">
+             {showSma&&<><b style={{color:"#e9bb74"}}>SMA {maFast}</b><b style={{color:"#a99dff"}}>SMA {maSlow}</b></>}
+             {showTrades&&<><b style={{color:"#4ad4a0"}}>{t("Buy marker")}</b><b style={{color:"#fa7c8a"}}>{t("Sell marker")}</b></>}
+             {showSma&&showCrossovers&&<b>{t("SMA crossover dots")}</b>}
+           </div>
            <div className="arc-chart-bottom"><span><span className="arc-green-dot"/> {t("REAL HISTORICAL OHLCV")}</span><span>{t("Next candle cannot be viewed until you advance")}</span></div>
          </section>
 
@@ -335,6 +359,9 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
            </div>
          </section>
 
+         <StrategyAnalytics runId={game.id} step={game.current_bar} mode="single"
+           assetName={id=>id===game.asset_id?(asset?.symbol??id.toUpperCase()):id.toUpperCase()}
+           onReport={report=>setAnalyticsFills({runId:game.id,executions:report.executions})}/>
          <section className="arc-bot-section">
            <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Workshop")}</strong><span className="arc-tag">{t("NO CODING EXPERIENCE NEEDED")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{t(editorOpen?"Collapse":"Expand")}</button></div>
            <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Teach your trading bot what to do")}</strong><p>{t("Write rules in plain English. The engine evaluates the conditions at each revealed candle close, then queues trades for the next candle.")}</p></div></div>
