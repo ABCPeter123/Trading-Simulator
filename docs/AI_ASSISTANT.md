@@ -17,6 +17,33 @@ A connected language model reads a compact, server-generated report containing
 metrics or suggest trading rules for your current basket. It is not connected to
 a broker or to the internet beyond the explicitly chosen AI provider.
 
+## Troubleshooting slow or timed-out Ollama responses
+
+The original local Ollama integration had a 45-second response timeout. It
+now uses a **240-second read timeout** by default, configurable via
+`TRADING_SIM_AI_TIMEOUT_SECONDS` in `.env` (60-600 seconds). The local
+development proxy also accepts long-running requests.
+
+The UI shows elapsed processing time, and the backend requests a shorter
+reply while keeping the model loaded for 20 minutes where Ollama supports it.
+
+If your computer cannot run Llama 3.2 3B quickly, use its smaller local model:
+
+```powershell
+ollama pull llama3.2:1b
+```
+
+Then edit your ignored `.env`:
+
+```dotenv
+TRADING_SIM_AI_PROVIDER=ollama
+TRADING_SIM_AI_MODEL=llama3.2:1b
+TRADING_SIM_AI_TIMEOUT_SECONDS=240
+```
+
+Restart the backend, and use the assistant's **Recheck AI** control.
+This remains completely local; no OpenAI API or per-request charges.
+
 ## First-time setup: local Ollama (default)
 
 This option is free to use locally, with no remote model API required.
