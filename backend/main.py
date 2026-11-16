@@ -14,7 +14,7 @@ from .archive import archive_stats
 from .arcade import start_run, get_run, list_runs, submit_order as submit_arcade_order, cancel_order, set_strategy, advance_run, set_risk
 from .arcade_dsl import compile_rules, EXAMPLES
 
-app = FastAPI(title="Trading Simulator Local API", version="0.9.0")
+app = FastAPI(title="Trading Simulator Local API", version="1.0.0")
 
 class NewOrder(BaseModel):
     asset_id: str
@@ -27,7 +27,7 @@ def instruments(search: str = Query("", max_length=80), category: str = Query(""
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "mode": "local", "version": "0.9.0"}
+    return {"status": "ok", "mode": "local", "version": "1.0.0"}
 
 @app.get("/api/market/{asset_id}")
 def market_history(asset_id: str, range: str = Query("1M"), resolution: str | None = Query(None)):
@@ -238,3 +238,37 @@ def ai_status():
 def ai_ask(request: AIQuestion):
     return ai_advise(request.mode, request.run_id, request.question,
                      [turn.model_dump() for turn in request.history])
+
+# Stochastic research is computed exclusively from already-revealed bars.
+class ScenarioRequest(BaseModel):
+    mode: Literal["single", "portfolio"]
+    run_id: str = Field(min_length=1, max_length=100)
+    asset_id: str | None = Field(default=None, max_length=40)
+    horizon: int = Field(default=20, ge=1, le=60)
+    lookback: int = Field(default=60, ge=20, le=252)
+    seed: int = Field(default=0, ge=0, le=2147483647)
+
+@app.post("/api/research/scenarios")
+def research_scenarios(request: ScenarioRequest):
+    from .stochastic import forecast_for_game
+    return forecast_for_game(request.mode, request.run_id, request.asset_id,
+                             request.horizon, request.lookback, request.seed)
+
+class BlackScholesRequest(BaseModel):
+    spot: float = Field(gt=0, le=1e10)
+    strike: float = Field(gt=0, le=1e10)
+    maturity_years: float = Field(gt=0, le=30)
+    volatility_annual: float = Field(ge=0, le=10)
+    risk_free_rate: float = Field(default=.03, ge=-.5, le=1)
+    dividend_yield: float = Field(default=0, ge=0, le=1)
+
+@app.post("/api/research/black-scholes")
+def research_option_pricing(request: BlackScholesRequest):
+    from .stochastic import black_scholes
+    return {
+        **black_scholes(request.spot,request.strike,request.maturity_years,
+                        request.volatility_annual,request.risk_free_rate,
+                        request.dividend_yield),
+        "method":"European Black-Scholes theoretical option value",
+        "not_a_price_forecast": True,
+    }
