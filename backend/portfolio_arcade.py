@@ -240,6 +240,17 @@ def public(run_id, row, snap, state):
     }
 
 
+def get_analysis(run_id):
+    """Read-only analytics from frozen bars and full untruncated fill ledger."""
+    from .strategy_analytics import build_report
+    with LOCK, closing(connection()) as db:
+        row, snap, state = _load(db, run_id)
+        return build_report(
+            snap["days"], snap["daily"], json.loads(row["basket"]),
+            state["start_index"], state["index"], state["fills"],
+        )
+
+
 def get_season(run_id):
     with LOCK, closing(connection()) as db:
         row, snap, state = _load(db, run_id)
