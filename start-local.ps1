@@ -2,7 +2,8 @@
 # Reuses existing Python/npm installations. Only updates dependencies when needed.
 param(
     [switch]$SetupOnly,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$Mobile
 )
 
 $ErrorActionPreference = "Stop"
@@ -123,14 +124,35 @@ if (Test-LocalPort 8000) {
     Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList "-NoExit -ExecutionPolicy Bypass -File `"$script`""
     Write-Host "[run] Started backend in another PowerShell window." -ForegroundColor Green
 }
+$mobileFrontendReady = $Mobile
 if (Test-LocalPort 5173) {
     Write-Host "[run] Port 5173 is already in use. Not starting a duplicate frontend." -ForegroundColor Yellow
+    if ($Mobile) {
+        $mobileFrontendReady = $false
+        Write-Host "[mobile] Stop the existing frontend process and rerun with -Mobile to enable LAN access." -ForegroundColor Yellow
+    }
 } else {
     $script = Join-Path $root "scripts\run-frontend.ps1"
-    Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList "-NoExit -ExecutionPolicy Bypass -File `"$script`""
+    $frontendArgs = "-NoExit -ExecutionPolicy Bypass -File `"$script`""
+    if ($Mobile) { $frontendArgs += " -Lan" }
+    Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList $frontendArgs
     Write-Host "[run] Started frontend in another PowerShell window." -ForegroundColor Green
 }
-Write-Host "[ready] Open http://127.0.0.1:5173" -ForegroundColor Cyan
+Write-Host "[ready] PC browser: http://127.0.0.1:5173" -ForegroundColor Cyan
+if ($mobileFrontendReady) {
+    # Suggest private IPv4 addresses; the user picks their Wi-Fi adapter.
+    $privateIps = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' } |
+        Select-Object -ExpandProperty IPAddress -Unique)
+    foreach ($ip in $privateIps) {
+        Write-Host "[mobile] On the same Wi-Fi, open http://$($ip):5173" -ForegroundColor Cyan
+    }
+    if ($privateIps.Count -eq 0) {
+        Write-Host "[mobile] Find your PC's IPv4 address with ipconfig, then open http://<PC-IP>:5173." -ForegroundColor Yellow
+    }
+    Write-Host "[mobile] Trusted private network only. The development server has no user authentication." -ForegroundColor Yellow
+    Write-Host "[mobile] If your phone cannot connect, allow Node.js through Windows Firewall on Private networks." -ForegroundColor Yellow
+}
 if (-not $NoBrowser) {
     Start-Process "http://127.0.0.1:5173"
 }
