@@ -48,3 +48,6 @@
 .an-executions th{font-size:9px;letter-spacing:.04em;color:#8ca6b9;padding:11px;background:#18293a}
 .an-executions td{padding:12px 11px;border-top:1px solid #273c4c;white-space:nowrap}
 @media(max-width:500px){.an-executions{margin:12px 10px 0}}
+
+.an-date-label{display:flex;align-items:center;gap:6px;font-size:10px;color:#a6bed3}
+.an-date-label input{background:#19283a;border:1px solid #496178;border-radius:5px;padding:7px;color:#e3f0ff;max-width:160px;font-size:10px}
