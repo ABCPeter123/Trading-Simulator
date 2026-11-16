@@ -6,6 +6,7 @@ export interface AIStatus {
   provider: AIProvider;
   model: string;
   configured: boolean;
+  ready: boolean;
   remote: boolean;
   description: string;
 }
