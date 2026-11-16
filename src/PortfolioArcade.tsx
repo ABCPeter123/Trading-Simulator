@@ -13,6 +13,8 @@ import AIAssistant from "./AIAssistant";
 import WorkspaceTabs from "./WorkspaceTabs";
 import type { WorkspaceTab } from "./WorkspaceTabs";
 import StochasticResearch from "./StochasticResearch";
+import MarketDesk from "./MarketDesk";
+import StrategyLibrary from "./StrategyLibrary";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
@@ -269,6 +271,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       </div>
     </main> : <main className="port-layout" data-tab={workspaceTab}>
       <WorkspaceTabs active={workspaceTab} onChange={setWorkspaceTab}/>
+      {workspaceTab==="market"&&<MarketDesk/>}
       <section className="port-main">
         <div className="port-achievements">
           <strong>{t("LEVEL")} {season.metrics.level} · {season.metrics.score.toLocaleString()} {t("POINTS")}</strong>
@@ -377,6 +380,9 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             <button disabled={busy||playing||viewingPast||strategy===season.strategy} onClick={()=>void update(()=>savePortfolioStrategy(season.id,strategy))}><Save size={16}/> {t("Save & activate strategy")}</button>
           </div>
         </div>
+        <StrategyLibrary mode="portfolio" runId={season.id} code={strategy}
+          symbols={season.asset_ids} activatedCode={season.strategy}
+          onLoad={draft=>{setStrategy(draft);setWorkspaceTab("strategy");}}/>
         <div className="port-history">
           <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong></div><span>{season.fills.length} {t("recent fills")}</span></div>
           <div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SYMBOL")}</th><th>{t("SIDE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th><th>{t("ENGINE")}</th></tr></thead><tbody>
