@@ -321,12 +321,12 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          <small className="arc-date-hint">{t("Choose a date such as 2008-09-15 or 2020-03-01. Requires source coverage and indicator warmup.")}</small>
          <label htmlFor="arc-start-point">{t("Starting point")} {startDate?t("(ignored when date is set)"):""}</label>
          <select id="arc-start-point" value={startingPoint} onChange={e=>setStartingPoint(Number(e.target.value))}>
-           <option value={0.2}>{t("Early season · More candles to play")}</option>
+           <option value={0.2}>{t("Long replay · More history")}</option>
            <option value={0.3}>{t("Standard replay")}</option>
            <option value={0.5}>{t("Short replay")}</option>
          </select>
          <button disabled={busy} className="arc-cta" onClick={()=>void createNew()}><Play size={18} fill="currentColor"/>{t(busy?"Loading market data...":"Start trading")}</button>
-         {saved.length>0 && <><span className="arc-resume-title">{t("OR RESUME A SAVED SEASON")}</span><select aria-label={t("Resume a saved arcade run")} defaultValue="" onChange={e=>{if(e.target.value)void switchRun(e.target.value);}}><option value="">{t("Select a previous run...")}</option>{saved.map(run=><option key={run.id} value={run.id}>{ASSETS.find(a=>a.id===run.asset_id)?.symbol} · {new Date(run.updated_at).toLocaleString()}</option>)}</select></>}
+         {saved.length>0 && <><span className="arc-resume-title">{t("RESUME PREVIOUS SESSION")}</span><select aria-label={t("Resume a saved simulation")} defaultValue="" onChange={e=>{if(e.target.value)void switchRun(e.target.value);}}><option value="">{t("Select a previous run...")}</option>{saved.map(run=><option key={run.id} value={run.id}>{ASSETS.find(a=>a.id===run.asset_id)?.symbol} · {new Date(run.updated_at).toLocaleString()}</option>)}</select></>}
          {error && <div className="arc-error" role="alert">{error}</div>}
        </div>
        <div className="arc-intro-foot"><ShieldCheck size={15}/> {t("Uses actual historical candles when available. All trading is simulated.")}</div>
@@ -422,7 +422,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
            {editorOpen&&<div className="arc-editor">
              <VisualStrategyBuilder onAdd={rule=>{setCode(prev=>prev.trim()?prev.trim()+"\n"+rule:rule);setCodeError("");}}/>
              <div className="arc-template-row"><span>{t("TRY A TEMPLATE")}</span>{game.examples.map(sample=><button key={sample.title} onClick={()=>{setCode(sample.code);setCodeError("");}}>{t(sample.title)}</button>)}</div>
-             <div className="arc-code-head"><span><Terminal size={14}/> strategy.tradesim</span><span>{t(codeSaved?"SAVED TO GAME":"UNSAVED CHANGES")}</span></div>
+             <div className="arc-code-head"><span><Terminal size={14}/> strategy.tradesim</span><span>{t(codeSaved?"SAVED TO SESSION":"UNSAVED CHANGES")}</span></div>
              <textarea spellCheck={false} aria-label={t("Trading strategy rules")} value={code} onChange={e=>{setCode(e.target.value);setCodeError("");}} rows={5} placeholder="WHEN SMA(10) CROSSES ABOVE SMA(30) BUY 25%" maxLength={1800}/>
              <div className="arc-editor-help">
                <strong>{t("Language cheatsheet")}</strong>
@@ -431,7 +431,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
                <p>{t("BUY % uses available cash. SELL % uses holdings. Rules trigger on crossing events, not every candle. No Python code or unsafe execution.")}</p>
              </div>
              {codeError&&<div role="alert" className="arc-error">{codeError}</div>}
-             <div className="arc-code-actions"><span>{t(game.strategy.trim()?"Bot armed":"No active strategy yet")}</span><button disabled={busy||validating||codeSaved||viewingPast} onClick={()=>void saveCode()}><Save size={15}/>{t(validating?"Validating...":"Save & activate strategy")}</button></div>
+             <div className="arc-code-actions"><span>{t(game.strategy.trim()?"Bot armed":"No active strategy")}</span><button disabled={busy||validating||codeSaved||viewingPast} onClick={()=>void saveCode()}><Save size={15}/>{t(validating?"Validating...":"Save & activate strategy")}</button></div>
            </div>}
          </section>
 
