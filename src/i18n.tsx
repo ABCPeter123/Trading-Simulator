@@ -761,6 +761,7 @@ const zh: Record<string, string> = {
   "Invalid season starting point.": "模拟开始位置无效。",
   "Fit all data": "显示全部历史数据",
   "Latest candles": "最近K线",
+  "All 256 modeled paths shown; percentile curves reflect the full distribution.": "全部256条模拟路径均已显示；分位数曲线反映完整的模拟分布。",
 };
 
 const LocaleContext = createContext<{
