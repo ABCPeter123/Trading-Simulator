@@ -29,7 +29,13 @@ BAR_SCHEMA = {
     "close": pl.Float64,
     "volume": pl.Float64,
 }
-ALLOWED_RANGES = {"1D", "1W", "1M", "3M", "6M", "1Y", "2Y", "5Y", "10Y", "MAX"}
+ALLOWED_RANGES = {"1D", "1W", "1M", "3M", "6M", "1Y", "2Y", "5Y", "10Y", "MAX"} | {
+    f"{period}_{resolution}" for resolution, periods in {
+        "1m": ("7D",), "5m": ("7D", "30D", "60D"),
+        "15m": ("7D", "30D", "60D"),
+        "1h": ("7D", "30D", "60D", "6M", "1Y"),
+    }.items() for period in periods
+}
 
 
 def archive_path(asset_id: str, window: str) -> Path:
@@ -119,5 +125,5 @@ def load_archived_history(asset_id: str, window: str) -> list[dict[str, int | fl
     if not path.exists():
         return []
     with ARCHIVE_LOCK:
-        rows = pl.read_parquet(path).sort("time").tail(1000).to_dicts()
+        rows = pl.read_parquet(path).sort("time").tail(5000).to_dicts()
     return [{column: row[column] for column in BAR_SCHEMA} for row in rows]
