@@ -285,7 +285,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
        <div className="arc-intro-icon"><Activity size={35}/></div>
        <span className="arc-upper">{t("HISTORICAL MARKET RESEARCH")}</span>
        <h1>{t("Historical Trading Simulator")}</h1>
-       <p>{t("Start with $100,000 in virtual cash, reveal real historical candles, and compete against buy-and-hold. Play manually or design a trading bot. Skip weeks in seconds.")}</p>
+       <p>{t("Start with $100,000 in simulated capital. Analyze real historical candles, test rule-based strategies, and compare performance with a benchmark.")}</p>
        <div className="arc-start-form">
          <label htmlFor="arc-market-search">Find a market · {catalog.length} {t("instruments indexed")}</label>
          <input id="arc-market-search" type="search" value={catalogSearch} placeholder={t("Search symbol or company...")} onChange={e=>{setCatalogSearch(e.target.value);setRemoteResults([]);}}/>
@@ -399,7 +399,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
              <button disabled={busy||playing||game.finished||viewingPast||!game.strategy.trim()} onClick={()=>void action(()=>gameStep(game.id,100,true))}><Target size={16}/> {t("Next strategy signal")}</button>
            </div>
            <div className="arc-auto">
-             <div><strong><Gauge size={16}/> {t("Autoplay")}</strong><span>{t("Automatically reveal history while you watch.")}</span></div>
+             <div><strong><Gauge size={16}/> {t("Autoplay")}</strong><span>{t("Advance observed historical bars automatically.")}</span></div>
              <select aria-label={t("Autoplay step speed")} value={speed} onChange={e=>setSpeed(Number(e.target.value))}><option value={1}>{t("1 bar / tick")}</option><option value={5}>{t("5 bars / tick")}</option><option value={10}>{t("10 bars / tick")}</option><option value={25}>{t("25 bars / tick")}</option><option value={50}>{t("50 bars / tick")}</option></select>
              <button className={playing?"arc-playing":""} disabled={game.finished||viewingPast} onClick={()=>setPlaying(p=>!p)}>{playing?<><Pause size={15}/> {t("Pause")}</>:<><Play size={15}/> {t("Run")}</>}</button>
            </div>
@@ -418,7 +418,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
            :<p className="ts-past-note">{t("AI research uses the latest session. Return to latest to ask questions.")}</p>}
          <section className="arc-bot-section">
            <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Editor")}</strong><span className="arc-tag">{t("NO CODING EXPERIENCE NEEDED")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{t(editorOpen?"Collapse":"Expand")}</button></div>
-           <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Define algorithmic trading rules")}</strong><p>{t("Write rules in plain English. The engine evaluates the conditions at each revealed candle close, then queues trades for the next candle.")}</p></div></div>
+           <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Define algorithmic trading rules")}</strong><p>{t("Write safe deterministic strategy rules. Signals evaluate on revealed candle closes, and orders enter the next available trading candle.")}</p></div></div>
            {editorOpen&&<div className="arc-editor">
              <VisualStrategyBuilder onAdd={rule=>{setCode(prev=>prev.trim()?prev.trim()+"\n"+rule:rule);setCodeError("");}}/>
              <div className="arc-template-row"><span>{t("TRY A TEMPLATE")}</span>{game.examples.map(sample=><button key={sample.title} onClick={()=>{setCode(sample.code);setCodeError("");}}>{t(sample.title)}</button>)}</div>
