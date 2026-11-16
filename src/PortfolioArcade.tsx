@@ -48,6 +48,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const busyRef = useRef(false);
   const activeSeasonRef = useRef<string|null>(null);
   const [playing, setPlaying] = useState(false);
+  const [autoplaySpeed,setAutoplaySpeed] = useState(5);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [side, setSide] = useState<TradeSide>("buy");
@@ -138,13 +139,13 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
     const timer = setInterval(() => {
       if (busyRef.current) return;
       busyRef.current = true;
-      void advancePortfolio(season.id, 5).then(next => {
+      void advancePortfolio(season.id, autoplaySpeed).then(next => {
         hydrate(next);
         if (next.finished) setPlaying(false);
       }).catch(e=>{setError(errorText(e));setPlaying(false);}).finally(()=>{busyRef.current=false;});
     }, 700);
     return ()=>clearInterval(timer);
-  }, [playing,season?.id,season?.finished,setup,hydrate]);
+  }, [playing,season?.id,season?.finished,setup,hydrate,autoplaySpeed]);
 
   const assetName = (id:string) => catalog.find(i=>i.id===id)?.symbol ??
     ASSETS.find(i=>i.id===id)?.symbol ?? id.toUpperCase();
@@ -276,7 +277,13 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <div><button disabled={busy||playing||season.finished} onClick={()=>advance(1)}><ChevronRight size={16}/> {baseResolution==="1d"?t("1 day"):t("Next candle")}</button>
             <button disabled={busy||playing||season.finished} onClick={()=>advance(5)}><FastForward size={15}/> +5</button>
             <button disabled={busy||playing||season.finished} onClick={()=>advance(20)}><FastForward size={15}/> +20</button>
+            <button disabled={busy||playing||season.finished} onClick={()=>advance(100)}><FastForward size={15}/> +100</button>
             <button disabled={busy||playing||season.finished||!season.strategy} onClick={()=>advance(100,true)}>{t("Next bot")}</button>
+            <label className="port-speed">{t("Autoplay step speed")}
+              <select value={autoplaySpeed} onChange={e=>setAutoplaySpeed(Number(e.target.value))}>
+                {[1,5,10,25,50].map(i=><option value={i} key={i}>{i} / {t("tick")}</option>)}
+              </select>
+            </label>
             <button disabled={busy||season.finished} onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={15}/>:<Play size={15}/>} {t(playing?"Pause":"Autoplay")}</button>
           </div>
         </div>
