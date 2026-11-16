@@ -68,9 +68,9 @@ export interface StrategyReport {
   methodology: string;
 }
 
-export const getStrategyReport = (mode: "portfolio" | "single", id: string) =>
+export const getStrategyReport = (mode: "portfolio" | "single", id: string, at?: number) =>
   request<StrategyReport>(
     mode === "portfolio"
-      ? `/portfolio-seasons/${encodeURIComponent(id)}/analytics`
-      : `/arcade/${encodeURIComponent(id)}/analytics`,
+      ? `/portfolio-seasons/${encodeURIComponent(id)}/analytics${at===undefined?"":`?at=${at}`}`
+      : `/arcade/${encodeURIComponent(id)}/analytics${at===undefined?"":`?at=${at}`}`,
   );
