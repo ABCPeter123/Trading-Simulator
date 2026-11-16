@@ -2,6 +2,32 @@
 
 A **local-first paper trading and historical replay terminal** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## AI Strategy Assistant v0.9
+
+Both Trading Arcade and Portfolio Arcade now have a **bilingual AI research
+assistant**. Ask it to analyze your historical equity curve, drawdown, fees,
+benchmark comparison, and recent fills, or request a compatible strategy for
+your game basket.
+
+- **Local-first:** default provider is a user-installed **Ollama** model.
+  Alternatively, configure the OpenAI Responses API using a private backend
+  key. No model subscription or key is bundled with this repository.
+- **No future leakage:** only the game's revealed portfolio analytics and
+  a handful of recent fills are given to the model. Stored future bars remain
+  invisible, even when asking about the strategy's future performance.
+- **Human approval:** proposed DSL code must pass the existing validator and
+  appears in a separate preview. **Insert draft for review** only edits the
+  local strategy textbox. It does not arm, backtest, trade or execute orders.
+- **Privacy:** model requests are initiated only when you ask a question.
+  The backend stores credentials in the ignored `.env` file, not the browser.
+  Cloud mode sends the summarized game data externally.
+
+**Setup:** for Ollama, install Ollama, run `ollama pull llama3.2`,
+copy `.env.example` to `.env`, then restart the local backend.
+For OpenAI, configure your provider, model, and private key in `.env`.
+
+See [AI Strategy Assistant setup and safeguards](docs/AI_ASSISTANT.md).
+
 ## Intraday Trading Arcade v0.8
 
 Both Arcade modes and the original Trading Terminal now offer real provider
