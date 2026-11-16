@@ -1,3 +1,4 @@
+import { useI18n } from "./i18n";
 import { useState } from "react";
 import { Plus, WandSparkles } from "lucide-react";
 
@@ -6,6 +7,7 @@ const EXPRS = ["PRICE","SMA","RSI","NUMBER"] as const;
 type Expression = typeof EXPRS[number];
 
 export default function VisualStrategyBuilder({onAdd}: Props) {
+  const {t} = useI18n();
   const [left, setLeft] = useState<Expression>("SMA");
   const [right, setRight] = useState<Expression>("SMA");
   const [leftValue, setLeftValue] = useState("10");
@@ -36,31 +38,31 @@ export default function VisualStrategyBuilder({onAdd}: Props) {
   }
 
   return <div className="arc-visual-builder">
-    <div className="arc-visual-head"><WandSparkles size={16}/><strong>Build a rule visually</strong><span>No code required</span></div>
+    <div className="arc-visual-head"><WandSparkles size={16}/><strong>{t("Build a rule visually")}</strong><span>{t("No code required")}</span></div>
     <div className="arc-visual-grid">
       <label>WHEN
-        <select aria-label="Left indicator" value={left} onChange={e=>setLeft(e.target.value as Expression)}>{EXPRS.map(v=><option key={v}>{v}</option>)}</select>
+        <select aria-label={t("Left indicator")} value={left} onChange={e=>setLeft(e.target.value as Expression)}>{EXPRS.map(v=><option key={v}>{v}</option>)}</select>
       </label>
       {left!=="PRICE"&&<label>{left==="NUMBER"?"Price threshold":"Lookback period"}
         <input aria-label="Left indicator value" type="number" value={leftValue} onChange={e=>setLeftValue(e.target.value)}/>
       </label>}
       <label>CONDITION
-        <select aria-label="Strategy condition" value={op} onChange={e=>setOp(e.target.value)}>{["CROSSES ABOVE","CROSSES BELOW","ABOVE","BELOW"].map(v=><option key={v}>{v}</option>)}</select>
+        <select aria-label={t("Strategy condition")} value={op} onChange={e=>setOp(e.target.value)}>{["CROSSES ABOVE","CROSSES BELOW","ABOVE","BELOW"].map(v=><option key={v}>{v}</option>)}</select>
       </label>
       <label>COMPARED TO
         <select aria-label="Right indicator" value={right} onChange={e=>setRight(e.target.value as Expression)}>{EXPRS.map(v=><option key={v}>{v}</option>)}</select>
       </label>
       {right!=="PRICE"&&<label>{right==="NUMBER"?"Price threshold":"Lookback period"}
-        <input aria-label="Right indicator value" type="number" value={rightValue} onChange={e=>setRightValue(e.target.value)}/>
+        <input aria-label={t("Right indicator value")} type="number" value={rightValue} onChange={e=>setRightValue(e.target.value)}/>
       </label>}
       <label>THEN
-        <select aria-label="Trade action" value={side} onChange={e=>setSide(e.target.value)}><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
+        <select aria-label="Trade action" value={side} onChange={e=>setSide(e.target.value)}><option value="BUY">{t("BUY")}</option><option value="SELL">SELL</option></select>
       </label>
       <label>POSITION SIZE %
-        <input aria-label="Strategy percent" type="number" min="0.01" max="100" step="any" value={percent} onChange={e=>setPercent(e.target.value)}/>
+        <input aria-label={t("Strategy percent")} type="number" min="0.01" max="100" step="any" value={percent} onChange={e=>setPercent(e.target.value)}/>
       </label>
     </div>
     {error&&<div className="arc-error" role="alert">{error}</div>}
-    <button type="button" className="arc-visual-add" onClick={addRule}><Plus size={16}/> Add rule to strategy</button>
+    <button type="button" className="arc-visual-add" onClick={addRule}><Plus size={16}/> {t("Add rule to strategy")}</button>
   </div>;
 }
