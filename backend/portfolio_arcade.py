@@ -346,7 +346,14 @@ def strategy(run_id, code):
         state["strategy"] = code
         event(state, f"Cross-asset bot armed with {len(rules)} rules.")
         _save(db, run_id, state)
-        return public(run_id, row, snap, state)
+        response = public(run_id, row, snap, state)
+    try:
+        from .strategy_library import capture
+        capture("portfolio", code, json.loads(row["basket"]), run_id)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("Could not archive activated portfolio strategy")
+    return response
 
 
 def risk(run_id, stop_loss_pct, take_profit_pct):
