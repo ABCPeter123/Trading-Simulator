@@ -1,6 +1,31 @@
 # Trading Simulator
 
-A **local-first paper trading and historical replay terminal** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
+A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
+
+## Unified Trading Simulator v1.1
+
+There is now **one application**, Trading Simulator. The old separate
+Trading Terminal screen has been removed, and its full watchlist, market
+explorer, delayed quotes, candlestick charts, independent paper-account
+ledger, paper order ticket, position tables, execution history and SMA
+backtester live inside the **Market Data & Paper** workspace tab.
+
+- **Saved Strategy Library**: save unlimited named versions up to the local
+  safety cap (500 entries), browse previous rules, restore them as editable
+  drafts, or delete old versions. The engine also archives previous strategy
+  versions when you change the active one. Versions persist locally in
+  SQLite and stay separate from running strategies.
+- **AI timeout repair**: local Ollama requests now allow a 240-second default
+  response window, configurable from 60-600 seconds in the private
+  `.env` file. The model stays warm where supported, answer sizes are
+  bounded, and the UI shows processing time. No paid provider is required.
+- **Unified navigation**: historical replay, integrated market and paper
+  research, orders, strategy and AI, analytics, stochastic scenarios and
+  trade history share the same professionally tabbed application.
+- **Non-destructive backwards replay** and existing database saves remain
+  available without migrations.
+
+See [Unified Simulator, Strategy Library and AI troubleshooting](docs/UNIFIED_SIMULATOR.md).
 
 ## Stochastic research, professional workspaces and backward replay (v1.0)
 
@@ -14,8 +39,8 @@ A **local-first paper trading and historical replay terminal** using public fina
   All strategy decisions use revealed information only.
 - **Professional tabs**: both historical simulators now organize market
   overview, orders/positions, strategy/AI, performance analytics, stochastic
-  scenarios and execution history into six sections. The original terminal
-  also separates charts, orders and backtest research into tabs.
+  scenarios and execution history into six sections. The integrated Market Data & Paper workspace
+  includes charts, orders and backtest research subviews.
   Gamification panels are hidden without changing any saved data.
 - **Backwards navigation**: inspect exact prior checkpoints using previous,
   next-recorded and return-to-latest controls. Historic inspection is
