@@ -241,13 +241,13 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
           <button type="button" onClick={onOpenArcade}><Trophy size={15}/> {t("Trading Arcade")}</button>
         </nav>
         <div className="topbar-right">
-          <span className="local-status"><span className={backendOnline ? "local-dot" : "offline-dot"}/>{backendOnline ? "LOCAL API ONLINE" : "API OFFLINE"}</span>
-          <span className="topbar-balance"><span>{mode === "replay" ? "REPLAY EQUITY" : "PAPER EQUITY"}</span><strong>{equity == null ? "Unavailable" : formatMoney(equity)}</strong></span>
+          <span className="local-status"><span className={backendOnline ? "local-dot" : "offline-dot"}/>{t(backendOnline ? "LOCAL API ONLINE" : "API OFFLINE")}</span>
+          <span className="topbar-balance"><span>{t(mode === "replay" ? "REPLAY EQUITY" : "PAPER EQUITY")}</span><strong>{equity == null ? t("Unavailable") : formatMoney(equity)}</strong></span>
           <button type="button" className="reset-button" onClick={() => void resetPortfolio()}><RotateCcw size={15}/><span>{t("Reset")}</span></button>
         </div>
       </header>
       <div className="notice-strip"><div>
-        <Database size={14}/><strong>{mode === "replay" ? "HISTORICAL REPLAY" : "REAL MARKET DATA"}</strong>
+        <Database size={14}/><strong>{t(mode === "replay" ? "HISTORICAL REPLAY" : "REAL MARKET DATA")}</strong>
         <span>{mode === "replay" ? "Orders fill only on the next visible candle's open." : "Public market feeds may be delayed. Fills are modeled, never actual exchange executions."}</span>
       </div><span className="notice-right">{t("LOCAL ACCOUNT · USD")}</span></div>
 
@@ -259,7 +259,7 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
           </label>
           <div className="category-tabs" role="tablist" aria-label={t("Asset classes")}>
             {ASSET_CLASSES.map(group =>
-              <button key={group} type="button" role="tab" aria-selected={assetClass===group} className={assetClass===group?"category-active":""} onClick={() => changeClass(group)}>{group}</button>)}
+              <button key={group} type="button" role="tab" aria-selected={assetClass===group} className={assetClass===group?"category-active":""} onClick={() => changeClass(group)}>{t(group)}</button>)}
           </div>
           <div className="watchlist-table-label"><span>{t("SYMBOL / NAME")}</span><span>{t("LAST KNOWN / STATUS")}</span></div>
           <div className="watchlist-items">
@@ -268,7 +268,7 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
               return <button type="button" key={asset.id} className={`asset-item ${selectedId === asset.id ? "asset-selected" : ""}`} onClick={() => selectAsset(asset)}>
                 <span className="asset-icon" style={{"--asset-accent":asset.accent} as React.CSSProperties}>{asset.symbol.slice(0,1)}</span>
                 <span className="asset-details"><strong>{asset.symbol}</strong><small>{asset.name}</small></span>
-                <span className="asset-quote"><strong>{q ? formatPrice(q.price, asset.decimals) : "—"}</strong><small className={q?.tradable ? "positive" : ""}>{q ? (q.tradable ? "Quote ready" : q.block_reason ?? "Indicative") : "Not loaded"}</small></span>
+                <span className="asset-quote"><strong>{q ? formatPrice(q.price, asset.decimals) : "—"}</strong><small className={q?.tradable ? "positive" : ""}>{t(q ? (q.tradable ? "Quote ready" : q.block_reason ?? "Indicative") : "Not loaded")}</small></span>
               </button>;
             })}
           </div>
@@ -278,28 +278,28 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
         <section className="center-column">
           <div className="instrument-header">
             <div className="instrument-title"><div className="symbol-logo" style={{"--asset-accent": selectedAsset.accent} as React.CSSProperties}>{selectedAsset.symbol[0]}</div>
-              <div><div className="instrument-name"><h1>{selectedAsset.symbol}</h1><span className="market-badge">{selectedAsset.assetClass}</span></div><p>{selectedAsset.name} <span>·</span> {selectedAsset.exchange}</p></div>
+              <div><div className="instrument-name"><h1>{selectedAsset.symbol}</h1><span className="market-badge">{t(selectedAsset.assetClass)}</span></div><p>{selectedAsset.name} <span>·</span> {selectedAsset.exchange}</p></div>
             </div>
             <div className="instrument-price"><strong>{snapshot == null ? "—" : formatPrice(snapshot, selectedAsset.decimals)} <small>{currency}</small></strong>
               <span className={change === null ? "" : change >= 0 ? "positive" : "negative"}>
                 {change !== null && (change >= 0 ? <ArrowUpRight size={14}/> : <ArrowDownLeft size={14}/>)}
-                {change === null ? "No market data" : `${change >= 0 ? "+" : ""}${formatPrice(change, selectedAsset.decimals)} (${changePct! >= 0 ? "+" : ""}${changePct!.toFixed(2)}%)`}
+                {change === null ? t("No market data") : `${change >= 0 ? "+" : ""}${formatPrice(change, selectedAsset.decimals)} (${changePct! >= 0 ? "+" : ""}${changePct!.toFixed(2)}%)`}
                 <small> {t("/ LAST TWO BARS")}</small>
               </span>
             </div>
           </div>
 
           <div className="market-stats">
-            <div><span>{quote?.bid == null ? "BID / MODEL" : "EXCHANGE BID"}</span><strong>{mode==="replay" ? "—" : quote?.bid != null ? formatPrice(quote.bid, selectedAsset.decimals) : "Unavailable"}</strong></div>
-            <div><span>{quote?.ask == null ? "ASK / MODEL" : "EXCHANGE ASK"}</span><strong>{mode==="replay" ? "—" : quote?.ask != null ? formatPrice(quote.ask, selectedAsset.decimals) : "Unavailable"}</strong></div>
+            <div><span>{t(quote?.bid == null ? "BID / MODEL" : "EXCHANGE BID")}</span><strong>{mode==="replay" ? "—" : quote?.bid != null ? formatPrice(quote.bid, selectedAsset.decimals) : "Unavailable"}</strong></div>
+            <div><span>{t(quote?.ask == null ? "ASK / MODEL" : "EXCHANGE ASK")}</span><strong>{mode==="replay" ? "—" : quote?.ask != null ? formatPrice(quote.ask, selectedAsset.decimals) : "Unavailable"}</strong></div>
             <div><span>{t("VISIBLE HIGH")}</span><strong>{high == null ? "—" : formatPrice(high, selectedAsset.decimals)}</strong></div>
             <div><span>{t("VISIBLE LOW")}</span><strong>{low == null ? "—" : formatPrice(low, selectedAsset.decimals)}</strong></div>
-            <div className="market-stats-source"><span className="muted-dot"/>{loadingMarket ? "LOADING" : quote?.source?.includes("Coinbase") ? "COINBASE" : "INDICATIVE"}</div>
+            <div className="market-stats-source"><span className="muted-dot"/>{t(loadingMarket ? "LOADING" : quote?.source?.includes("Coinbase") ? "COINBASE" : "INDICATIVE")}</div>
           </div>
 
           <section className="chart-card">
             <div className="chart-toolbar">
-              <div className="chart-toolbar-label"><CandlestickChart size={17}/><strong>{t("Price chart")}</strong><span className="demo-pill">{history ? "HISTORICAL OHLCV" : "NO DATA"}</span></div>
+              <div className="chart-toolbar-label"><CandlestickChart size={17}/><strong>{t("Price chart")}</strong><span className="demo-pill">{t(history ? "HISTORICAL OHLCV" : "NO DATA")}</span></div>
               <div className="chart-actions">
                 <div className="timeframe-control" aria-label={t("Timeframe")}>{RANGES.map(period =>
                   <button type="button" key={period} className={range===period ? "control-active" : ""} aria-pressed={range===period} onClick={() => setRange(period)}>{period}</button>)}
@@ -313,13 +313,13 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
                 <button type="button" className={mode==="market"?"mode-selected":""} onClick={()=>changeMode("market")}><Activity size={14}/> {t("Market")}</button>
                 <button type="button" className={mode==="replay"?"mode-selected":""} onClick={()=>changeMode("replay")}><Clock3 size={14}/> {t("Replay")}</button>
               </div>
-              <span>{history ? `${history.source} · latest bar ${dt(history.bars.at(-1)!.time)}` : "Connect local API for market history"}</span>
+              <span>{history ? `${history.source} · latest bar ${dt(history.bars.at(-1)!.time)}` : t("Connect local API for market history")}</span>
             </div>
             <div className="chart-body">
               {visibleBars.length ? <PriceChart asset={selectedAsset} range={range} style={chartStyle} bars={visibleBars}/> :
                 <div className="chart-placeholder">{loadingMarket ? <RefreshCw size={26} className="spin"/> : <Database size={26}/>}
-                  <strong>{loadingMarket ? "Fetching market history" : "Chart not available"}</strong>
-                  <span>{marketError || "Start the Python API and select an available instrument."}</span>
+                  <strong>{t(loadingMarket ? "Fetching market history" : "Chart not available")}</strong>
+                  <span>{t(marketError || "Start the Python API and select an available instrument.")}</span>
                 </div>}
             </div>
             {mode==="replay" && <div className="replay-controls">
@@ -329,14 +329,14 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
               <button type="button" onClick={()=>stepReplay(5)} disabled={!allBars.length || replayIndex >= allBars.length-1}><FastForward size={17}/> +5</button>
             </div>}
             <div className="chart-footer"><span><span className="legend-dot up-dot"/> {t("Up")} <span className="legend-dot down-dot"/> {t("Down")} <span className="legend-volume"/> {t("Volume")}</span>
-              <span>{mode==="replay" ? "No future bars displayed" : "Historical data, not tick-by-tick"} · <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">{t("Charts by TradingView")}</a></span>
+              <span>{t(mode==="replay" ? "No future bars displayed" : "Historical data, not tick-by-tick")} · <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">{t("Charts by TradingView")}</a></span>
             </div>
           </section>
 
           <section className="portfolio-card" id="portfolio-panel">
-            <div className="section-heading"><div><span className="eyebrow">{mode==="replay"?"ISOLATED REPLAY ACCOUNT":"SQLITE PAPER ACCOUNT"}</span><h2>{t("Portfolio overview")}</h2></div><span className="sim-account"><span className="local-dot"/> {t("PAPER ACCOUNT")}</span></div>
+            <div className="section-heading"><div><span className="eyebrow">{t(mode==="replay"?"ISOLATED REPLAY ACCOUNT":"SQLITE PAPER ACCOUNT")}</span><h2>{t("Portfolio overview")}</h2></div><span className="sim-account"><span className="local-dot"/> {t("PAPER ACCOUNT")}</span></div>
             <div className="portfolio-metrics">
-              <div><span>{t("NET LIQUIDATION")}</span><strong>{equity == null ? "—" : formatMoney(equity)}</strong><small>{mode==="replay"?"At current replay close":"Unavailable if any mark missing"}</small></div>
+              <div><span>{t("NET LIQUIDATION")}</span><strong>{equity == null ? "—" : formatMoney(equity)}</strong><small>{t(mode==="replay"?"At current replay close":"Unavailable if any mark missing")}</small></div>
               <div><span>{t("AVAILABLE CASH")}</span><strong>{totalCash == null ? "—" : formatMoney(totalCash)}</strong><small>{t("USD cash-only")}</small></div>
               <div><span>{t("MARKET EXPOSURE")}</span><strong>{exposure == null ? "—" : formatMoney(exposure)}</strong><small>{openCount} {t("open instruments")}</small></div>
               <div><span>{t("UNREALIZED P&L")}</span><strong className={unrealized == null ? "" : unrealized >= 0 ? "positive" : "negative"}>{unrealized == null ? "—" : formatMoney(unrealized)}</strong><small>{t("Without simulated exit costs")}</small></div>
@@ -354,8 +354,8 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
                   : account?.positions.length ? <table className="data-table"><thead><tr><th>{t("ASSET")}</th><th>{t("QUANTITY")}</th><th>{t("AVERAGE COST")}</th><th>{t("MARKET VALUE")}</th><th>{t("UNREALIZED P&L")}</th></tr></thead>
                     <tbody>{account.positions.map(position => {
                       const asset = ASSETS.find(item => item.id === position.asset_id);
-                      return <tr key={position.asset_id}><td><strong>{asset?.symbol ?? position.asset_id}</strong><small>{asset?.assetClass}</small></td><td>{formatQuantity(position.quantity)}</td>
-                        <td>{formatPrice(position.average_cost, asset?.decimals ?? 2)}</td><td>{position.market_value === null ? "Unpriced" : formatMoney(position.market_value)}</td>
+                      return <tr key={position.asset_id}><td><strong>{asset?.symbol ?? position.asset_id}</strong><small>{asset?.assetClass?t(asset.assetClass):""}</small></td><td>{formatQuantity(position.quantity)}</td>
+                        <td>{formatPrice(position.average_cost, asset?.decimals ?? 2)}</td><td>{position.market_value === null ? t("Unpriced") : formatMoney(position.market_value)}</td>
                         <td className={position.unrealized_pnl == null ? "" : position.unrealized_pnl >= 0?"positive":"negative"}>{position.unrealized_pnl === null ? "—" : formatMoney(position.unrealized_pnl)}</td>
                       </tr>;
                     })}</tbody></table>
@@ -365,10 +365,10 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
                   <table className="data-table"><thead><tr><th>{t("TIME")}</th><th>{t("SYMBOL")}</th><th>{t("SIDE")}</th><th>{t("QTY")}</th><th>{t("FILL PRICE")}</th><th>{t("FEE")}</th></tr></thead>
                     <tbody>{mode==="replay" ? replayAccount.fills.map((fill, index) => <tr key={index}>
                       <td>{dt(fill.time)}</td><td><strong>{selectedAsset.symbol}</strong></td>
-                      <td className={fill.side==="buy"?"positive":"negative"}>{fill.side.toUpperCase()}</td><td>{formatQuantity(fill.quantity)}</td><td>{formatPrice(fill.price, selectedAsset.decimals)}</td><td>{formatMoney(fill.fee)}</td>
+                      <td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td><td>{formatQuantity(fill.quantity)}</td><td>{formatPrice(fill.price, selectedAsset.decimals)}</td><td>{formatMoney(fill.fee)}</td>
                     </tr>) : account?.fills.map(fill => <tr key={fill.id}>
                       <td>{dt(fill.created_at)}</td><td><strong>{ASSETS.find(a=>a.id===fill.asset_id)?.symbol ?? fill.asset_id}</strong></td>
-                      <td className={fill.side==="buy"?"positive":"negative"}>{fill.side.toUpperCase()}</td><td>{formatQuantity(fill.quantity)}</td>
+                      <td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td><td>{formatQuantity(fill.quantity)}</td>
                       <td>{formatPrice(fill.price, ASSETS.find(a=>a.id===fill.asset_id)?.decimals ?? 2)}</td><td>{formatMoney(fill.fee)}</td>
                     </tr>)}</tbody></table>
                   : <div className="empty-state"><Clock3 size={25}/><strong>{t("No executed orders")}</strong><span>{t("Paper fills will appear here.")}</span></div>
@@ -379,15 +379,15 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
           <section className="portfolio-card strategy-card">
             <div className="section-heading">
               <div><span className="eyebrow">{t("HISTORICAL RESEARCH")}</span><h2>{t("Strategy backtester")}</h2></div>
-              <button type="button" className="text-link" onClick={()=>setShowBacktest(v=>!v)}>{showBacktest ? "Collapse" : "Configure"} <ChevronDown size={15}/></button>
+              <button type="button" className="text-link" onClick={()=>setShowBacktest(v=>!v)}>{t(showBacktest ? "Collapse" : "Configure")} <ChevronDown size={15}/></button>
             </div>
             {showBacktest && <div className="strategy-body">
               <p>{t("Backtest an SMA crossover using one year of actual daily candles. Signal at bar close; modeled execution at the")} <strong>{t("next bar open")}</strong>.</p>
               <div className="strategy-settings"><label>{t("Fast MA (days)")}<input type="number" min="2" max="99" value={fast} onChange={e=>setFast(e.target.value)}/></label>
                 <label>{t("Slow MA (days)")}<input type="number" min="3" max="100" value={slow} onChange={e=>setSlow(e.target.value)}/></label>
-                <button type="button" disabled={runningBacktest || !supported} onClick={()=>void runBacktest()}><Play size={15}/>{runningBacktest ? "Running..." : "Run backtest"}</button>
+                <button type="button" disabled={runningBacktest || !supported} onClick={()=>void runBacktest()}><Play size={15}/>{t(runningBacktest ? "Running..." : "Run backtest")}</button>
               </div>
-              {backtestError && <p className="form-error">{backtestError}</p>}
+              {backtestError && <p className="form-error">{t(backtestError)}</p>}
               {!supported && <p className="support-text">{t("This instrument does not yet support the USD cash strategy engine.")}</p>}
               {backtest && <div className="backtest-results">
                 <div><span>{t("STRATEGY RETURN")}</span><strong className={backtest.return_pct>=0?"positive":"negative"}>{backtest.return_pct.toFixed(2)}%</strong></div>
@@ -402,39 +402,39 @@ function App({onOpenArcade}: {onOpenArcade:()=>void}) {
 
         <aside className="ticket-column">
           <section className="ticket-card">
-            <div className="ticket-heading"><div><span className="eyebrow">{mode==="replay"?"NEXT-BAR EXECUTION":"PAPER EXECUTION"}</span><h2>{t("Order ticket")}</h2></div><span className="ticket-icon"><ArrowRight size={18}/></span></div>
-            <div className="ticket-security"><span className="ticket-security-symbol">{selectedAsset.symbol}</span><span className="ticket-security-class">{selectedAsset.assetClass}<ChevronDown size={12}/></span></div>
+            <div className="ticket-heading"><div><span className="eyebrow">{t(mode==="replay"?"NEXT-BAR EXECUTION":"PAPER EXECUTION")}</span><h2>{t("Order ticket")}</h2></div><span className="ticket-icon"><ArrowRight size={18}/></span></div>
+            <div className="ticket-security"><span className="ticket-security-symbol">{selectedAsset.symbol}</span><span className="ticket-security-class">{t(selectedAsset.assetClass)}<ChevronDown size={12}/></span></div>
             <div className="side-switch">
               <button type="button" className={side==="buy"?"buy-active":""} onClick={()=>{setSide("buy");setTradeError("");}}>{t("Buy / Long")}</button>
               <button type="button" className={side==="sell"?"sell-active":""} onClick={()=>{setSide("sell");setTradeError("");}}>{t("Sell / Close")}</button>
             </div>
             <form onSubmit={e=>void placeOrder(e)}>
               <div className="field-head"><label htmlFor="order-type">{t("Order type")}</label></div>
-              <select id="order-type" value="market" onChange={()=>{}} aria-label={t("Order type")}><option value="market">{mode==="replay"?"Next-bar open (replay)":"Market (modeled)"}</option></select>
-              <div className="field-head"><label htmlFor="order-quantity">{t("Quantity")} {wholeUnits?"(whole units)":"(base units)"}</label><span className="field-hint">Held: {formatQuantity(held)}</span></div>
+              <select id="order-type" value="market" onChange={()=>{}} aria-label={t("Order type")}><option value="market">{t(mode==="replay"?"Next-bar open (replay)":"Market (modeled)")}</option></select>
+              <div className="field-head"><label htmlFor="order-quantity">{t("Quantity")} {t(wholeUnits?"(whole units)":"(base units)")}</label><span className="field-hint">Held: {formatQuantity(held)}</span></div>
               <div className="quantity-field"><input id="order-quantity" type="number" inputMode="decimal" step={wholeUnits?"1":"any"} min={wholeUnits?"1":"0.00000001"} value={quantity} onChange={e=>{setQuantity(e.target.value);setTradeError("");}} required/><span>{t("UNITS")}</span></div>
               <div className="ticket-summary">
                 <div><span>{t("Last reference price")}</span><strong>{snapshot==null?"—":formatPrice(snapshot, selectedAsset.decimals)}</strong></div>
-                <div><span>{mode==="replay"?"Est. fill at current close":"Estimated fill price"}</span><strong>{indicativeFill == null?"—":formatPrice(indicativeFill, selectedAsset.decimals)}</strong></div>
-                <div><span>{mode==="replay"?"Model spread":"Modeled spread"}</span><strong>{selectedAsset.spreadBps} bps</strong></div>
-                <div className="ticket-total"><span>{mode==="replay"?"Illustrative order value":"Estimated order value"}</span><strong>{formatMoney(estimate)}</strong></div>
+                <div><span>{t(mode==="replay"?"Est. fill at current close":"Estimated fill price")}</span><strong>{indicativeFill == null?"—":formatPrice(indicativeFill, selectedAsset.decimals)}</strong></div>
+                <div><span>{t(mode==="replay"?"Model spread":"Modeled spread")}</span><strong>{selectedAsset.spreadBps} bps</strong></div>
+                <div className="ticket-total"><span>{t(mode==="replay"?"Illustrative order value":"Estimated order value")}</span><strong>{formatMoney(estimate)}</strong></div>
               </div>
               {replayAccount.pending && mode==="replay" && <p className="support-text">Pending {replayAccount.pending.side} order for {formatQuantity(replayAccount.pending.quantity)} units. Advance replay to fill.</p>}
-              {tradeError && <p role="alert" className="form-error">{tradeError}</p>}
-              {!supported && <p className="support-text">{selectedAsset.assetClass==="Options"?"Choose a real dated contract in a future options-chain release.":selectedAsset.assetClass==="Futures"?"Chart-only until multiplier, margin, and settlement rules are implemented.":"CAD-to-USD conversion is not implemented."}</p>}
-              {supported && mode==="market" && !quoteReady && <p className="support-text">{quote?.block_reason ?? "No fresh market quote. Orders are blocked."}</p>}
+              {tradeError && <p role="alert" className="form-error">{t(tradeError)}</p>}
+              {!supported && <p className="support-text">{t(selectedAsset.assetClass==="Options"?"Choose a real dated contract in a future options-chain release.":selectedAsset.assetClass==="Futures"?"Chart-only until multiplier, margin, and settlement rules are implemented.":"CAD-to-USD conversion is not implemented.")}</p>}
+              {supported && mode==="market" && !quoteReady && <p className="support-text">{t(quote?.block_reason ?? "No fresh market quote. Orders are blocked.")}</p>}
               <button type="submit" className={`submit-order ${side==="sell"?"submit-sell":""}`} disabled={!canTrade || placing}>
                 {side==="buy"?<ArrowUpRight size={19}/>:<ArrowDownLeft size={19}/>}
-                {placing?"Submitting...":mode==="replay"?`Queue replay ${side}`:`Paper ${side}`}
+                {placing?t("Submitting..."):mode==="replay"?`${t("Queue replay")} ${t(side)}`:`${t("Paper")} ${t(side)}`}
               </button>
             </form>
             <div className="ticket-footnote"><ShieldCheck size={15}/><span>{t("Long-only USD account. Market-mode orders require fresh quotes during supported sessions. Spread, slippage and fees are modeled, not guaranteed execution.")}</span></div>
           </section>
           <section className="account-card">
-            <div className="account-heading"><span>{t("SIMULATION STATUS")}</span><span className="account-status"><span className={backendOnline?"local-dot":"offline-dot"}/>{backendOnline?"ONLINE":"OFFLINE"}</span></div>
-            <div className="account-item"><Database size={17}/><div><strong>{t("Market data")}</strong><span>{history?.source ?? "Unavailable"}</span></div><span className="offline-tag">{history?"REAL":"NONE"}</span></div>
+            <div className="account-heading"><span>{t("SIMULATION STATUS")}</span><span className="account-status"><span className={backendOnline?"local-dot":"offline-dot"}/>{t(backendOnline?"ONLINE":"OFFLINE")}</span></div>
+            <div className="account-item"><Database size={17}/><div><strong>{t("Market data")}</strong><span>{history?.source ?? "Unavailable"}</span></div><span className="offline-tag">{t(history?"REAL":"NONE")}</span></div>
             <div className="account-item"><Clock3 size={17}/><div><strong>{t("Last quote")}</strong><span>{quote ? dt(quote.timestamp) : "Unavailable"}</span></div></div>
-            <div className="account-item">{mode==="replay"?<PauseCircle size={17}/>:<Check size={17}/>}<div><strong>{mode==="replay"?"Historical replay":"Quote freshness"}</strong><span>{mode==="replay"?"Step-by-step, next-open fills":quote?.fresh?"Fresh enough for paper model":"Stale or unavailable"}</span></div></div>
+            <div className="account-item">{mode==="replay"?<PauseCircle size={17}/>:<Check size={17}/>}<div><strong>{t(mode==="replay"?"Historical replay":"Quote freshness")}</strong><span>{t(mode==="replay"?"Step-by-step, next-open fills":quote?.fresh?"Fresh enough for paper model":"Stale or unavailable")}</span></div></div>
             <div className="account-item"><RefreshCw size={17}/><div><strong>{t("Market snapshots")}</strong><span>{t("Refresh quote roughly every 45 seconds")}</span></div>
               <button type="button" className="mini-icon-button" onClick={() => {void getQuote(selectedId).then(next=>{setQuote(next);setLastQuotes(p=>({...p,[selectedId]:next}));}).catch(e=>setMarketError(errorMessage(e)));}} title={t("Refresh quote")}><RefreshCw size={14}/></button>
             </div>
