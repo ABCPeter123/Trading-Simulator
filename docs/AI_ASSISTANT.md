@@ -24,8 +24,10 @@ now uses a **240-second read timeout** by default, configurable via
 `TRADING_SIM_AI_TIMEOUT_SECONDS` in `.env` (60-600 seconds). The local
 development proxy also accepts long-running requests.
 
-The UI shows elapsed processing time, and the backend requests a shorter
-reply while keeping the model loaded for 20 minutes where Ollama supports it.
+The UI shows elapsed processing time. Opening the website triggers a non-blocking
+local preload through `POST /api/ai/warmup`, and Ollama is asked to keep the
+selected model loaded for 30 minutes. Status indicates whether loading is
+underway. Startup requests retry if the backend starts later than the frontend.
 
 If your computer cannot run Llama 3.2 3B quickly, use its smaller local model:
 
@@ -43,6 +45,36 @@ TRADING_SIM_AI_TIMEOUT_SECONDS=240
 
 Restart the backend, and use the assistant's **Recheck AI** control.
 This remains completely local; no OpenAI API or per-request charges.
+
+## Better local model quality
+
+The bundled default `llama3.2` is small, so detailed financial analysis
+can remain weak even with better prompts. For stronger English and Chinese
+reasoning, choose a larger locally installed model if your PC has adequate RAM.
+For example:
+
+```powershell
+ollama pull qwen2.5:7b
+```
+
+Set these values in your existing ignored `.env` file, then restart the
+Python backend:
+
+```dotenv
+TRADING_SIM_AI_PROVIDER=ollama
+TRADING_SIM_AI_MODEL=qwen2.5:7b
+```
+
+This downloads several GB and requires additional memory. It remains local
+and has no per-request API fee. Smaller models may run faster, but often
+produce weaker reasoning. You can revert to `llama3.2` at any time.
+
+The assistant now receives a system prompt describing strategy grammar,
+quantitative evidence checks, benchmark comparisons, risk, sizing, and
+limitations. It also receives up to 24 **revealed-only** equity/benchmark
+observations, current positions and exposure, rolling results, and the last
+12 executions. It answers in your selected interface language even if your
+question uses the other language. It cannot inspect unrevealed candles.
 
 ## First-time setup: local Ollama (default)
 
@@ -105,7 +137,7 @@ It reads existing server-side reports for the selected saved game:
   and risk controls
 - Current positions and approximate mark-to-market values
 - Current equity, return, drawdown, fees and benchmark comparison
-- Rolling returns, instrument attribution and at most 8 recent executions
+- Rolling returns, instrument attribution and at most 12 recent executions plus 24 observed curve checkpoints
 
 The model cannot access the entire hidden provider snapshot, all future
 market bars, broker account credentials, trade authorization, or your
@@ -136,8 +168,9 @@ must not promise simultaneous 50/50 allocation or risk-free performance.
 - `GET /api/ai/status`: returns selected provider and model information,
   not credentials. For Ollama it probes localhost for the selected installed
   model; this does not guarantee all later inference requests will succeed
+- `POST /api/ai/warmup`: starts a non-blocking, idempotent model preload on localhost only
 - `POST /api/ai/ask`: accepts `mode` (`single` or `portfolio`),
-  `run_id`, `question`, and up to 6 short history entries
+  `run_id`, `question`, optional `language`, and up to 6 short history entries
 - `backend/ai_assistant.py`: safe read-only orchestration and DSL validation
 - `src/AIAssistant.tsx`: bilingual chat with explicit draft review
 - `backend/tests/test_ai_assistant.py`: offline provider/privacy/validation tests
