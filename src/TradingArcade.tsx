@@ -378,7 +378,7 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
              </label>
              <span className="an-interval-warning">{t("Signals and fills use replay resolution, not the aggregated chart view.")}</span>
            </div>
-           <div className="arc-chart-wrap"><PriceChart asset={asset!} range="1Y" style={chartStyle} bars={displayedBars} visibleWindow={120}
+           <div className="arc-chart-wrap"><PriceChart asset={asset!} range="1Y" style={chartStyle} bars={displayedBars}
              smaPeriods={showSma?[maFast,maSlow]:[]} showCrossovers={showSma&&showCrossovers}
              trades={showTrades?mapChartTrades(chartTrades,activeChartView):[]}/></div>
            <div className="an-chart-key">
