@@ -6,6 +6,8 @@ import {
   Search, ShieldCheck, ShoppingCart, Trash2, Wallet,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
+import StrategyAnalytics from "./StrategyAnalytics";
+import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
 import type { CatalogInstrument, DiscoveredInstrument } from "./arcadeApi";
@@ -57,6 +59,12 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const [stop, setStop] = useState("0");
   const [take, setTake] = useState("0");
   const [chartStyle, setChartStyle] = useState<"candles"|"line">("candles");
+  const [maFast, setMaFast] = useState(20);
+  const [maSlow, setMaSlow] = useState(100);
+  const [showSma, setShowSma] = useState(true);
+  const [showCrossovers, setShowCrossovers] = useState(true);
+  const [showTrades, setShowTrades] = useState(true);
+  const [analyticsFills, setAnalyticsFills] = useState<{runId:string;executions:StrategyExecution[]}|null>(null);
 
   const selected = catalog.find(item => item.id === focused);
   const chosenAsset: Asset = useMemo(() => {
@@ -141,6 +149,10 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const current = positions.find(p=>p.asset_id===focused);
   const bars = season?.bars[focused] ?? [];
   const last = bars.at(-1);
+  const markers = (analyticsFills?.runId === season?.id
+    ? analyticsFills.executions : season?.fills ?? [])
+    .filter(fill=>fill.asset_id===focused)
+    .map(fill=>({time:fill.time,side:fill.side,quantity:fill.quantity,price:fill.price,source:fill.source}));
   const filtered = catalog.filter(i=>eligible(i)&&
     (i.symbol+" "+i.name).toLowerCase().includes(search.toLowerCase())).slice(0,100);
   const discover = async () => {
@@ -261,8 +273,22 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             <div className="arc-chart-view"><button className={chartStyle==="candles"?"selected":""} onClick={()=>setChartStyle("candles")}>{t("Candles")}</button>
               <button className={chartStyle==="line"?"selected":""} onClick={()=>setChartStyle("line")}>{t("Line")}</button></div>
           </div>
+          <div className="an-chart-controls">
+            <label><input type="checkbox" checked={showSma} onChange={e=>setShowSma(e.target.checked)}/>{t("SMA overlays")}</label>
+            {showSma&&<><label>{t("Fast SMA")} <select value={maFast} onChange={e=>setMaFast(Number(e.target.value))}>{[5,10,20,30,50,100,150,200].map(p=><option key={p} value={p}>{p}</option>)}</select></label>
+              <label>{t("Slow SMA")} <select value={maSlow} onChange={e=>setMaSlow(Number(e.target.value))}>{[10,20,30,50,100,150,200].map(p=><option key={p} value={p}>{p}</option>)}</select></label>
+              <label><input type="checkbox" checked={showCrossovers} onChange={e=>setShowCrossovers(e.target.checked)}/>{t("Crossovers")}</label></>}
+            <label><input type="checkbox" checked={showTrades} onChange={e=>setShowTrades(e.target.checked)}/>{t("Trade markers")}</label>
+          </div>
           <div className="arc-chart-wrap">{bars.length>0&&
-            <PriceChart asset={chosenAsset} range="1Y" style={chartStyle} bars={bars} visibleWindow={110}/>}</div>
+            <PriceChart asset={chosenAsset} range="1Y" style={chartStyle} bars={bars} visibleWindow={110}
+              smaPeriods={showSma?[maFast,maSlow]:[]} showCrossovers={showSma&&showCrossovers}
+              trades={showTrades?markers:[]}/>}</div>
+          <div className="an-chart-key">
+            {showSma&&<><b style={{color:"#e9bb74"}}>SMA {maFast}</b><b style={{color:"#a99dff"}}>SMA {maSlow}</b></>}
+            {showTrades&&<><b style={{color:"#4ad4a0"}}>{t("Buy marker")}</b><b style={{color:"#fa7c8a"}}>{t("Sell marker")}</b></>}
+            {showSma&&showCrossovers&&<b>{t("SMA crossover dots")}</b>}
+          </div>
           <div className="port-source">{season.sources[focused]} · {t("Last actual bar:")} {last?fmtTime(last.time):t("none")}
             {current&&!current.has_bar_today&&<span> · {t("Market closed on")} {season.day}, {t("no orders filled for this symbol")}</span>}</div>
         </div>
@@ -275,6 +301,8 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             </tr>)}
           </tbody></table></div>
         </div>
+        <StrategyAnalytics runId={season.id} step={season.current_step} mode="portfolio" assetName={assetName}
+          onReport={report=>setAnalyticsFills({runId:season.id,executions:report.executions})}/>
         <div className="port-strategy">
           <div className="arc-box-head"><div><Bot size={17}/><strong>{t("Cross-asset strategy lab")}</strong></div><span className="arc-tag">{t("SAFE RULE LANGUAGE")}</span></div>
           <p>{t("A signal from one instrument can trade another. Orders queue after the signal candle closes and fill no earlier than the target symbol's next actual session.")}</p>
