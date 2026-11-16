@@ -74,7 +74,7 @@ The AI assistant still defaults to **free local Ollama**. Previously,
 the backend cut off responses after a 45-second timeout even when
 the model was still processing. The local client now has a longer
 default **240-second read timeout**, and retains the selected model
-in memory for 20 minutes where supported.
+in memory for 30 minutes where supported.
 
 Local responses have a smaller maximum output budget to improve latency.
 The UI displays an elapsed time while the model processes. The Vite
