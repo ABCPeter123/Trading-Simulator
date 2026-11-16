@@ -258,7 +258,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           </label>
           <label>{t("Start date (optional)")}<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
         </div>
-        <small className="arc-date-hint">{t("Intraday data has limited provider history. Daily bars support long-term seasons. The game never invents missing minute prices.")}</small>
+        <small className="arc-date-hint">{t("Intraday providers have limited historical coverage. Daily bars support longer backtests; missing minute prices are never manufactured.")}</small>
         {error&&<p className="arc-error" role="alert">{error}</p>}
         <button className="arc-cta" disabled={busy||basket.length<2}
           onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate,resolution))}>
@@ -420,7 +420,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         <section className="port-queue">
           <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Pending orders")}</strong></div><span>{season.orders.length}</span></div>
           {season.orders.length===0?<p>{t("No pending orders")}</p>:season.orders.map(o=><div className="port-queue-item" key={o.id}>
-            <span>{assetName(o.asset_id)} {t(o.side.toUpperCase())} {o.size}{o.size_type==="percent"?"%":""} · {t(o.kind.toUpperCase())} {o.source==="bot"?t("(bot)"):""}</span>
+            <span>{assetName(o.asset_id)} {t(o.side.toUpperCase())} {o.size}{o.size_type==="percent"?"%":""} · {t(o.kind.toUpperCase())} {o.source==="bot"?t("(automated)"):""}</span>
             <button disabled={busy||playing||viewingPast} title={t("Cancel order")} onClick={()=>void update(()=>cancelPortfolioOrder(season.id,o.id))}><Trash2 size={15}/></button>
           </div>)}
         </section>
