@@ -1,0 +1,18 @@
+.sl-library{border:1px solid #41536c;border-radius:11px;background:#142238;color:#e9f0ff;overflow:hidden}
+.sl-head{display:flex;align-items:center;gap:11px;padding:14px 17px;background:#202e43;border-bottom:1px solid #3b4a62}
+.sl-head>div{flex:1}.sl-head h3{font-size:15px;margin:0 0 5px}.sl-head p{font-size:11px;margin:0;color:#acbacf}.sl-head>span{color:#bdb2ed;font-size:11px;white-space:nowrap}
+.sl-save{padding:13px 16px;display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.sl-save label{display:flex;flex:1;min-width:220px;flex-direction:column;gap:6px;font-size:11px;color:#b7c6dd}
+.sl-save input{background:#111d2d;color:#f3f3ff;border:1px solid #4a607d;border-radius:7px;padding:11px}
+.sl-save button,.sl-preview button{border:1px solid #9789da;border-radius:7px;background:#504b87;color:#fff;display:flex;align-items:center;gap:7px;padding:11px;font-weight:750;font-size:11px}
+.sl-save button:disabled{opacity:.5}.sl-help{font-size:10px;color:#9aacbd;padding:0 16px 9px;line-height:1.5;margin:0}
+.sl-list{padding:0 13px 13px;max-height:325px;overflow:auto}
+.sl-list>p{font-size:11px;color:#a7b7ca;padding:8px}
+.sl-item{display:flex;align-items:center;gap:9px;border:1px solid #31445c;border-radius:8px;margin-top:6px;background:#1a2a40}
+.sl-item.selected{border-color:#9180d2;background:#283456}
+.sl-item-title{padding:10px 12px;display:flex;flex:1;flex-direction:column;align-items:start;gap:6px;min-width:0;background:transparent;border:0;color:#e7edfa;text-align:left}
+.sl-item-title strong{font-size:12px;overflow-wrap:anywhere}.sl-item-title small{display:flex;gap:6px;align-items:center;color:#9baec1;font-size:10px;flex-wrap:wrap}
+.sl-trash{background:transparent;border:0;color:#cb9faf;padding:12px}
+.sl-preview{padding:12px 16px;border-top:1px solid #384a62}
+.sl-preview pre{font-size:11px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:#101a28;border-radius:6px;color:#c7ddfa}
+.sl-preview button{margin-left:auto}.sl-message,.sl-error{font-size:11px;line-height:1.5;padding:0 16px 12px}.sl-message{color:#a1e9cd}.sl-error{color:#f5a4ad}
