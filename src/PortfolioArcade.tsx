@@ -2,7 +2,7 @@ import { useI18n } from "./i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowUpRight, ArrowDownRight, BarChart3, Bot, Check,
-  ChevronRight, Clock3, FastForward, Pause, Play, Plus, Save,
+  ChevronLeft, ChevronRight, Clock3, FastForward, Pause, Play, Plus, Save,
   Search, ShieldCheck, ShoppingCart, Trash2, Wallet,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
@@ -10,6 +10,9 @@ import { REPLAY_WINDOWS, RESOLUTIONS, aggregateBars, chartTrades as mapChartTrad
 import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 import StrategyAnalytics from "./StrategyAnalytics";
 import AIAssistant from "./AIAssistant";
+import WorkspaceTabs from "./WorkspaceTabs";
+import type { WorkspaceTab } from "./WorkspaceTabs";
+import StochasticResearch from "./StochasticResearch";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
@@ -18,7 +21,7 @@ import type { Asset, TradeSide } from "./types";
 import {
   listPortfolioSeasons, loadPortfolioSeason, newPortfolioSeason,
   advancePortfolio, tradePortfolio, cancelPortfolioOrder,
-  savePortfolioStrategy, savePortfolioRisk,
+  savePortfolioStrategy, savePortfolioRisk, portfolioAt,
 } from "./portfolioApi";
 import type { PortfolioSaved, PortfolioSeason } from "./portfolioApi";
 import "./arcade.css";
@@ -35,6 +38,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const [catalog, setCatalog] = useState<CatalogInstrument[]>([]);
   const [saved, setSaved] = useState<PortfolioSaved[]>([]);
   const [season, setSeason] = useState<PortfolioSeason|null>(null);
+  const [workspaceTab,setWorkspaceTab] = useState<WorkspaceTab>("overview");
   const [setup, setSetup] = useState(true);
   const [basket, setBasket] = useState<string[]>(["spy","qqq"]);
   const [search, setSearch] = useState("");
@@ -87,6 +91,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
     activeSeasonRef.current = next.id;
     setSeason(next);
     if (changedRun) {
+      setWorkspaceTab("overview");
       setChartView(next.resolution??"1d");
       setFocused(next.asset_ids[0]);
       setSource(next.asset_ids[0]);
@@ -136,7 +141,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   };
 
   useEffect(() => {
-    if (!playing || !season || season.finished || setup) return;
+    if (!playing || !season || season.finished || setup || season.viewing_past) return;
     const timer = setInterval(() => {
       if (busyRef.current) return;
       busyRef.current = true;
@@ -150,6 +155,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
 
   const assetName = (id:string) => catalog.find(i=>i.id===id)?.symbol ??
     ASSETS.find(i=>i.id===id)?.symbol ?? id.toUpperCase();
+  const viewingPast=!!season?.viewing_past;
   const positions = season?.positions ?? [];
   const current = positions.find(p=>p.asset_id===focused);
   const bars = season?.bars[focused] ?? [];
@@ -185,6 +191,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
     finally{setSearchBusy(false);}
   };
   const advance = (n:number, untilAction=false) => {
+    if (viewingPast) return;
     if(season) void update(()=>advancePortfolio(season.id,n,untilAction));
   };
   const addRule = () => {
@@ -205,15 +212,15 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       <div className="arc-top-left">
         <button className="arc-back" onClick={()=>{setPlaying(false);onExit();}} aria-label="Back to single-asset Arcade"><ArrowLeft size={18}/></button>
         <div className="arc-logo"><BarChart3 size={23}/></div>
-        <div className="arc-brand">{t("PORTFOLIO")} <span>{t("ARCADE")}</span><small>{t("MULTI-ASSET HISTORICAL TRADING")}</small></div>
+        <div className="arc-brand">{t("Portfolio")} <span>{t("Simulator")}</span><small>{t("Multi-asset historical research")}</small></div>
       </div>
       <div className="arc-top-right">
-        {season && <span className="arc-live"><span/> {showReplayTime(season.day,baseResolution)} · LVL {season.metrics.level}</span>}
-        <button className="arc-outline-button" onClick={()=>{setPlaying(false);setSetup(true);}}><Plus size={15}/> {t("New basket")}</button>
+        {season && <span className="arc-live"><span/> {showReplayTime(season.day,baseResolution)}</span>}
+        <button className="arc-outline-button" onClick={()=>{setPlaying(false);setSetup(true);}}><Plus size={15}/> {t("New portfolio session")}</button>
       </div>
     </header>
     {setup || !season ? <main className="port-setup">
-      <span className="arc-upper">{t("MULTI-ASSET CHALLENGE")}</span>
+      <span className="arc-upper">{t("MULTI-ASSET RESEARCH")}</span>
       <h1>{t("One portfolio.")} <em>{t("Multiple markets.")}</em></h1>
       <p>{t("Choose 2 to 5 instruments. All positions use a shared $100,000 USD account. Prices come from synchronized historical daily candles, with no future information revealed.")}</p>
       <div className="port-picker">
@@ -253,7 +260,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         {error&&<p className="arc-error" role="alert">{error}</p>}
         <button className="arc-cta" disabled={busy||basket.length<2}
           onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate,resolution))}>
-          <Play size={16}/> {t(busy?"Loading real historical data...":"Start portfolio season")}
+          <Play size={16}/> {t(busy?"Loading real historical data...":"Create portfolio session")}
         </button>
         {saved.length>0 && <label>{t("Resume saved season")}<select defaultValue="" onChange={e=>{
           if(e.target.value) void update(()=>loadPortfolioSeason(e.target.value));
@@ -275,18 +282,27 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         </div>
         <div className="port-toolbar">
           <span><Clock3 size={15}/> {showReplayTime(season.day,baseResolution)} · {t("Step")} {season.current_step+1}/{season.total_steps}</span>
-          <div><button disabled={busy||playing||season.finished} onClick={()=>advance(1)}><ChevronRight size={16}/> {baseResolution==="1d"?t("1 day"):t("Next candle")}</button>
-            <button disabled={busy||playing||season.finished} onClick={()=>advance(5)}><FastForward size={15}/> +5</button>
-            <button disabled={busy||playing||season.finished} onClick={()=>advance(20)}><FastForward size={15}/> +20</button>
-            <button disabled={busy||playing||season.finished} onClick={()=>advance(100)}><FastForward size={15}/> +100</button>
-            <button disabled={busy||playing||season.finished||!season.strategy} onClick={()=>advance(100,true)}>{t("Next bot")}</button>
+          <div><button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(1)}><ChevronRight size={16}/> {baseResolution==="1d"?t("1 day"):t("Next candle")}</button>
+            <button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(5)}><FastForward size={15}/> +5</button>
+            <button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(20)}><FastForward size={15}/> +20</button>
+            <button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(100)}><FastForward size={15}/> +100</button>
+            <button disabled={busy||playing||season.finished||viewingPast||!season.strategy} onClick={()=>advance(100,true)}>{t("Next strategy signal")}</button>
             <label className="port-speed">{t("Autoplay step speed")}
               <select value={autoplaySpeed} onChange={e=>setAutoplaySpeed(Number(e.target.value))}>
                 {[1,5,10,25,50].map(i=><option value={i} key={i}>{i} / {t("tick")}</option>)}
               </select>
             </label>
-            <button disabled={busy||season.finished} onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={15}/>:<Play size={15}/>} {t(playing?"Pause":"Autoplay")}</button>
+            <button disabled={busy||season.finished||viewingPast} onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={15}/>:<Play size={15}/>} {t(playing?"Pause":"Autoplay")}</button>
           </div>
+        </div>
+
+        <div className="ts-time-actions">
+          <button type="button" disabled={busy||playing||season.current_step<=season.history_start}
+            onClick={()=>void update(()=>portfolioAt(season.id,season.current_step-1))}><ChevronLeft size={15}/>{t("Previous step")}</button>
+          <button type="button" disabled={busy||playing||season.current_step>=season.live_index}
+            onClick={()=>void update(()=>portfolioAt(season.id,season.current_step+1))}><ChevronRight size={15}/>{t("Next recorded step")}</button>
+          {viewingPast&&<button type="button" onClick={()=>void update(()=>loadPortfolioSeason(season.id))}>{t("Return to latest")}</button>}
+          <span className={viewingPast?"ts-past-note":""}>{viewingPast?t("Historical inspection: read-only. Your latest trades are unchanged."):t("Checkpoint history is saved as the simulation advances.")}</span>
         </div>
         <div className="port-asset-tabs">{season.asset_ids.map(id=><button key={id}
           className={id===focused?"active":""} onClick={()=>setFocused(id)}>
@@ -334,12 +350,17 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             </tr>)}
           </tbody></table></div>
         </div>
-        <StrategyAnalytics runId={season.id} step={season.current_step} mode="portfolio" assetName={assetName}
-          onReport={report=>setAnalyticsFills({runId:season.id,executions:report.executions})}/>
+        <div className="ts-analysis-panel"><StrategyAnalytics runId={season.id} step={season.current_step} mode="portfolio" assetName={assetName} atIndex={viewingPast?season.current_step:undefined}
+          onReport={report=>setAnalyticsFills({runId:season.id,executions:report.executions})}/></div>
+        <div className="ts-research-panel">
+          {workspaceTab==="scenarios"&&<StochasticResearch mode="portfolio" runId={season.id}
+            assetIds={season.asset_ids} step={season.current_step} viewingPast={viewingPast}
+            onStrategy={draft=>{setStrategy(draft);setWorkspaceTab("strategy");}}/>}
+        </div>
         <AIAssistant key={season.id} mode="portfolio" runId={season.id}
-          onDraft={draft=>setStrategy(draft)}/>
+          onDraft={draft=>{setStrategy(draft);setWorkspaceTab("strategy");}}/>
         <div className="port-strategy">
-          <div className="arc-box-head"><div><Bot size={17}/><strong>{t("Cross-asset strategy lab")}</strong></div><span className="arc-tag">{t("SAFE RULE LANGUAGE")}</span></div>
+          <div className="arc-box-head"><div><Bot size={17}/><strong>{t("Cross-asset Strategy Editor")}</strong></div><span className="arc-tag">{t("SAFE RULE LANGUAGE")}</span></div>
           <p>{t("A signal from one instrument can trade another. Orders queue after the signal candle closes and fill no earlier than the target symbol's next actual session.")}</p>
           <div className="port-rule-row">
             <label>{t("Signal symbol")}<select value={source} onChange={e=>setSource(e.target.value)}>{season.asset_ids.map(id=><option key={id} value={id}>{assetName(id)}</option>)}</select></label>
@@ -351,7 +372,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <div className="port-rule-row"><button onClick={()=>setStrategy(
             `WHEN ${source} SMA(10) CROSSES ABOVE SMA(30) BUY 25% ${target}\nWHEN ${source} SMA(10) CROSSES BELOW SMA(30) SELL 100% ${target}`
           )}>{t("Use crossover template")}</button>
-            <button disabled={busy||playing||strategy===season.strategy} onClick={()=>void update(()=>savePortfolioStrategy(season.id,strategy))}><Save size={16}/> {t("Save & arm bot")}</button>
+            <button disabled={busy||playing||viewingPast||strategy===season.strategy} onClick={()=>void update(()=>savePortfolioStrategy(season.id,strategy))}><Save size={16}/> {t("Save & activate strategy")}</button>
           </div>
         </div>
         <div className="port-history">
@@ -378,7 +399,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             <label>{t("Quantity")}<input type="number" min="0.00000001" step="any" required value={size} onChange={e=>setSize(e.target.value)}/></label>
             {sizeType==="percent"&&<div className="port-percent">{[10,25,50,100].map(n=><button key={n} type="button" onClick={()=>setSize(String(n))}>{n}%</button>)}</div>}
             <p>{t("Held:")} {fmtQty(current?.quantity??0)} · {t("Cash:")} {formatMoney(season.metrics.cash)}</p>
-            <button className="port-submit" disabled={busy||playing||season.finished} type="submit">{t(side==="buy"?"Queue Buy":"Queue Sell")}</button>
+            <button className="port-submit" disabled={busy||playing||season.finished||viewingPast} type="submit">{t(side==="buy"?"Queue Buy":"Queue Sell")}</button>
           </form>
         </section>
         <section className="port-risk">
@@ -386,13 +407,13 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <p>{t("Applies the same percentages to each held symbol using its own average cost.")}</p>
           <label>{t("Stop loss %")}<input type="number" value={stop} min="0" max="75" step="0.1" onChange={e=>setStop(e.target.value)}/></label>
           <label>{t("Take profit %")}<input type="number" value={take} min="0" max="75" step="0.1" onChange={e=>setTake(e.target.value)}/></label>
-          <button disabled={busy||playing} onClick={()=>void update(()=>savePortfolioRisk(season.id,Number(stop),Number(take)))}><ShieldCheck size={15}/> {t("Apply risk limits")}</button>
+          <button disabled={busy||playing||viewingPast} onClick={()=>void update(()=>savePortfolioRisk(season.id,Number(stop),Number(take)))}><ShieldCheck size={15}/> {t("Apply risk limits")}</button>
         </section>
         <section className="port-queue">
           <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Pending orders")}</strong></div><span>{season.orders.length}</span></div>
           {season.orders.length===0?<p>{t("No pending orders")}</p>:season.orders.map(o=><div className="port-queue-item" key={o.id}>
             <span>{assetName(o.asset_id)} {t(o.side.toUpperCase())} {o.size}{o.size_type==="percent"?"%":""} · {t(o.kind.toUpperCase())} {o.source==="bot"?t("(bot)"):""}</span>
-            <button disabled={busy||playing} title={t("Cancel order")} onClick={()=>void update(()=>cancelPortfolioOrder(season.id,o.id))}><Trash2 size={15}/></button>
+            <button disabled={busy||playing||viewingPast} title={t("Cancel order")} onClick={()=>void update(()=>cancelPortfolioOrder(season.id,o.id))}><Trash2 size={15}/></button>
           </div>)}
         </section>
         {notice&&<div className="arc-note" role="status"><Check size={15}/>{t(notice)}<button onClick={()=>setNotice("")}>×</button></div>}
