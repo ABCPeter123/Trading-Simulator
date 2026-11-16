@@ -11,8 +11,21 @@ import "./polish.css";
 function Simulator() {
   const { t } = useI18n();
   useEffect(()=>{
-    // The browser launch initiates one non-blocking Ollama preload. No cloud API calls.
-    void fetch("/api/ai/warmup",{method:"POST"}).catch(()=>{});
+    // Local-only and non-blocking. Retry startup races when the Python API
+    // launches after Vite, without polling or contacting a cloud service.
+    let cancelled=false;
+    let retry:ReturnType<typeof setTimeout>|undefined;
+    let attempts=0;
+    const preload=()=>{
+      attempts++;
+      void fetch("/api/ai/warmup",{method:"POST"})
+        .then(response=>{if(!response.ok)throw new Error("API not ready");})
+        .catch(()=>{
+          if(!cancelled&&attempts<6)retry=setTimeout(preload,4000);
+        });
+    };
+    preload();
+    return ()=>{cancelled=true;if(retry)clearTimeout(retry);};
   },[]);
   const [mode, setMode] = useState<"single" | "portfolio">("single");
   return <>
