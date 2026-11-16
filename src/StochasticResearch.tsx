@@ -68,7 +68,7 @@ export default function StochasticResearch({mode,runId,assetIds,step,viewingPast
       const value=await getScenarios(mode,runId,symbol,horizon,lookback);
       setReport(value);
       setStrike(String(value.spot.toFixed(2)));
-      setVolatility(Math.max(.001,value.sigma_per_bar*Math.sqrt(value.resolution==="1d"?252:value.resolution==="1h"?252*7:252*390)));
+      setPrices(null);
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setLoading(false);}
   }
@@ -117,7 +117,7 @@ export default function StochasticResearch({mode,runId,assetIds,step,viewingPast
         <div className="forecast-controls">
           <label>{t("Strike")}<input type="number" min=".01" step="any" value={strike} onChange={e=>setStrike(e.target.value)}/></label>
           <label>{t("Years to expiry")}<input type="number" min=".001" step=".01" value={maturity} onChange={e=>setMaturity(Number(e.target.value))}/></label>
-          <label>{t("Annual volatility")}<input type="number" min="0" step=".01" value={volatility.toFixed(3)} onChange={e=>setVolatility(Number(e.target.value))}/></label>
+          <label>{t("Annual volatility (manual assumption)")}<input type="number" min="0" step=".01" value={volatility} onChange={e=>setVolatility(Number(e.target.value))}/></label>
           <label>{t("Risk-free rate")}<input type="number" step=".01" value={rate} onChange={e=>setRate(Number(e.target.value))}/></label>
           <button onClick={()=>void priceEuropeanOption({spot:report.spot,strike:Number(strike),maturity_years:maturity,volatility_annual:volatility,risk_free_rate:rate}).then(setPrices).catch(e=>setError(String(e)))}>{t("Price option")}</button>
         </div>
