@@ -14,7 +14,7 @@ type Window = "ALL" | "5" | "20" | "60" | "126" | "252" | "CUSTOM";
 const WINDOWS:Window[]=["ALL","5","20","60","126","252"];
 const shortNum=(n:number)=>n.toLocaleString("en-US",{maximumFractionDigits:2});
 const pct=(n:number|null)=>n===null?"N/A":`${n>=0?"+":""}${n.toFixed(2)}%`;
-const epoch=(s:string)=>(Date.parse(s+"T00:00:00Z")/1000) as UTCTimestamp;
+const epoch=(s:string)=>(Date.parse(s.length===10?s+"T00:00:00Z":s)/1000) as UTCTimestamp;
 
 interface PlotLine {
   name:string;
@@ -114,7 +114,7 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
   const data=useMemo(()=>{
     if(!report)return [];
     if (window==="ALL") return report.curve;
-    if (window==="CUSTOM") return report.curve.filter(p=>(!fromDay||p.day>=fromDay)&&(!toDay||p.day<=toDay));
+    if (window==="CUSTOM") return report.curve.filter(p=>(!fromDay||p.day.slice(0,10)>=fromDay)&&(!toDay||p.day.slice(0,10)<=toDay));
     return report.curve.slice(-(Number(window)+1));
   },[report,window,fromDay,toDay]);
   const plots=useMemo(()=>({
