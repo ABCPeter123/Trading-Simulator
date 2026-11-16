@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, Check, Copy, LoaderCircle, Send, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, Check, Copy, LoaderCircle, RefreshCcw, Send, ShieldCheck, Sparkles } from "lucide-react";
 import { askAI, getAIStatus } from "./aiAssistantApi";
 import type { AIAnswer, AIMode, AIMessage, AIStatus } from "./aiAssistantApi";
 import { useI18n } from "./i18n";
@@ -64,19 +64,23 @@ export default function AIAssistant({mode,runId,onDraft}: {
         <h2>{t("AI Strategy Assistant")}</h2>
         <p>{t("Ask about your actual replay results, or request an editable trading strategy.")}</p>
       </div>
-      <span className="ai-chip">{status?.provider==="openai"?"OpenAI":status?.provider==="ollama"?"Ollama":t("Not configured")}</span>
+      <span className="ai-chip">{status?.provider==="openai"?"OpenAI":status?.provider==="ollama"?"Ollama":t("Not configured")} · {status?.ready?t("Connected"):t("Not ready")}</span>
     </div>
     <div className="ai-status">
       <ShieldCheck size={14}/>
-      <span>{status?.description ? (status.provider==="ollama"?t("Ollama runs locally. Install Ollama and pull the model to ask questions."):
-        status.provider==="openai"?t("OpenAI runs remotely. Each question sends summarized historical game data."):
-        t("AI is disabled.")) : t("Checking AI connection...")}</span>
+      <span>{status?.description ? (status.provider==="ollama"&&!status.ready
+        ? status.description : status.provider==="ollama"
+        ? t("Ollama runs locally. Install Ollama and pull the model to ask questions.")
+        : status.provider==="openai"
+        ? t("OpenAI runs remotely. Each question sends summarized historical game data.")
+        : t("AI is disabled.")) : t("Checking AI connection...")}</span>
       {status?.model&&<strong>{status.model}</strong>}
+      {status?.provider==="ollama"&&<button className="ai-refresh" type="button" onClick={()=>void getAIStatus().then(setStatus).catch(e=>setStatusError(e instanceof Error?e.message:t("AI status unavailable.")))}><RefreshCcw size={13}/>{t("Recheck AI")}</button>}
     </div>
     {statusError&&<p role="alert" className="ai-error">{statusError}</p>}
-    {!status?.configured&&status&&<p className="ai-setup">{t("Configure the backend AI provider to enable questions. See the AI setup guide.")}</p>}
+    {!status?.ready&&status&&<p className="ai-setup">{t("Configure the backend AI provider to enable questions. See the AI setup guide.")}</p>}
     <div className="ai-suggestions">
-      {suggestions.map((question,i)=><button key={i} type="button" disabled={busy||status?.configured===false}
+      {suggestions.map((question,i)=><button key={i} type="button" disabled={busy||status?.ready===false}
         onClick={()=>void send(question)}><Sparkles size={13}/>{question}</button>)}
     </div>
     {turns.length>0&&<div className="ai-conversation" aria-live="polite">
@@ -104,7 +108,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
       <textarea rows={2} maxLength={1200} value={message} onChange={e=>setMessage(e.target.value)}
         placeholder={t("Ask me to analyze performance or suggest a strategy...")}
         disabled={busy||status?.configured===false}/>
-      <button type="submit" disabled={!message.trim()||busy||!status?.configured}>
+      <button type="submit" disabled={!message.trim()||busy||!status?.ready}>
         {busy?<LoaderCircle size={17} className="ai-spin"/>:<Send size={17}/>}
         {busy?t("Thinking..."):t("Ask AI")}
       </button>
