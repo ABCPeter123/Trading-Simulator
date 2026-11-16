@@ -162,3 +162,28 @@ def test_intraday_and_daily_archives_use_distinct_files(tmp_path, monkeypatch):
     assert minute.name == "7D_1m.parquet"
     with pytest.raises(HTTPException):
         archive.archive_path("spy","../7D_1m")
+
+
+def test_coinbase_temporary_rate_limit_retries_without_fabricating_bars(monkeypatch):
+    from backend.assets import get_instrument
+    monkeypatch.setattr(intraday,"sleep",lambda seconds:None)
+    class Response:
+        def __init__(self,status):
+            self.status_code=status
+        def raise_for_status(self):
+            if self.status_code != 200:
+                raise RuntimeError("unexpected response")
+        def json(self):
+            return [[int(FIRST.timestamp()),100,102,101,101.5,300]]
+    class Client:
+        def __init__(self):
+            self.calls=0
+        def get(self,url,params):
+            self.calls+=1
+            return Response(429 if self.calls==1 else 200)
+    client=Client()
+    monkeypatch.setattr(intraday.market,"_client",client)
+    rows=intraday.fetch_coinbase(get_instrument("btcusd"), FIRST,
+                                FIRST+timedelta(minutes=3), "1m")
+    assert len(rows)==1
+    assert client.calls==2
