@@ -79,7 +79,8 @@ def get_archive_stats(asset_id: str, range: str = Query("1Y")):
 class ArcadeStart(BaseModel):
     asset_id: str
     starting_point: float = Field(default=0.3, ge=0.15, le=0.75)
-    period: Literal["1Y", "2Y", "5Y", "10Y", "MAX"] = "5Y"
+    period: Literal["7D", "30D", "60D", "6M", "1Y", "2Y", "5Y", "10Y", "MAX"] = "5Y"
+    resolution: Literal["1m", "5m", "15m", "1h", "1d"] = "1d"
     start_date: str | None = Field(default=None, max_length=10)
 
 class ArcadeOrder(BaseModel):
@@ -110,7 +111,7 @@ def arcade_validate(strategy: ArcadeStrategy):
 
 @app.post("/api/arcade/new")
 def arcade_new(request: ArcadeStart):
-    return start_run(request.asset_id, request.starting_point, request.period, request.start_date)
+    return start_run(request.asset_id, request.starting_point, request.period, request.start_date, request.resolution)
 
 @app.get("/api/arcade/{run_id}")
 def arcade_get(run_id: str):
@@ -175,7 +176,7 @@ def portfolio_runs():
 @app.post("/api/portfolio-seasons")
 def portfolio_new(request: PortfolioSeasonStart):
     return portfolio.create_season(request.asset_ids, request.period,
-                                    request.starting_point, request.start_date)
+                                    request.starting_point, request.start_date, request.resolution)
 
 @app.get("/api/portfolio-seasons/{run_id}")
 def portfolio_get(run_id: str):
