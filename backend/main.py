@@ -218,7 +218,7 @@ def arcade_analytics(run_id: str):
 
 # AI advisor is read-only. Proposals must pass the same DSL validator and
 # are NEVER saved to a game or submitted as orders by this endpoint.
-from .ai_assistant import advise as ai_advise, configuration as ai_configuration
+from .ai_assistant import advise as ai_advise, provider_status as ai_provider_status
 
 class AITurn(BaseModel):
     role: Literal["user", "assistant"]
@@ -232,7 +232,7 @@ class AIQuestion(BaseModel):
 
 @app.get("/api/ai/status")
 def ai_status():
-    return ai_configuration()
+    return ai_provider_status()
 
 @app.post("/api/ai/ask")
 def ai_ask(request: AIQuestion):
