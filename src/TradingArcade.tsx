@@ -1,10 +1,10 @@
 import { useI18n } from "./i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, ArrowDownRight, ArrowUpRight, Award, Bot, Check,
-  ChevronLeft, ChevronRight, Clock3, Code2, FastForward, Flag, Gauge, Medal, Pause,
+  Activity, ArrowDownRight, ArrowUpRight, Bot, Check,
+  ChevronLeft, ChevronRight, Clock3, Code2, FastForward, Flag, Gauge, Pause,
   Play, Plus, Save, ShieldCheck, Sparkles, Target, Terminal,
-  Trash2, Trophy, Wallet,
+  Trash2, Wallet,
 } from "lucide-react";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import type { Asset } from "./types";
@@ -278,7 +278,7 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
         <span className="arc-live"><span/> {t("Historical market simulation")}</span>
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);setWorkspaceTab("market");}}>{t("Market Data & Paper")}</button>
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);onOpenPortfolio();}}><Wallet size={15}/> {t("Portfolio Simulator")}</button>
-        {q && <div className="arc-player"><div className="arc-avatar"><Trophy size={17}/></div><div><strong>{t("LEVEL")} {q.level}</strong><span>{q.xp} XP · {q.score.toLocaleString()} {t("score")}</span></div></div>}
+
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);setWorkspaceTab("overview");setNewGame(true);setError("");}}><Plus size={15}/> {t("New session")}</button>
       </div>
     </header>
@@ -454,15 +454,6 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
        </div>
 
        <aside className="arc-side">
-         <section className="arc-level-card">
-           <div className="arc-level-head"><Medal size={17}/><span>{t("TRADER RANK")}</span><strong>LVL {q!.level}</strong></div>
-           <h2>{q!.score.toLocaleString()} <small>{t("POINTS")}</small></h2>
-           <p>{t("Measured against buy-and-hold with a drawdown penalty.")}</p>
-           <div className="arc-xp-track"><div style={{width:`${q!.xp%125/125*100}%`}}/></div>
-           <span>{q!.xp%125} / 125 XP {t("to next level")}</span>
-           <div className="arc-badges">{q!.badges.map(b=><div key={b}><Award size={13}/>{t(b)}</div>)}{!q!.badges.length&&<small>{t("Place your first fill to earn a badge.")}</small>}</div>
-         </section>
-
          <section className="arc-trade-card">
            <div className="arc-box-head"><div><Wallet size={17}/><strong>{t("Trade desk")}</strong></div><span className="arc-tag">{t("PAPER MONEY")}</span></div>
            <div className="arc-side-body">
