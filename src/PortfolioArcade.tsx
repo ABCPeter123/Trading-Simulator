@@ -9,6 +9,7 @@ import { PriceChart } from "./components/PriceChart";
 import { REPLAY_WINDOWS, RESOLUTIONS, aggregateBars, chartTrades as mapChartTrades, chartViewsFor, showReplayTime } from "./replayIntervals";
 import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 import StrategyAnalytics from "./StrategyAnalytics";
+import AIAssistant from "./AIAssistant";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
@@ -335,6 +336,8 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         </div>
         <StrategyAnalytics runId={season.id} step={season.current_step} mode="portfolio" assetName={assetName}
           onReport={report=>setAnalyticsFills({runId:season.id,executions:report.executions})}/>
+        <AIAssistant key={season.id} mode="portfolio" runId={season.id}
+          onDraft={draft=>setStrategy(draft)}/>
         <div className="port-strategy">
           <div className="arc-box-head"><div><Bot size={17}/><strong>{t("Cross-asset strategy lab")}</strong></div><span className="arc-tag">{t("SAFE RULE LANGUAGE")}</span></div>
           <p>{t("A signal from one instrument can trade another. Orders queue after the signal candle closes and fill no earlier than the target symbol's next actual session.")}</p>
