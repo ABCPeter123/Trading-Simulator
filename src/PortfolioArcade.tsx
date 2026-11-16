@@ -197,13 +197,13 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       <h1>{t("One portfolio.")} <em>{t("Multiple markets.")}</em></h1>
       <p>{t("Choose 2 to 5 instruments. All positions use a shared $100,000 USD account. Prices come from synchronized historical daily candles, with no future information revealed.")}</p>
       <div className="port-picker">
-        <div className="port-selected"><strong>YOUR BASKET ({basket.length}/5)</strong>
+        <div className="port-selected"><strong>{t("YOUR BASKET")} ({basket.length}/5)</strong>
           <div>{basket.map(id=><button key={id} onClick={()=>setBasket(prev=>prev.filter(x=>x!==id))}>{assetName(id)} ×</button>)}</div>
         </div>
         <label htmlFor="port-search"><Search size={15}/> {t("Search instruments")}</label>
         <input id="port-search" type="search" value={search} onChange={e=>{setSearch(e.target.value);setExternal([]);}} placeholder={t("Apple, SPY, BTC ...")}/>
         <button className="port-search-more" disabled={searchBusy||search.trim().length<2} onClick={()=>void discover()}>
-          {searchBusy?"Searching provider...":"Discover more instruments on Yahoo Finance"}
+          {t(searchBusy?"Searching provider...":"Discover more instruments on Yahoo Finance")}
         </button>
         {external.length>0&&<div className="port-discovery">{external.map(item=><div key={item.symbol}>
           <span><strong>{item.symbol}</strong><small>{item.name} · {item.currency}</small></span>
@@ -213,16 +213,16 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           className={basket.includes(a.id)?"selected":""}
           disabled={!basket.includes(a.id)&&basket.length>=5}
           onClick={()=>setBasket(prev=>prev.includes(a.id)?prev.filter(x=>x!==a.id):[...prev,a.id])}>
-          <strong>{a.symbol}</strong><small>{a.name}</small><span>{basket.includes(a.id)?"Added":"+"}</span>
+          <strong>{a.symbol}</strong><small>{a.name}</small><span>{basket.includes(a.id)?t("Added"):"+"}</span>
         </button>)}</div>
         <div className="port-settings">
-          <label>{t("Historical range")}<select value={period} onChange={e=>setPeriod(e.target.value)}>{HISTORY_OPTIONS.map(v=><option key={v} value={v}>{v==="MAX"?"Maximum available":v}</option>)}</select></label>
+          <label>{t("Historical range")}<select value={period} onChange={e=>setPeriod(e.target.value)}>{HISTORY_OPTIONS.map(v=><option key={v} value={v}>{v==="MAX"?t("Maximum available"):v}</option>)}</select></label>
           <label>{t("Start date (optional)")}<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
         </div>
         {error&&<p className="arc-error" role="alert">{error}</p>}
         <button className="arc-cta" disabled={busy||basket.length<2}
           onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate))}>
-          <Play size={16}/> {busy?"Loading real historical data...":"Start portfolio season"}
+          <Play size={16}/> {t(busy?"Loading real historical data...":"Start portfolio season")}
         </button>
         {saved.length>0 && <label>{t("Resume saved season")}<select defaultValue="" onChange={e=>{
           if(e.target.value) void update(()=>loadPortfolioSeason(e.target.value));
@@ -234,7 +234,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         <div className="port-achievements">
           <strong>{t("LEVEL")} {season.metrics.level} · {season.metrics.score.toLocaleString()} {t("POINTS")}</strong>
           <span>{season.metrics.xp} XP</span>
-          <div>{season.metrics.badges.map(badge=><span key={badge}>{badge}</span>)}</div>
+          <div>{season.metrics.badges.map(badge=><span key={badge}>{t(badge)}</span>)}</div>
         </div>
         <div className="port-metrics">
           <div><small>{t("EQUITY")}</small><strong>{formatMoney(season.metrics.equity)}</strong></div>
@@ -248,7 +248,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             <button disabled={busy||playing||season.finished} onClick={()=>advance(5)}><FastForward size={15}/> +5</button>
             <button disabled={busy||playing||season.finished} onClick={()=>advance(20)}><FastForward size={15}/> +20</button>
             <button disabled={busy||playing||season.finished||!season.strategy} onClick={()=>advance(100,true)}>{t("Next bot")}</button>
-            <button disabled={busy||season.finished} onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={15}/>:<Play size={15}/>} {playing?"Pause":"Autoplay"}</button>
+            <button disabled={busy||season.finished} onClick={()=>setPlaying(v=>!v)}>{playing?<Pause size={15}/>:<Play size={15}/>} {t(playing?"Pause":"Autoplay")}</button>
           </div>
         </div>
         <div className="port-asset-tabs">{season.asset_ids.map(id=><button key={id}
@@ -263,15 +263,15 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           </div>
           <div className="arc-chart-wrap">{bars.length>0&&
             <PriceChart asset={chosenAsset} range="1Y" style={chartStyle} bars={bars} visibleWindow={110}/>}</div>
-          <div className="port-source">{season.sources[focused]} · Last actual bar: {last?fmtTime(last.time):"none"}
-            {current&&!current.has_bar_today&&<span> · Market closed on {season.day}, no orders filled for this symbol</span>}</div>
+          <div className="port-source">{season.sources[focused]} · {t("Last actual bar:")} {last?fmtTime(last.time):t("none")}
+            {current&&!current.has_bar_today&&<span> · {t("Market closed on")} {season.day}, {t("no orders filled for this symbol")}</span>}</div>
         </div>
         <div className="port-positions">
           <div className="arc-box-head"><div><Wallet size={17}/><strong>{t("Portfolio positions")}</strong></div><span className="arc-tag">{t("SHARED USD ACCOUNT")}</span></div>
           <div className="arc-table-scroll"><table><thead><tr><th>{t("SYMBOL")}</th><th>{t("QTY")}</th><th>{t("AVG COST")}</th><th>{t("MARKET VALUE")}</th><th>{t("UNREALIZED P&L")}</th><th>{t("MARK DATE")}</th></tr></thead><tbody>
             {positions.map(p=><tr key={p.asset_id} onClick={()=>setFocused(p.asset_id)} className="port-clickrow">
               <td>{assetName(p.asset_id)}</td><td>{fmtQty(p.quantity)}</td><td>{formatMoney(p.average_cost)}</td>
-              <td>{formatMoney(p.market_value)}</td><td className={(p.unrealized_pnl??0)>=0?"positive":"negative"}>{formatMoney(p.unrealized_pnl??0)}</td><td>{p.mark_day??"None"}</td>
+              <td>{formatMoney(p.market_value)}</td><td className={(p.unrealized_pnl??0)>=0?"positive":"negative"}>{formatMoney(p.unrealized_pnl??0)}</td><td>{p.mark_day??t("None")}</td>
             </tr>)}
           </tbody></table></div>
         </div>
@@ -292,18 +292,18 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           </div>
         </div>
         <div className="port-history">
-          <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong></div><span>{season.fills.length} recent fills</span></div>
+          <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong></div><span>{season.fills.length} {t("recent fills")}</span></div>
           <div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SYMBOL")}</th><th>{t("SIDE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th><th>{t("ENGINE")}</th></tr></thead><tbody>
             {season.fills.slice(0,30).map((fill,i)=><tr key={fill.order_id+"-"+i}>
-              <td>{fmtTime(fill.time)}</td><td>{assetName(fill.asset_id)}</td><td className={fill.side==="buy"?"positive":"negative"}>{fill.side.toUpperCase()}</td>
-              <td>{fmtQty(fill.quantity)}</td><td>{formatMoney(fill.price)}</td><td>{formatMoney(fill.fee)}</td><td>{fill.source}</td>
+              <td>{fmtTime(fill.time)}</td><td>{assetName(fill.asset_id)}</td><td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td>
+              <td>{fmtQty(fill.quantity)}</td><td>{formatMoney(fill.price)}</td><td>{formatMoney(fill.fee)}</td><td>{t(fill.source)}</td>
             </tr>)}
           </tbody></table></div>
         </div>
       </section>
       <aside className="port-side">
         <section className="port-trade">
-          <div className="arc-box-head"><div><ShoppingCart size={17}/><strong>Trade {assetName(focused)}</strong></div></div>
+          <div className="arc-box-head"><div><ShoppingCart size={17}/><strong>{t("Trade")} {assetName(focused)}</strong></div></div>
           <form onSubmit={trade}>
             <div className="port-toggle"><button type="button" className={side==="buy"?"active-buy":""} onClick={()=>setSide("buy")}><ArrowUpRight size={15}/> {t("Buy")}</button>
               <button type="button" className={side==="sell"?"active-sell":""} onClick={()=>setSide("sell")}><ArrowDownRight size={15}/> {t("Sell")}</button></div>
@@ -314,8 +314,8 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             <label>{t("Size type")}<select value={sizeType} onChange={e=>setSizeType(e.target.value as typeof sizeType)}><option value="percent">{t("% of cash / holdings")}</option><option value="units">{t("Exact units")}</option></select></label>
             <label>{t("Quantity")}<input type="number" min="0.00000001" step="any" required value={size} onChange={e=>setSize(e.target.value)}/></label>
             {sizeType==="percent"&&<div className="port-percent">{[10,25,50,100].map(n=><button key={n} type="button" onClick={()=>setSize(String(n))}>{n}%</button>)}</div>}
-            <p>Held: {fmtQty(current?.quantity??0)} · Cash: {formatMoney(season.metrics.cash)}</p>
-            <button className="port-submit" disabled={busy||playing||season.finished} type="submit">{side==="buy"?"Queue Buy":"Queue Sell"}</button>
+            <p>{t("Held:")} {fmtQty(current?.quantity??0)} · {t("Cash:")} {formatMoney(season.metrics.cash)}</p>
+            <button className="port-submit" disabled={busy||playing||season.finished} type="submit">{t(side==="buy"?"Queue Buy":"Queue Sell")}</button>
           </form>
         </section>
         <section className="port-risk">
@@ -328,13 +328,13 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         <section className="port-queue">
           <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Pending orders")}</strong></div><span>{season.orders.length}</span></div>
           {season.orders.length===0?<p>{t("No pending orders")}</p>:season.orders.map(o=><div className="port-queue-item" key={o.id}>
-            <span>{assetName(o.asset_id)} {o.side.toUpperCase()} {o.size}{o.size_type==="percent"?"%":""} · {o.kind} {o.source==="bot"?"(bot)":""}</span>
+            <span>{assetName(o.asset_id)} {t(o.side.toUpperCase())} {o.size}{o.size_type==="percent"?"%":""} · {t(o.kind.toUpperCase())} {o.source==="bot"?t("(bot)"):""}</span>
             <button disabled={busy||playing} title={t("Cancel order")} onClick={()=>void update(()=>cancelPortfolioOrder(season.id,o.id))}><Trash2 size={15}/></button>
           </div>)}
         </section>
-        {notice&&<div className="arc-note" role="status"><Check size={15}/>{notice}<button onClick={()=>setNotice("")}>×</button></div>}
-        {error&&<div className="arc-error" role="alert">{error}</div>}
-        <p className="port-disclaimer">{season.execution_notice}</p>
+        {notice&&<div className="arc-note" role="status"><Check size={15}/>{t(notice)}<button onClick={()=>setNotice("")}>×</button></div>}
+        {error&&<div className="arc-error" role="alert">{t(error)}</div>}
+        <p className="port-disclaimer">{t(season.execution_notice)}</p>
       </aside>
     </main>}
   </div>;
