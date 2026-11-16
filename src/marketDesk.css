@@ -15,3 +15,11 @@
 .market-desk .watchlist-panel,.market-desk .ticket-column{background:#101a27}
 .market-desk .terminal-workspace-tabs{grid-column:1/-1}
 @media(max-width:740px){.market-desk-head{padding:15px}.market-desk-head h2{font-size:20px}.market-desk-notice{padding:10px 15px}.market-desk .center-column{padding:14px}}
+
+/* Order entry must remain usable when the watchlist panel is not visible. */
+.terminal-order-asset-picker{display:flex;flex-direction:column;gap:7px;margin:-4px 0 16px;color:#b3c5d6;font-size:11px;font-weight:700}
+.terminal-order-asset-picker select{width:100%;max-width:100%;min-width:0;min-height:44px;background:#192530;border:1px solid #42566c;border-radius:7px;color:#f0f5fc;padding:0 11px;text-overflow:ellipsis}
+@media(max-width:740px){
+  .market-desk .terminal-workspace-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:10px;overflow:visible}
+  .market-desk .terminal-workspace-tabs button{display:flex;justify-content:center;align-items:center;text-align:center;white-space:normal;line-height:1.35;min-width:0;min-height:54px;padding:8px 6px;font-size:11px}
+}
