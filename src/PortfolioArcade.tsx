@@ -149,7 +149,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const current = positions.find(p=>p.asset_id===focused);
   const bars = season?.bars[focused] ?? [];
   const last = bars.at(-1);
-  const markers = (analyticsFills?.runId === season?.id
+  const markers = (analyticsFills !== null && analyticsFills.runId === season?.id
     ? analyticsFills.executions : season?.fills ?? [])
     .filter(fill=>fill.asset_id===focused)
     .map(fill=>({time:fill.time,side:fill.side,quantity:fill.quantity,price:fill.price,source:fill.source}));
