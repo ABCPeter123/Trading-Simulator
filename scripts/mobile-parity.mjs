@@ -73,6 +73,19 @@ const report = {
   rolling: {"5":null,"20":null,"60":null,"126":null,"252":null},
   allocations: [], executions: [], methodology: "Test fixture.",
 };
+const scenarioPaths=Array.from({length:256},(_,i)=>
+  Array.from({length:21},(_,step)=>100+step*0.4+(i-128)*step*0.003));
+const scenario={
+  asset_id:"aapl",as_of:last.time,resolution:"1d",spot:100,horizon:20,
+  lookback:60,paths_count:256,seed:0,mu_log_per_bar:0.001,
+  sigma_per_bar:0.02,observations:60,prob_up_model_pct:50.5,
+  prob_up_simulated_pct:52,expected_terminal:108,median_terminal:108,
+  quantiles:Array.from({length:21},(_,step)=>({
+    step,p05:100+step*.03,p25:100+step*.25,median:100+step*.4,
+    p75:100+step*.55,p95:100+step*.75,
+  })),
+  paths:scenarioPaths,limitations:"Illustrative regression fixture.",method:"GBM",
+};
 const json = (value) => JSON.stringify(value);
 
 function mockResponse(path) {
@@ -89,6 +102,7 @@ function mockResponse(path) {
     provider: "off", model: "", ready: false, configured: false,
     remote: false, description: "Disabled in regression test.",
   };
+  if (path === "/api/research/scenarios") return scenario;
   if (path === "/api/account") return {
     cash: 100000, equity: 100000, positions: [], fills: [], unrealized_pnl: 0,
   };
@@ -192,6 +206,15 @@ async function verifyMode(page, mode, viewport) {
         viewport+" "+mode+" equity and benchmark graph");
       await verifyFullGraph(page,selector+" .an-chart-canvas",
         curve.length,viewport+" "+mode+" analytics history");
+    }
+    if(name==="Scenario Research"&&mode==="single"&&viewport===390){
+      await page.locator(selector+" .forecast-controls button").first().click();
+      await visible(page,selector+" .forecast-plot","all scenario traces");
+      await page.waitForFunction(sel=>{
+        const plot=document.querySelector(sel);
+        return plot?.dataset.loadedPaths==="256"&&plot?.dataset.loadedSteps==="21"&&
+          plot.querySelector("canvas")!==null;
+      },selector+" .forecast-plot",{timeout:12000});
     }
     const active = await page.locator(selector).getAttribute("data-tab");
     const expected = ({
