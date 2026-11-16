@@ -31,7 +31,7 @@ export default function MarketDesk() {
   const [selectedId, setSelectedId] = useState("aapl");
   const [search, setSearch] = useState("");
   const [resolution, setResolution] = useState<ReplayResolution>("1d");
-  const [range, setRange] = useState<ReplayWindow>("1Y");
+  const [range, setRange] = useState<ReplayWindow>("MAX");
   const [chartStyle, setChartStyle] = useState<ChartStyle>("candles");
   const [mode, setMode] = useState<"market" | "replay">("market");
   const [side, setSide] = useState<TradeSide>("buy");
@@ -343,7 +343,7 @@ export default function MarketDesk() {
                 <label className="terminal-interval-picker">{t("Candle interval")}
                   <select value={resolution} onChange={e=>{
                     const next=e.target.value as ReplayResolution;
-                    setResolution(next);setRange(REPLAY_WINDOWS[next][0]);
+                    setResolution(next);setRange(next==="1d"?"MAX":REPLAY_WINDOWS[next][0]);
                   }}>{RESOLUTIONS.map(i=><option key={i} value={i}>{i}</option>)}</select>
                 </label>
                 <div className="timeframe-control" aria-label={t("Timeframe")}>{REPLAY_WINDOWS[resolution].map(period =>
