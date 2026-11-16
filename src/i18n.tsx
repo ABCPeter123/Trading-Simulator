@@ -593,6 +593,9 @@ const zh: Record<string, string> = {
   "Read-only historical analysis. AI suggestions are not guaranteed and require your explicit approval.": "仅分析已揭示的历史数据。AI 建议不保证收益，必须经你确认后才能启用。",
   "AI status unavailable.": "无法获取 AI 状态。",
   "AI request failed.": "AI 请求失败。",
+  "Connected": "已连接",
+  "Not ready": "未就绪",
+  "Recheck AI": "重新检测 AI",
 };
 
 const LocaleContext = createContext<{
