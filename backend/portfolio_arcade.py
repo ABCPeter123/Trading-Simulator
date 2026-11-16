@@ -25,6 +25,7 @@ from .arcade_dsl import matches
 from .assets import get_instrument
 from .ledger import dec, positive_quantity
 from .market import history
+from .intraday import replay_history, validate_replay_window
 from .portfolio_dsl import compile_portfolio_rules
 
 LOCK = RLock()
@@ -48,12 +49,13 @@ def connection():
     return db
 
 
-def _date(bar):
-    return datetime.fromtimestamp(int(bar["time"]), tz=timezone.utc).date().isoformat()
+def _date(bar, resolution="1d"):
+    timestamp = datetime.fromtimestamp(int(bar["time"]), tz=timezone.utc)
+    return timestamp.date().isoformat() if resolution == "1d" else timestamp.isoformat(timespec="seconds")
 
 
-def _prepare(histories):
-    """Normalize daily UTC dates; no missing-day bars are invented."""
+def _prepare(histories, resolution="1d"):
+    """Align actual provider candle timestamps; never create a missing candle."""
     by_id = {}
     timeline = set()
     for asset_id, payload in histories.items():
@@ -69,28 +71,34 @@ def _prepare(histories):
             if float(bar["low"]) > min(float(bar["open"]), float(bar["close"]), float(bar["high"])):
                 raise HTTPException(503, detail=f"Invalid low in {asset_id}.")
             previous = t
-            daily[_date(bar)] = bar
+            daily[_date(bar, resolution)] = bar
         if len(daily) < 80:
-            raise HTTPException(422, detail=f"{asset_id} has fewer than 80 usable daily candles.")
+            raise HTTPException(422, detail=f"{asset_id} has fewer than 80 usable candles.")
         by_id[asset_id] = daily
         timeline.update(daily)
     days = sorted(timeline)
-    # A basket must genuinely overlap; two disjoint histories must never
-    # share a replay timeline with indefinitely stale portfolio marks.
-    shared = set.intersection(*(set(daily) for daily in by_id.values()))
-    shared_days = sorted(shared)
-    if len(shared_days) < 75 or shared_days[-1] < days[max(0, len(days) - 21)]:
-        raise HTTPException(422, detail="Basket needs at least 75 overlapping daily candles, including a recent shared session.")
-    # Start only after warmup observations exist for every member AND at
-    # least 35 common sessions exist, so the benchmark is comparable.
-    warmup_day = shared_days[34]
+    # Intraday bars from stocks, cryptocurrencies and different exchanges
+    # often have different timestamp offsets. Require actual overlapping
+    # calendar dates, not identical candle start timestamps.
+    if resolution == "1d":
+        shared = set.intersection(*(set(daily) for daily in by_id.values()))
+        shared_days = sorted(shared)
+        if len(shared_days) < 75 or shared_days[-1] < days[max(0, len(days) - 21)]:
+            raise HTTPException(422, detail="Basket needs at least 75 overlapping daily candles, including a recent shared session.")
+        common_warmup = shared_days[34]
+    else:
+        shared_dates = set.intersection(*(set(k[:10] for k in daily) for daily in by_id.values()))
+        common = sorted(shared_dates)
+        if len(common) < 2:
+            raise HTTPException(422, detail="Intraday basket requires at least two overlapping real trading dates.")
+        common_warmup = common[0]
     seen = {asset_id: 0 for asset_id in by_id}
     first = None
     for idx, day in enumerate(days):
         for asset_id, available in by_id.items():
             if day in available:
                 seen[asset_id] += 1
-        if day >= warmup_day and all(count >= 36 for count in seen.values()):
+        if day >= common_warmup and all(count >= 36 for count in seen.values()):
             first = idx
             break
     if first is None or len(days) - first < 45:
@@ -112,18 +120,20 @@ def _save(db, run_id, state):
                (json.dumps(state), datetime.now(timezone.utc).isoformat(), run_id))
 
 
-def create_season(symbols, period="5Y", starting_point=0.3, start_date=None):
+def create_season(symbols, period="5Y", starting_point=0.3, start_date=None, resolution="1d"):
     if not isinstance(symbols, list) or not 2 <= len(symbols) <= MAX_SYMBOLS:
         raise HTTPException(422, detail="Choose 2-5 assets for one shared-cash season.")
     if len(set(symbols)) != len(symbols):
         raise HTTPException(422, detail="Each instrument can appear only once.")
-    if period not in {"1Y", "2Y", "5Y", "10Y", "MAX"} or not 0.15 <= starting_point <= 0.75:
-        raise HTTPException(422, detail="Invalid season range or starting point.")
+    validate_replay_window(period, resolution)
+    if not 0.15 <= starting_point <= 0.75:
+        raise HTTPException(422, detail="Invalid season starting point.")
     instruments = [get_instrument(asset_id) for asset_id in symbols]
     if any(not i.tradable or i.currency != "USD" or i.kind not in ("Stocks", "ETFs", "Crypto") for i in instruments):
         raise HTTPException(422, detail="Multi-asset seasons currently support USD equities, ETFs and crypto only.")
-    raw = {asset_id: history(asset_id, period) for asset_id in symbols}
-    days, daily, warmup = _prepare(raw)
+    raw = {asset_id: (history(asset_id, period) if resolution == "1d"
+                      else replay_history(asset_id, period, resolution)) for asset_id in symbols}
+    days, daily, warmup = _prepare(raw, resolution)
     index = min(len(days) - 2, max(warmup, int(len(days) * starting_point)))
     if start_date:
         try:
@@ -134,10 +144,10 @@ def create_season(symbols, period="5Y", starting_point=0.3, start_date=None):
         if index >= len(days) - 1:
             raise HTTPException(422, detail="Selected start date has no remaining historical candles.")
     sources = {asset_id: raw[asset_id]["source"] for asset_id in symbols}
-    snapshot = {"days": days, "daily": daily, "sources": sources}
+    snapshot = {"days": days, "daily": daily, "sources": sources, "resolution": resolution}
     initial_positions = {asset_id: {"qty": "0", "avg": "0", "realized": "0"} for asset_id in symbols}
     state = {
-        "index": index, "start_index": index, "cash": str(INITIAL_CASH),
+        "index": index, "start_index": index, "resolution": resolution, "cash": str(INITIAL_CASH),
         "positions": initial_positions, "orders": [], "fills": [],
         "strategy": "", "risk": {"stop_loss_pct": 0, "take_profit_pct": 0},
         "events": ["Multi-asset season started. No future candles are visible."],
@@ -223,7 +233,7 @@ def public(run_id, row, snap, state):
                              if day in snap["daily"][asset_id]]
     return {
         "id": run_id, "asset_ids": json.loads(row["basket"]),
-        "period": row["period"], "sources": snap["sources"],
+        "period": row["period"], "resolution": state.get("resolution", "1d"), "sources": snap["sources"],
         "day": days[idx], "current_step": idx, "total_steps": len(days),
         "progress_pct": round(100*idx/(len(days)-1), 1),
         "finished": idx == len(days)-1, "bars": visible,
@@ -248,6 +258,7 @@ def get_analysis(run_id):
         return build_report(
             snap["days"], snap["daily"], json.loads(row["basket"]),
             state["start_index"], state["index"], state["fills"],
+            resolution=state.get("resolution", "1d"),
         )
 
 
