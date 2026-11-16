@@ -2,6 +2,16 @@
 
 A **local-first paper trading and historical replay terminal** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Language support: English / 简体中文
+
+The entire frontend now has an **EN / 中文** switch, fixed at the lower-right
+corner across the trading terminal, single-asset Arcade, and Portfolio Arcade.
+The selection persists per browser using localStorage and can be changed at any
+time without restarting or reinstalling dependencies. Trading commands,
+ticker symbols, and historical data remain unchanged when switching languages.
+
+See [中文说明 / language guide](docs/LANGUAGE.md).
+
 ## Portfolio Arcade v0.6
 
 **New: multi-asset historical seasons.** From Trading Arcade choose
