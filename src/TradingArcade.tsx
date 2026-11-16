@@ -1,5 +1,5 @@
 import { useI18n } from "./i18n";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, ArrowDownRight, ArrowLeft, ArrowUpRight, Award, Bot, Check,
   ChevronRight, Clock3, Code2, FastForward, Flag, Gauge, Medal, Pause,
@@ -230,11 +230,14 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
   const filteredCatalog = catalog.filter(item => item.tradable && item.currency === "USD" &&
     (catalogClass === "All" || item.asset_class === catalogClass) &&
     (item.symbol+" "+item.name).toLowerCase().includes(catalogSearch.trim().toLowerCase()));
-  const catalogAsset = catalog.find(a=>a.id===game?.asset_id);
-  const asset: Asset | undefined = ASSETS.find(a=>a.id===game?.asset_id) ??
-    (catalogAsset ? {id: catalogAsset.id, symbol: catalogAsset.symbol, name: catalogAsset.name,
-      exchange: catalogAsset.currency, assetClass: catalogAsset.asset_class as Asset["assetClass"],
-      decimals: catalogAsset.decimals, spreadBps: 5, accent: "#a7a2ff"} : undefined);
+  const asset: Asset | undefined = useMemo(()=>{
+    const original = ASSETS.find(a=>a.id===game?.asset_id);
+    if (original) return original;
+    const imported = catalog.find(a=>a.id===game?.asset_id);
+    return imported ? {id:imported.id,symbol:imported.symbol,name:imported.name,
+      exchange:imported.currency,assetClass:imported.asset_class as Asset["assetClass"],
+      decimals:imported.decimals,spreadBps:5,accent:"#a7a2ff"} : undefined;
+  },[game?.asset_id,catalog]);
   const latest=game?.bars.at(-1);
   const q=game?.metrics;
   const delta=latest&&game&&game.bars.length>=2 ? latest.close-game.bars[game.bars.length-2].close : 0;
