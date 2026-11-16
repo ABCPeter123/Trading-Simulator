@@ -2,7 +2,7 @@ import { useI18n } from "./i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, ArrowDownRight, ArrowLeft, ArrowUpRight, Award, Bot, Check,
-  ChevronRight, Clock3, Code2, FastForward, Flag, Gauge, Medal, Pause,
+  ChevronLeft, ChevronRight, Clock3, Code2, FastForward, Flag, Gauge, Medal, Pause,
   Play, Plus, Save, ShieldCheck, Sparkles, Target, Terminal,
   Trash2, Trophy, Wallet, Zap,
 } from "lucide-react";
@@ -11,13 +11,16 @@ import type { Asset } from "./types";
 import VisualStrategyBuilder from "./VisualStrategyBuilder";
 import StrategyAnalytics from "./StrategyAnalytics";
 import AIAssistant from "./AIAssistant";
+import WorkspaceTabs from "./WorkspaceTabs";
+import type { WorkspaceTab } from "./WorkspaceTabs";
+import StochasticResearch from "./StochasticResearch";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { PriceChart } from "./components/PriceChart";
 import { REPLAY_WINDOWS, RESOLUTIONS, aggregateBars, chartTrades as mapChartTrades, chartViewsFor, showReplayTime } from "./replayIntervals";
 import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 import {
   gameCancel, gameCatalog, gameDiscover, gameImportTicker, gameLoad, gameRuns, gameSaveCode, gameSetRisk, gameStart, gameStep,
-  gameTrade, gameValidateCode,
+  gameTrade, gameValidateCode, gameAt,
 } from "./arcadeApi";
 import type { ArcadeRun, CatalogInstrument, DiscoveredInstrument, OrderKind, SavedArcadeRun } from "./arcadeApi";
 import type { TradeSide } from "./types";
@@ -36,6 +39,7 @@ function Metric({label, value, note, positive}: {label: string; value: string; n
 export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void;onOpenPortfolio:()=>void}) {
   const {t} = useI18n();
   const [game, setGame] = useState<ArcadeRun|null>(null);
+  const [workspaceTab,setWorkspaceTab] = useState<WorkspaceTab>("overview");
   const [saved, setSaved] = useState<SavedArcadeRun[]>([]);
   const [catalog, setCatalog] = useState<CatalogInstrument[]>([]);
   const [catalogSearch, setCatalogSearch] = useState("");
@@ -79,6 +83,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
   const load = useCallback(async (id: string) => {
     const run = await gameLoad(id);
     setGame(run);
+    setWorkspaceTab("overview");
     setChartView(run.resolution??"1d");
     setCode(run.strategy || SAMPLE_CODE);
     setStopPct(String(run.risk?.stop_loss_pct ?? 0));
@@ -184,6 +189,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
       if (!selected) throw Error("Choose a supported instrument.");
       const result=await gameStart(selected.id,startingPoint,period,startDate,resolution);
       setGame(result);
+      setWorkspaceTab("overview");
       setChartView(result.resolution??"1d");
       setCode(SAMPLE_CODE);
       setStopPct("0");
@@ -245,6 +251,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
       exchange:imported.currency,assetClass:imported.asset_class as Asset["assetClass"],
       decimals:imported.decimals,spreadBps:5,accent:"#a7a2ff"} : undefined;
   },[game?.asset_id,catalog]);
+  const viewingPast=!!game?.viewing_past;
   const latest=game?.bars.at(-1);
   const q=game?.metrics;
   const delta=latest&&game&&game.bars.length>=2 ? latest.close-game.bars[game.bars.length-2].close : 0;
@@ -263,21 +270,21 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
       <div className="arc-top-left">
         <button className="arc-back" title={t("Back to trading terminal")} onClick={()=>{setPlaying(false);onExit();}}><ArrowLeft size={18}/></button>
         <div className="arc-logo"><Zap size={23} fill="currentColor"/></div>
-        <div className="arc-brand">{t("TRADING")} <span>{t("ARCADE")}</span><small>{t("MARKET REPLAY · STRATEGY LAB")}</small></div>
+        <div className="arc-brand">{t("Historical Trading")} <span>{t("Simulator")}</span><small>{t("Market research workspace")}</small></div>
       </div>
       <div className="arc-top-right">
-        <span className="arc-live"><span/> {t("LOCAL HISTORICAL GAME")}</span>
-        <button className="arc-outline-button" onClick={()=>{setPlaying(false);onOpenPortfolio();}}><Wallet size={15}/> {t("Portfolio Arcade")}</button>
+        <span className="arc-live"><span/> {t("Historical market simulation")}</span>
+        <button className="arc-outline-button" onClick={()=>{setPlaying(false);onOpenPortfolio();}}><Wallet size={15}/> {t("Portfolio Simulator")}</button>
         {q && <div className="arc-player"><div className="arc-avatar"><Trophy size={17}/></div><div><strong>{t("LEVEL")} {q.level}</strong><span>{q.xp} XP · {q.score.toLocaleString()} {t("score")}</span></div></div>}
-        <button className="arc-outline-button" onClick={()=>{setPlaying(false);setNewGame(true);setError("");}}><Plus size={15}/> {t("New season")}</button>
+        <button className="arc-outline-button" onClick={()=>{setPlaying(false);setNewGame(true);setError("");}}><Plus size={15}/> {t("New session")}</button>
       </div>
     </header>
 
-    {initializing ? <div className="arc-intro"><Activity className="spin" size={30}/><h2>{t("Loading your arcade")}</h2><p>{t("Reading local game saves.")}</p></div> :
+    {initializing ? <div className="arc-intro"><Activity className="spin" size={30}/><h2>{t("Loading historical sessions")}</h2><p>{t("Reading local game saves.")}</p></div> :
      newGame || !game ? <main className="arc-intro">
-       <div className="arc-intro-icon"><Trophy size={35}/></div>
-       <span className="arc-upper">{t("WELCOME TO THE MARKET")}</span>
-       <h1>{t("Trade through history.")}<br/><em>{t("Beat the market.")}</em></h1>
+       <div className="arc-intro-icon"><Activity size={35}/></div>
+       <span className="arc-upper">{t("HISTORICAL MARKET RESEARCH")}</span>
+       <h1>{t("Historical Trading Simulator")}</h1>
        <p>{t("Start with $100,000 in virtual cash, reveal real historical candles, and compete against buy-and-hold. Play manually or design a trading bot. Skip weeks in seconds.")}</p>
        <div className="arc-start-form">
          <label htmlFor="arc-market-search">Find a market · {catalog.length} {t("instruments indexed")}</label>
@@ -315,19 +322,20 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          <label htmlFor="arc-start-point">{t("Starting point")} {startDate?t("(ignored when date is set)"):""}</label>
          <select id="arc-start-point" value={startingPoint} onChange={e=>setStartingPoint(Number(e.target.value))}>
            <option value={0.2}>{t("Early season · More candles to play")}</option>
-           <option value={0.3}>{t("Standard season")}</option>
-           <option value={0.5}>{t("Quick season")}</option>
+           <option value={0.3}>{t("Standard replay")}</option>
+           <option value={0.5}>{t("Short replay")}</option>
          </select>
          <button disabled={busy} className="arc-cta" onClick={()=>void createNew()}><Play size={18} fill="currentColor"/>{t(busy?"Loading market data...":"Start trading")}</button>
          {saved.length>0 && <><span className="arc-resume-title">{t("OR RESUME A SAVED SEASON")}</span><select aria-label={t("Resume a saved arcade run")} defaultValue="" onChange={e=>{if(e.target.value)void switchRun(e.target.value);}}><option value="">{t("Select a previous run...")}</option>{saved.map(run=><option key={run.id} value={run.id}>{ASSETS.find(a=>a.id===run.asset_id)?.symbol} · {new Date(run.updated_at).toLocaleString()}</option>)}</select></>}
          {error && <div className="arc-error" role="alert">{error}</div>}
        </div>
        <div className="arc-intro-foot"><ShieldCheck size={15}/> {t("Uses actual historical candles when available. All trading is simulated.")}</div>
-     </main> : <main className="arc-layout">
+     </main> : <main className="arc-layout" data-tab={workspaceTab}>
+       <WorkspaceTabs active={workspaceTab} onChange={setWorkspaceTab}/>
        <div className="arc-main">
          <section className="arc-hero">
            <div className="arc-symbol-line">
-             <div><span className="arc-upper">{t("SEASON IN PROGRESS")}</span><h1>{asset?.symbol??game.asset_id}<span className="arc-symbol-currency"> {t("/ USD")}</span></h1><p>{asset?.name} · {game.period} / {baseResolution} · {game.source}</p></div>
+             <div><span className="arc-upper">{t("REPLAY IN PROGRESS")}</span><h1>{asset?.symbol??game.asset_id}<span className="arc-symbol-currency"> {t("/ USD")}</span></h1><p>{asset?.name} · {game.period} / {baseResolution} · {game.source}</p></div>
              <div className="arc-price"><strong>{latest ? formatPrice(latest.close,asset?.decimals??2):"—"}</strong><span className={delta>=0?"positive":"negative"}>{delta>=0?<ArrowUpRight size={15}/>:<ArrowDownRight size={15}/>} {delta>=0?"+":""}{formatPrice(delta,asset?.decimals??2)} {t("last candle")}</span></div>
            </div>
            <div className="arc-progress-line">
@@ -372,30 +380,44 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          </section>
 
          <section className="arc-time-panel">
-           <div className="arc-box-head"><div><FastForward size={17}/><strong>{t("Time machine")}</strong><span className="arc-tag">{t("NO WAITING")}</span></div>{game.finished&&<span className="arc-complete"><Flag size={14}/> {t("SEASON FINISHED")}</span>}</div>
+           <div className="arc-box-head"><div><FastForward size={17}/><strong>{t("Replay timeline")}</strong><span className="arc-tag">{t("NO WAITING")}</span></div>{game.finished&&<span className="arc-complete"><Flag size={14}/> {t("REPLAY COMPLETE")}</span>}</div>
            <p>{t("Every step advances the historical market, checks your pending orders, and executes active strategy rules. No real-time waiting.")}</p>
+           
+           <div className="ts-time-actions">
+             <button type="button" disabled={busy||playing||game.current_bar<=game.history_start}
+               onClick={()=>void action(()=>gameAt(game.id,game.current_bar-1))}><ChevronLeft size={15}/>{t("Previous step")}</button>
+             <button type="button" disabled={busy||playing||game.current_bar>=game.live_index}
+               onClick={()=>void action(()=>gameAt(game.id,game.current_bar+1))}><ChevronRight size={15}/>{t("Next recorded step")}</button>
+             {viewingPast&&<button type="button" onClick={()=>void action(()=>gameLoad(game.id))}>{t("Return to latest")}</button>}
+             <span className={viewingPast?"ts-past-note":""}>{viewingPast?t("Historical inspection: read-only. Your latest trades are unchanged."):t("Checkpoint history is saved as the simulation advances.")}</span>
+           </div>
            <div className="arc-time-actions">
-             <button disabled={busy||playing||game.finished} onClick={()=>void action(()=>gameStep(game.id,1))}><ChevronRight size={17}/> {t("Next candle")}</button>
-             <button disabled={busy||playing||game.finished} onClick={()=>void action(()=>gameStep(game.id,5))}><FastForward size={15}/> {t("+5 candles")}</button>
-             <button disabled={busy||playing||game.finished} onClick={()=>void action(()=>gameStep(game.id,20))}><FastForward size={16}/> {t("+20 candles")}</button>
-             <button disabled={busy||playing||game.finished} onClick={()=>void action(()=>gameStep(game.id,100))}><FastForward size={16}/> {t("+100 candles")}</button>
-             <button disabled={busy||playing||game.finished||!game.strategy.trim()} onClick={()=>void action(()=>gameStep(game.id,100,true))}><Target size={16}/> {t("Next bot action")}</button>
+             <button disabled={busy||playing||game.finished||viewingPast} onClick={()=>void action(()=>gameStep(game.id,1))}><ChevronRight size={17}/> {t("Next candle")}</button>
+             <button disabled={busy||playing||game.finished||viewingPast} onClick={()=>void action(()=>gameStep(game.id,5))}><FastForward size={15}/> {t("+5 candles")}</button>
+             <button disabled={busy||playing||game.finished||viewingPast} onClick={()=>void action(()=>gameStep(game.id,20))}><FastForward size={16}/> {t("+20 candles")}</button>
+             <button disabled={busy||playing||game.finished||viewingPast} onClick={()=>void action(()=>gameStep(game.id,100))}><FastForward size={16}/> {t("+100 candles")}</button>
+             <button disabled={busy||playing||game.finished||viewingPast||!game.strategy.trim()} onClick={()=>void action(()=>gameStep(game.id,100,true))}><Target size={16}/> {t("Next strategy signal")}</button>
            </div>
            <div className="arc-auto">
              <div><strong><Gauge size={16}/> {t("Autoplay")}</strong><span>{t("Automatically reveal history while you watch.")}</span></div>
              <select aria-label={t("Autoplay step speed")} value={speed} onChange={e=>setSpeed(Number(e.target.value))}><option value={1}>{t("1 bar / tick")}</option><option value={5}>{t("5 bars / tick")}</option><option value={10}>{t("10 bars / tick")}</option><option value={25}>{t("25 bars / tick")}</option><option value={50}>{t("50 bars / tick")}</option></select>
-             <button className={playing?"arc-playing":""} disabled={game.finished} onClick={()=>setPlaying(p=>!p)}>{playing?<><Pause size={15}/> {t("Pause")}</>:<><Play size={15}/> {t("Play")}</>}</button>
+             <button className={playing?"arc-playing":""} disabled={game.finished||viewingPast} onClick={()=>setPlaying(p=>!p)}>{playing?<><Pause size={15}/> {t("Pause")}</>:<><Play size={15}/> {t("Play")}</>}</button>
            </div>
          </section>
 
-         <StrategyAnalytics runId={game.id} step={game.current_bar} mode="single"
+         <div className="ts-analysis-panel"><StrategyAnalytics runId={game.id} step={game.current_bar} mode="single" atIndex={viewingPast?game.current_bar:undefined}
            assetName={id=>id===game.asset_id?(asset?.symbol??id.toUpperCase()):id.toUpperCase()}
-           onReport={report=>setAnalyticsFills({runId:game.id,executions:report.executions})}/>
+           onReport={report=>setAnalyticsFills({runId:game.id,executions:report.executions})}/></div>
+         <div className="ts-research-panel">
+           {workspaceTab==="scenarios"&&<StochasticResearch mode="single" runId={game.id} assetIds={[game.asset_id]}
+             step={game.current_bar} viewingPast={viewingPast}
+             onStrategy={draft=>{setCode(draft);setEditorOpen(true);setCodeError("");setWorkspaceTab("strategy");}}/>}
+         </div>
          <AIAssistant key={game.id} mode="single" runId={game.id}
-           onDraft={draft=>{setCode(draft);setEditorOpen(true);setCodeError("");}}/>
+           onDraft={draft=>{setCode(draft);setEditorOpen(true);setCodeError("");setWorkspaceTab("strategy");}}/>
          <section className="arc-bot-section">
-           <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Workshop")}</strong><span className="arc-tag">{t("NO CODING EXPERIENCE NEEDED")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{t(editorOpen?"Collapse":"Expand")}</button></div>
-           <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Teach your trading bot what to do")}</strong><p>{t("Write rules in plain English. The engine evaluates the conditions at each revealed candle close, then queues trades for the next candle.")}</p></div></div>
+           <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Editor")}</strong><span className="arc-tag">{t("NO CODING EXPERIENCE NEEDED")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{t(editorOpen?"Collapse":"Expand")}</button></div>
+           <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Define algorithmic trading rules")}</strong><p>{t("Write rules in plain English. The engine evaluates the conditions at each revealed candle close, then queues trades for the next candle.")}</p></div></div>
            {editorOpen&&<div className="arc-editor">
              <VisualStrategyBuilder onAdd={rule=>{setCode(prev=>prev.trim()?prev.trim()+"\n"+rule:rule);setCodeError("");}}/>
              <div className="arc-template-row"><span>{t("TRY A TEMPLATE")}</span>{game.examples.map(sample=><button key={sample.title} onClick={()=>{setCode(sample.code);setCodeError("");}}>{t(sample.title)}</button>)}</div>
@@ -408,7 +430,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
                <p>{t("BUY % uses available cash. SELL % uses holdings. Rules trigger on crossing events, not every candle. No Python code or unsafe execution.")}</p>
              </div>
              {codeError&&<div role="alert" className="arc-error">{codeError}</div>}
-             <div className="arc-code-actions"><span>{t(game.strategy.trim()?"Bot armed":"No active strategy yet")}</span><button disabled={busy||validating||codeSaved} onClick={()=>void saveCode()}><Save size={15}/>{t(validating?"Validating...":"Save & arm bot")}</button></div>
+             <div className="arc-code-actions"><span>{t(game.strategy.trim()?"Bot armed":"No active strategy yet")}</span><button disabled={busy||validating||codeSaved||viewingPast} onClick={()=>void saveCode()}><Save size={15}/>{t(validating?"Validating...":"Save & activate strategy")}</button></div>
            </div>}
          </section>
 
@@ -445,7 +467,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
                <div className="arc-quote-mini"><span>{t("Last candle close")}</span><strong>{latest?formatPrice(latest.close,asset?.decimals??2):"—"}</strong></div>
                <div className="arc-quote-mini"><span>{t("Units held")}</span><strong>{q!.quantity.toLocaleString("en-US",{maximumFractionDigits:8})}</strong></div>
                <div className="arc-quote-mini"><span>{t("Cash available")}</span><strong>{formatMoney(q!.cash)}</strong></div>
-               <button className={side==="buy"?"arc-buy-cta":"arc-sell-cta"} disabled={busy||playing||game.finished} type="submit">{side==="buy"?<ArrowUpRight size={17}/>:<ArrowDownRight size={17}/>} Queue {t(side.toUpperCase())} {t("order")}</button>
+               <button className={side==="buy"?"arc-buy-cta":"arc-sell-cta"} disabled={busy||playing||game.finished||viewingPast} type="submit">{side==="buy"?<ArrowUpRight size={17}/>:<ArrowDownRight size={17}/>} Queue {t(side.toUpperCase())} {t("order")}</button>
              </form>
              <div className="arc-disclaimer"><ShieldCheck size={14}/><span>{t("Orders execute only as new candles reveal. Fees, spread and slippage are modeled.")}</span></div>
            </div>
@@ -464,7 +486,7 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
                </label>
              </div>
              <div className="arc-risk-presets"><button onClick={()=>{setStopPct("3");setTakePct("6");}}>{t("3% stop / 6% target")}</button><button onClick={()=>{setStopPct("5");setTakePct("10");}}>{t("5% / 10%")}</button><button onClick={()=>{setStopPct("0");setTakePct("0");}}>{t("Off")}</button></div>
-             <button className="arc-risk-save" disabled={busy||playing} onClick={()=> {
+             <button className="arc-risk-save" disabled={busy||playing||viewingPast} onClick={()=> {
                const stop=Number(stopPct),take=Number(takePct);
                if (!Number.isFinite(stop)||!Number.isFinite(take)||stop<0||stop>75||take<0||take>75) {setError("Risk percentages must be between 0 and 75.");return;}
                void action(()=>gameSetRisk(game.id,stop,take),"Protective exits updated.");
