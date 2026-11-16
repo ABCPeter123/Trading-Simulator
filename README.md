@@ -2,6 +2,25 @@
 
 A **local-first paper trading and historical replay terminal** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Strategy analytics v0.7
+
+**Detailed game performance research** is now built into both Arcade modes.
+Each saved historical season includes a strategy analytics dashboard with:
+
+- Adjustable **SMA overlays** and crossover markers on the historical price chart.
+- Real simulated **buy/sell execution arrows**, not guessed strategy signals.
+- Equity versus equal-weight buy-and-hold, drawdown, and invested-vs-cash charts.
+- Returns for user-selected replay windows and **custom date ranges**.
+- Per-instrument P&L attribution, full execution audit, fees, turnover, and
+  profit ratios for individual sell fills.
+- Separate downloadable CSVs for equity time series and full trade history.
+- Read-only analytics based on stored, revealed historical prices and fills
+  without peeking at upcoming market bars.
+
+Read [Strategy Analytics methodology](docs/STRATEGY_ANALYTICS.md).
+The dashboard includes **English / 简体中文** labels and uses the existing
+charting package. No new dependencies or local installation steps.
+
 ## Language support: English / 简体中文
 
 The entire frontend now has an **EN / 中文** switch, fixed at the lower-right
