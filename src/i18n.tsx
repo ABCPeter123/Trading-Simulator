@@ -596,6 +596,7 @@ const zh: Record<string, string> = {
   "Connected": "已连接",
   "Not ready": "未就绪",
   "Recheck AI": "重新检测 AI",
+  "Ollama is unavailable or the model is missing. Run:": "Ollama 未运行或模型未安装。请运行：",
 };
 
 const LocaleContext = createContext<{
