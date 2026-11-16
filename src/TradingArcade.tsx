@@ -4,7 +4,7 @@ import {
   Activity, ArrowDownRight, ArrowUpRight, Award, Bot, Check,
   ChevronLeft, ChevronRight, Clock3, Code2, FastForward, Flag, Gauge, Medal, Pause,
   Play, Plus, Save, ShieldCheck, Sparkles, Target, Terminal,
-  Trash2, Trophy, Wallet, Zap,
+  Trash2, Trophy, Wallet,
 } from "lucide-react";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import type { Asset } from "./types";
