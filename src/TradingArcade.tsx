@@ -10,6 +10,7 @@ import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import type { Asset } from "./types";
 import VisualStrategyBuilder from "./VisualStrategyBuilder";
 import StrategyAnalytics from "./StrategyAnalytics";
+import AIAssistant from "./AIAssistant";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { PriceChart } from "./components/PriceChart";
 import { REPLAY_WINDOWS, RESOLUTIONS, aggregateBars, chartTrades as mapChartTrades, chartViewsFor, showReplayTime } from "./replayIntervals";
@@ -390,6 +391,8 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
          <StrategyAnalytics runId={game.id} step={game.current_bar} mode="single"
            assetName={id=>id===game.asset_id?(asset?.symbol??id.toUpperCase()):id.toUpperCase()}
            onReport={report=>setAnalyticsFills({runId:game.id,executions:report.executions})}/>
+         <AIAssistant key={game.id} mode="single" runId={game.id}
+           onDraft={draft=>{setCode(draft);setEditorOpen(true);setCodeError("");}}/>
          <section className="arc-bot-section">
            <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Workshop")}</strong><span className="arc-tag">{t("NO CODING EXPERIENCE NEEDED")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{t(editorOpen?"Collapse":"Expand")}</button></div>
            <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Teach your trading bot what to do")}</strong><p>{t("Write rules in plain English. The engine evaluates the conditions at each revealed candle close, then queues trades for the next candle.")}</p></div></div>
