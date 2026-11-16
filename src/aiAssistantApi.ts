@@ -8,6 +8,8 @@ export interface AIStatus {
   configured: boolean;
   ready: boolean;
   remote: boolean;
+  warming?: boolean;
+  loaded?: boolean;
   description: string;
 }
 export interface AIMessage {
@@ -25,8 +27,9 @@ export interface AIAnswer {
   scope: string;
 }
 export const getAIStatus = () => request<AIStatus>("/ai/status");
-export const askAI = (mode: AIMode, runId: string, question: string, history: AIMessage[]) =>
+export const warmupAI = () => request<{started:boolean;reason:string}>("/ai/warmup",{method:"POST"});
+export const askAI = (mode: AIMode, runId: string, question: string, history: AIMessage[], language: "en"|"zh-CN" = "en") =>
   request<AIAnswer>("/ai/ask", {
     method: "POST",
-    body: JSON.stringify({mode, run_id: runId, question, history: history.slice(-6)}),
+    body: JSON.stringify({mode, run_id: runId, question, history: history.slice(-6), language}),
   });
