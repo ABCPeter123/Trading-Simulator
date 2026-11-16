@@ -158,8 +158,13 @@ async function verifyMode(page, mode, viewport) {
       ]) {
         await tabs.getByRole("button",{name:label,exact:true}).click();
         await visible(page,target,viewport + " " + label);
+        if (label === "Account & Orders") {
+          const symbolSelect = page.locator(".terminal-order-asset-picker select");
+          await visible(page, ".terminal-order-asset-picker select",
+            viewport + " direct paper order symbol selection");
+          await symbolSelect.selectOption("spy");
+        }
       }
-      await visible(page, ".terminal-order-asset-picker select", "direct paper order symbol selection");
     }
     const overflow = await page.evaluate(() =>
       document.documentElement.scrollWidth - document.documentElement.clientWidth);
