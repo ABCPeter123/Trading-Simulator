@@ -454,6 +454,14 @@ export default function MarketDesk() {
           <section className="ticket-card">
             <div className="ticket-heading"><div><span className="eyebrow">{t(mode==="replay"?"NEXT-BAR EXECUTION":"PAPER EXECUTION")}</span><h2>{t("Order ticket")}</h2></div><span className="ticket-icon"><ArrowRight size={18}/></span></div>
             <div className="ticket-security"><span className="ticket-security-symbol">{selectedAsset.symbol}</span><span className="ticket-security-class">{t(selectedAsset.assetClass)}<ChevronDown size={12}/></span></div>
+            <label className="terminal-order-asset-picker">{t("Instrument")}
+              <select value={selectedId} onChange={event=>{
+                const next=ASSETS.find(asset=>asset.id===event.target.value);
+                if(next){setAssetClass(next.assetClass);setSearch("");selectAsset(next);}
+              }}>
+                {ASSETS.map(asset=><option key={asset.id} value={asset.id}>{asset.symbol} · {asset.name}</option>)}
+              </select>
+            </label>
             <div className="side-switch">
               <button type="button" className={side==="buy"?"buy-active":""} onClick={()=>{setSide("buy");setTradeError("");}}>{t("Buy / Long")}</button>
               <button type="button" className={side==="sell"?"sell-active":""} onClick={()=>{setSide("sell");setTradeError("");}}>{t("Sell / Close")}</button>
