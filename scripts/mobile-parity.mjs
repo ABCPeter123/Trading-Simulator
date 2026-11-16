@@ -122,6 +122,24 @@ async function visible(page, selector, where) {
   }
 }
 
+async function chartVisible(page, selector, where) {
+  try {
+    await page.waitForFunction(sel => {
+      const element = document.querySelector(sel);
+      if (!element) return false;
+      const rect = element.getBoundingClientRect();
+      const canvas = element.querySelector("canvas");
+      const plot = canvas?.getBoundingClientRect();
+      return rect.width >= 50 && rect.height >= 40 &&
+        canvas && canvas.width > 0 && canvas.height > 0 &&
+        plot && plot.width > 0 && plot.height > 0;
+    },selector,{timeout:10000});
+  } catch (error) {
+    throw new Error(where + ": graph canvas is blank or incorrectly sized (" +
+      selector + "): " + error.message);
+  }
+}
+
 async function verifyMode(page, mode, viewport) {
   const selector = mode === "single" ? ".arc-layout" : ".port-layout";
   await visible(page, selector + '[data-tab="overview"]', viewport + " " + mode);
@@ -137,6 +155,14 @@ async function verifyMode(page, mode, viewport) {
     await button.click();
     const target = mode === "single" ? singleTarget : portfolioTarget;
     await visible(page, target, viewport + " " + mode + " " + name);
+    if (name === "Historical Replay") {
+      await chartVisible(page, selector+" .arc-chart-wrap .chart-canvas",
+        viewport+" "+mode+" historical price graph");
+    }
+    if (name === "Performance Analytics") {
+      await chartVisible(page, selector+" .an-chart-canvas",
+        viewport+" "+mode+" equity and benchmark graph");
+    }
     const active = await page.locator(selector).getAttribute("data-tab");
     const expected = ({
       "Historical Replay":"overview","Market Data & Paper":"market",
@@ -158,6 +184,10 @@ async function verifyMode(page, mode, viewport) {
       ]) {
         await tabs.getByRole("button",{name:label,exact:true}).click();
         await visible(page,target,viewport + " " + label);
+        if (label === "Market & Charts") {
+          await chartVisible(page, ".market-desk .chart-card .chart-canvas",
+            viewport + " market price graph");
+        }
         if (label === "Account & Orders") {
           const symbolSelect = page.locator(".terminal-order-asset-picker select");
           await visible(page, ".terminal-order-asset-picker select",
@@ -196,6 +226,12 @@ try {
     await verifyMode(page,"single",width);
     await page.locator(".sim-mode-tabs").getByRole("button",{name:"Portfolio Simulator",exact:true}).click();
     await verifyMode(page,"portfolio",width);
+    await page.locator(".ts-lang-switch").getByRole("button",{name:"中文"}).click();
+    if (await page.locator("html").getAttribute("lang") !== "zh-CN")
+      throw new Error(width + "px Chinese locale not applied");
+    const chineseTab = await page.locator(".port-layout .ts-tab-strip button").first().textContent();
+    if (chineseTab?.includes("Historical Replay"))
+      throw new Error(width + "px workspace navigation was not translated");
     await context.close();
     process.stdout.write("Feature parity passed at " + width + "px (both modes, all workspaces).\n");
   }
