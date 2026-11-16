@@ -14,15 +14,16 @@ from statistics import mean, pstdev
 from .arcade import INITIAL_CASH
 
 
-def _day(timestamp):
-    return datetime.fromtimestamp(int(timestamp), tz=timezone.utc).date().isoformat()
+def _day(timestamp, resolution="1d"):
+    point = datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+    return point.date().isoformat() if resolution == "1d" else point.isoformat(timespec="seconds")
 
 
 def _percent(current, prior):
     return (current / prior - 1) * 100 if prior > 0 else None
 
 
-def build_report(days, daily, asset_ids, start_index, end_index, fills):
+def build_report(days, daily, asset_ids, start_index, end_index, fills, resolution="1d"):
     if start_index > end_index:
         raise ValueError("Invalid analytics window")
     # Read observed closes strictly up to start; preserve warmup information.
@@ -46,7 +47,7 @@ def build_report(days, daily, asset_ids, start_index, end_index, fills):
             continue
         # Fills originate from source candles whose timestamps are already
         # stored in the frozen snapshot, never from a user-controlled price.
-        events.setdefault(_day(fill["time"]), []).append(fill)
+        events.setdefault(_day(fill["time"], resolution), []).append(fill)
 
     quantities = {asset_id: 0.0 for asset_id in asset_ids}
     average = {asset_id: 0.0 for asset_id in asset_ids}
@@ -168,6 +169,7 @@ def build_report(days, daily, asset_ids, start_index, end_index, fills):
 
     return {
         "start_day": days[start_index], "end_day": days[end_index],
+        "resolution": resolution,
         "sessions": len(series), "curve": series,
         "summary": {
             "total_return_pct": end["return_pct"],
