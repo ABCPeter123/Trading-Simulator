@@ -6,20 +6,23 @@ import { useI18n } from "./i18n";
 import { getScenarios, priceEuropeanOption } from "./stochasticApi";
 import type { ScenarioResult,OptionPrices } from "./stochasticApi";
 import "./stochastic.css";
+import { useChartDimensions } from "./components/useChartDimensions";
 
 const money=(x:number)=>Number.isFinite(x)?x.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}):"N/A";
 function FanChart({result}:{result:ScenarioResult}) {
-  const el=useRef<HTMLDivElement>(null);
+  const {ref:el,width,height,visible}=useChartDimensions();
+  const resizeRef=useRef<((width:number,height:number)=>void)|null>(null);
   useEffect(()=>{
     const element=el.current;
-    if(!element)return;
+    if(!element||!visible)return;
     const chart=createChart(element,{
-      autoSize:true,layout:{background:{type:ColorType.Solid,color:"#101d2c"},textColor:"#a0aec0"},
+      autoSize:false,width,height,layout:{background:{type:ColorType.Solid,color:"#101d2c"},textColor:"#a0aec0"},
       grid:{vertLines:{color:"#233346"},horzLines:{color:"#233346"}},
       rightPriceScale:{borderColor:"#37465b"},
       timeScale:{borderColor:"#37465b",visible:false},
       localization:{priceFormatter:(n:number)=>money(n)},
     });
+    resizeRef.current=(nextWidth,nextHeight)=>chart.resize(nextWidth,nextHeight);
     const colors=["#67569b","#8086ca","#eecc79","#7fb1ce","#67569b"];
     for(const [i,key] of (["p05","p25","median","p75","p95"] as const).entries()){
       const series=chart.addSeries(LineSeries,{
@@ -39,8 +42,9 @@ function FanChart({result}:{result:ScenarioResult}) {
       series.setData(result.paths[i].map((value,step)=>({time:(step+1) as UTCTimestamp,value})));
     }
     chart.timeScale().fitContent();
-    return ()=>chart.remove();
-  },[result]);
+    return ()=>{resizeRef.current=null;chart.remove();};
+  },[result,visible]);
+  useEffect(()=>{if(visible)resizeRef.current?.(width,height);},[visible,width,height]);
   return <div className="forecast-plot" ref={el}/>;
 }
 export default function StochasticResearch({mode,runId,assetIds,step,viewingPast,onStrategy}:{
