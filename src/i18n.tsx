@@ -670,6 +670,7 @@ const zh: Record<string, string> = {
   "Forecast horizon": "预测跨度",
   "SMA/RSI periods must be 2-100; PROB_UP horizon 1-60; order percent 0-100.": "SMA和RSI周期必须为2至100，PROB_UP模拟跨度为1至60，交易比例为0至100。",
   "PROB_UP(1-60)": "PROB_UP(1-60)",
+  "Annual volatility (manual assumption)": "年化波动率（手动假设）",
 };
 
 const LocaleContext = createContext<{
