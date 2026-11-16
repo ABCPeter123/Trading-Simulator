@@ -23,7 +23,6 @@ export default function AIAssistant({mode,runId,onDraft}: {
   const [answers,setAnswers]=useState<AIAnswer[]>([]);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
-  const [copied,setCopied]=useState(false);
 
   useEffect(()=>{
     let alive=true;
