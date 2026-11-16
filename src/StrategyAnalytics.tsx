@@ -134,6 +134,7 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport,at
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
   const [window,setWindow]=useState<Window>("ALL");
+  const [rangeReset,setRangeReset]=useState(0);
   const [fromDay,setFromDay]=useState("");
   const [toDay,setToDay]=useState("");
   useEffect(()=>{
@@ -152,17 +153,28 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport,at
     if (window==="CUSTOM") return report.curve.filter(p=>(!fromDay||p.day.slice(0,10)>=fromDay)&&(!toDay||p.day.slice(0,10)<=toDay));
     return report.curve.slice(-(Number(window)+1));
   },[report,window,fromDay,toDay]);
+  // Chart points always contain the COMPLETE revealed curve. Time-window
+  // filters affect metrics and the initial x-axis view, never series data.
+  const allPoints=report?.curve??[];
+  const plotViewport=useMemo(()=>{
+    if(!report||window==="ALL"||!data.length)return null;
+    const start=report.curve.findIndex(p=>p.day===data[0].day);
+    const end=report.curve.findIndex(p=>p.day===data[data.length-1].day);
+    if(start<0||end<start)return null;
+    return {from:start-0.5,to:end+0.5};
+  },[report,window,data]);
+  const focusKey=window+"|"+fromDay+"|"+toDay+"|"+rangeReset;
   const plots=useMemo(()=>({
     equity:[
-      {name:t("Strategy equity"),color:"#55d0a6",points:toSeries(data,"equity")},
-      {name:t("Equal-weight benchmark"),color:"#b7a4fe",points:toSeries(data,"benchmark")},
+      {name:t("Strategy equity"),color:"#55d0a6",points:toSeries(allPoints,"equity")},
+      {name:t("Equal-weight benchmark"),color:"#b7a4fe",points:toSeries(allPoints,"benchmark")},
     ],
-    drawdown:[{name:t("Drawdown"),color:"#f2828e",points:toSeries(data,"drawdown_pct")}],
+    drawdown:[{name:t("Drawdown"),color:"#f2828e",points:toSeries(allPoints,"drawdown_pct")}],
     capital:[
-      {name:t("Capital invested"),color:"#e8b47d",points:toSeries(data,"invested")},
-      {name:t("Cash balance"),color:"#6db6e7",points:toSeries(data,"cash")},
+      {name:t("Capital invested"),color:"#e8b47d",points:toSeries(allPoints,"invested")},
+      {name:t("Cash balance"),color:"#6db6e7",points:toSeries(allPoints,"cash")},
     ],
-  }),[data,t]);
+  }),[report,t]);
   const windowResult=useMemo(()=>{
     if(data.length===0)return null;
     const first=data[0],last=data.at(-1)!;
@@ -188,8 +200,8 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport,at
       <div className="an-period-row">
         <span>{t("Show last")}</span>
         {WINDOWS.map(k=><button key={k} className={k===window?"active":""}
-          onClick={()=>setWindow(k)}>{k==="ALL"?t("All"):k+" "+t("steps")}</button>)}
-        <button className={window==="CUSTOM"?"active":""} onClick={()=>setWindow("CUSTOM")}>{t("Custom dates")}</button>
+          onClick={()=>{setWindow(k);setRangeReset(value=>value+1);}}>{k==="ALL"?t("All"):k+" "+t("steps")}</button>)}
+        <button className={window==="CUSTOM"?"active":""} onClick={()=>{setWindow("CUSTOM");setRangeReset(value=>value+1);}}>{t("Custom dates")}</button>
         {window==="CUSTOM"&&<><label className="an-date-label">{t("From")}<input type="date" min={report.start_day} max={report.end_day}
           value={fromDay} onChange={e=>setFromDay(e.target.value)}/></label>
           <label className="an-date-label">{t("To")}<input type="date" min={report.start_day} max={report.end_day}
@@ -215,17 +227,17 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport,at
         <div className="an-plot">
           <header><TrendingUp size={16}/><strong>{t("Equity vs benchmark")}</strong></header>
           <div className="an-legend"><span style={{color:"#55d0a6"}}>{t("Strategy equity")}</span><span style={{color:"#b7a4fe"}}>{t("Equal-weight benchmark")}</span></div>
-          <LinePlot data={plots.equity}/>
+          <LinePlot data={plots.equity} viewport={plotViewport} focusKey={focusKey}/>
         </div>
         <div className="an-plot">
           <header><TrendingDown size={16}/><strong>{t("Drawdown history")}</strong></header>
           <div className="an-legend"><span style={{color:"#f2828e"}}>{t("Peak-to-trough decline")}</span></div>
-          <LinePlot data={plots.drawdown} area format="percent"/>
+          <LinePlot data={plots.drawdown} viewport={plotViewport} focusKey={focusKey} area format="percent"/>
         </div>
         <div className="an-plot">
           <header><Wallet size={16}/><strong>{t("Cash vs invested capital")}</strong></header>
           <div className="an-legend"><span style={{color:"#e8b47d"}}>{t("Capital invested")}</span><span style={{color:"#6db6e7"}}>{t("Cash balance")}</span></div>
-          <LinePlot data={plots.capital}/>
+          <LinePlot data={plots.capital} viewport={plotViewport} focusKey={focusKey}/>
         </div>
       </div>
       <div className="an-detail-grid">
