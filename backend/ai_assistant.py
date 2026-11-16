@@ -64,6 +64,30 @@ def configuration():
     }
 
 
+def provider_status():
+    """Show whether the selected local model is actually available."""
+    config = configuration()
+    if config["provider"] != "ollama":
+        return {**config, "ready": config["configured"]}
+    ready = False
+    try:
+        with httpx.Client(timeout=2, trust_env=False) as client:
+            response = client.get("http://127.0.0.1:11434/api/tags")
+            response.raise_for_status()
+            known = [entry.get("name", "") for entry in response.json().get("models", [])]
+            ready = any(
+                name == config["model"] or
+                name.split(":")[0] == config["model"] or
+                name == config["model"] + ":latest" for name in known
+            )
+    except (httpx.HTTPError, TypeError, ValueError, KeyError):
+        ready = False
+    if not ready:
+        config["description"] = ("Ollama is not running, or model " + config["model"] +
+                                 " is not installed. Run: ollama pull " + config["model"])
+    return {**config, "ready": ready}
+
+
 def game_context(mode: str, run_id: str):
     if mode == "portfolio":
         game = get_season(run_id)
