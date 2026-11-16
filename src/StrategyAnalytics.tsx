@@ -9,6 +9,7 @@ import { getStrategyReport } from "./strategyAnalyticsApi";
 import type { StrategyReport, AnalyticsPoint } from "./strategyAnalyticsApi";
 import { useI18n } from "./i18n";
 import "./analytics.css";
+import { useChartDimensions } from "./components/useChartDimensions";
 
 type Window = "ALL" | "5" | "20" | "60" | "126" | "252" | "CUSTOM";
 const WINDOWS:Window[]=["ALL","5","20","60","126","252"];
@@ -26,14 +27,15 @@ function LinePlot({data,format="money",area=false}:{
   format?:"money"|"percent";
   area?:boolean;
 }) {
-  const node=useRef<HTMLDivElement>(null);
+  const {ref:node,width,height,visible}=useChartDimensions();
+  const resizeRef=useRef<((width:number,height:number)=>void)|null>(null);
   const key=data.map(line=>line.name+"|"+line.color).join(",");
   const updateRef=useRef<((lines:PlotLine[])=>void)|null>(null);
   useEffect(()=>{
     const element=node.current;
-    if(!element)return;
+    if(!element||!visible)return;
     const chart=createChart(element,{
-      autoSize:true,
+      autoSize:false,width,height,
       layout:{background:{type:ColorType.Solid,color:"#111c29"},textColor:"#879aaf",fontSize:10},
       grid:{vertLines:{color:"#1e3040"},horzLines:{color:"#1e3040"}},
       crosshair:{mode:CrosshairMode.Normal},
@@ -43,6 +45,7 @@ function LinePlot({data,format="money",area=false}:{
         priceFormatter:(value:number)=>format==="percent"?value.toFixed(2)+"%":formatMoney(value),
       },
     });
+    resizeRef.current=(nextWidth,nextHeight)=>chart.resize(nextWidth,nextHeight);
     const plots=data.map((line,i)=>{
       const s=area&&i===0?chart.addSeries(AreaSeries,{
         lineColor:line.color,topColor:line.color+"44",bottomColor:line.color+"00",
@@ -56,9 +59,10 @@ function LinePlot({data,format="money",area=false}:{
       lines.forEach((line,i)=>plots[i].setData(line.points));
       chart.timeScale().fitContent();
     };
-    return ()=>{updateRef.current=null;chart.remove();};
-  },[key,area,format]);
-  useEffect(()=>{updateRef.current?.(data);},[data,key,area,format]);
+    return ()=>{updateRef.current=null;resizeRef.current=null;chart.remove();};
+  },[key,area,format,visible]);
+  useEffect(()=>{if(visible)resizeRef.current?.(width,height);},[visible,width,height]);
+  useEffect(()=>{if(visible)updateRef.current?.(data);},[data,key,area,format,visible]);
   return <div className="an-chart-canvas" ref={node}/>;
 }
 
