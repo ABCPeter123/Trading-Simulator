@@ -228,7 +228,7 @@ def arcade_analytics(run_id: str, at: int | None = Query(None, ge=0)):
 
 # AI advisor is read-only. Proposals must pass the same DSL validator and
 # are NEVER saved to a game or submitted as orders by this endpoint.
-from .ai_assistant import advise as ai_advise, provider_status as ai_provider_status
+from .ai_assistant import advise as ai_advise, provider_status as ai_provider_status, warmup_ollama as ai_warmup_ollama
 
 class AITurn(BaseModel):
     role: Literal["user", "assistant"]
@@ -239,15 +239,20 @@ class AIQuestion(BaseModel):
     run_id: str = Field(min_length=1, max_length=100)
     question: str = Field(min_length=1, max_length=1200)
     history: list[AITurn] = Field(default_factory=list, max_length=6)
+    language: Literal["en", "zh-CN"] = "en"
 
 @app.get("/api/ai/status")
 def ai_status():
     return ai_provider_status()
 
+@app.post("/api/ai/warmup")
+def ai_warmup():
+    return ai_warmup_ollama()
+
 @app.post("/api/ai/ask")
 def ai_ask(request: AIQuestion):
     return ai_advise(request.mode, request.run_id, request.question,
-                     [turn.model_dump() for turn in request.history])
+                     [turn.model_dump() for turn in request.history], request.language)
 
 # Stochastic research is computed exclusively from already-revealed bars.
 class ScenarioRequest(BaseModel):
