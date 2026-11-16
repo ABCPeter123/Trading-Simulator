@@ -207,14 +207,24 @@ def portfolio_strategy(run_id: str, request: ArcadeStrategy):
 def portfolio_risk(run_id: str, request: ArcadeRisk):
     return portfolio.risk(run_id, request.stop_loss_pct, request.take_profit_pct)
 
+
+@app.get("/api/arcade/{run_id}/at/{step}")
+def arcade_historical_view(run_id: str, step: int):
+    from .arcade import get_at
+    return get_at(run_id, step)
+
+@app.get("/api/portfolio-seasons/{run_id}/at/{step}")
+def portfolio_historical_view(run_id: str, step: int):
+    return portfolio.get_at(run_id, step)
+
 @app.get("/api/portfolio-seasons/{run_id}/analytics")
-def portfolio_analytics(run_id: str):
-    return portfolio.get_analysis(run_id)
+def portfolio_analytics(run_id: str, at: int | None = Query(None, ge=0)):
+    return portfolio.get_analysis(run_id, at)
 
 @app.get("/api/arcade/{run_id}/analytics")
-def arcade_analytics(run_id: str):
+def arcade_analytics(run_id: str, at: int | None = Query(None, ge=0)):
     from .arcade import get_analysis
-    return get_analysis(run_id)
+    return get_analysis(run_id, at)
 
 # AI advisor is read-only. Proposals must pass the same DSL validator and
 # are NEVER saved to a game or submitted as orders by this endpoint.
