@@ -675,6 +675,12 @@ const zh: Record<string, string> = {
   "Market & Charts": "行情与图表",
   "Account & Orders": "账户与订单",
   "Backtest Research": "策略回测研究",
+  "Start with $100,000 in simulated capital. Analyze real historical candles, test rule-based strategies, and compare performance with a benchmark.": "以10万美元模拟资本开始，分析真实历史K线，测试规则策略，并将业绩与基准比较。",
+  "Write safe deterministic strategy rules. Signals evaluate on revealed candle closes, and orders enter the next available trading candle.": "编写安全、确定性的策略规则。信号在已揭示K线收盘后计算，订单最早进入下一根可交易K线。",
+  "Advance observed historical bars automatically.": "自动推进已观察历史K线。",
+  "Select 2 to 5 instruments using a shared $100,000 simulated USD account. Historical candles are synchronized and upcoming market data remain hidden.": "选择2至5种证券，共享10万美元模拟账户。历史K线同步，尚未到来的行情保持隐藏。",
+  "Validated strategy syntax": "已验证的策略语法",
+  "Historical inspection is read-only. Return to latest to trade.": "历史查看为只读模式，请返回最新时间点后交易。",
 };
 
 const LocaleContext = createContext<{
