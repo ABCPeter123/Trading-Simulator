@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import TradingArcade from "./TradingArcade";
 import PortfolioArcade from "./PortfolioArcade";
@@ -9,6 +9,10 @@ import "./mobile.css";
 
 function Simulator() {
   const { t } = useI18n();
+  useEffect(()=>{
+    // The browser launch initiates one non-blocking Ollama preload. No cloud API calls.
+    void fetch("/api/ai/warmup",{method:"POST"}).catch(()=>{});
+  },[]);
   const [mode, setMode] = useState<"single" | "portfolio">("single");
   return <>
     <nav className="sim-mode-tabs" aria-label={t("Simulation mode")}>
