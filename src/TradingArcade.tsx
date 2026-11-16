@@ -271,8 +271,8 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
     <header className="arc-top">
       <div className="arc-top-left">
         
-        <div className="arc-logo"><Zap size={23} fill="currentColor"/></div>
-        <div className="arc-brand">{t("Historical Trading")} <span>{t("Simulator")}</span><small>{t("Market research workspace")}</small></div>
+        <div className="arc-logo"><Activity size={23}/></div>
+        <div className="arc-brand">{t("Trading")} <span>{t("Simulator")}</span><small>{t("Market research workspace")}</small></div>
       </div>
       <div className="arc-top-right">
         <span className="arc-live"><span/> {t("Historical market simulation")}</span>
@@ -291,7 +291,7 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
      newGame || !game ? <main className="arc-intro">
        <div className="arc-intro-icon"><Activity size={35}/></div>
        <span className="arc-upper">{t("HISTORICAL MARKET RESEARCH")}</span>
-       <h1>{t("Historical Trading Simulator")}</h1>
+       <h1>{t("Trading Simulator")}</h1>
        <p>{t("Start with $100,000 in simulated capital. Analyze real historical candles, test rule-based strategies, and compare performance with a benchmark.")}</p>
        <button type="button" className="arc-outline-button" onClick={()=>setWorkspaceTab("market")}>{t("Open market data and paper account")}</button>
        <div className="arc-start-form">
