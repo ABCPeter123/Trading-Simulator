@@ -53,3 +53,13 @@
 .port-layout[data-tab="market"] .market-desk{grid-column:1/-1}
 .arc-layout[data-tab="market"]{grid-template-columns:minmax(0,1fr)}
 .arc-layout[data-tab="market"] .market-desk{grid-column:1/-1}
+
+/* Keep every workspace destination present in the DOM and reachable at every
+   viewport. The selector on narrow screens is only a shortcut. */
+.ts-tab-strip{display:flex;gap:7px;align-items:center;min-width:0;width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}
+.ts-tab-strip>button{flex:0 0 auto}
+@media(max-width:740px){
+  .ts-workspace-tabs{display:flex;flex-direction:column;align-items:stretch;gap:9px}
+  .ts-workspace-tabs .ts-tab-strip{width:100%;padding-bottom:5px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  .ts-workspace-tabs .ts-tab-strip>button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 12px;scroll-snap-align:start}
+}
