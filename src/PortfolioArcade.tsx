@@ -267,7 +267,8 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         }}><option value="">{t("Select a saved basket")}</option>{saved.map(x=>
           <option key={x.id} value={x.id}>{x.asset_ids.map(assetName).join(" + ")} · {x.period}</option>)}</select></label>}
       </div>
-    </main> : <main className="port-layout">
+    </main> : <main className="port-layout" data-tab={workspaceTab}>
+      <WorkspaceTabs active={workspaceTab} onChange={setWorkspaceTab}/>
       <section className="port-main">
         <div className="port-achievements">
           <strong>{t("LEVEL")} {season.metrics.level} · {season.metrics.score.toLocaleString()} {t("POINTS")}</strong>
