@@ -77,7 +77,7 @@ function tradesCsv(data:StrategyReport) {
     fill.day,fill.asset_id,fill.side,fill.quantity,fill.price,
     fill.notional,fill.fee,fill.cash_change,fill.source,
   ].join(","));
-  const blob=new Blob([header.join(",")+"\\n"+rows.join("\\n")+"\\n"],{type:"text/csv;charset=utf-8"});
+  const blob=new Blob([header.join(",")+"\n"+rows.join("\n")+"\n"],{type:"text/csv;charset=utf-8"});
   const url=URL.createObjectURL(blob);
   const anchor=document.createElement("a");anchor.href=url;
   anchor.download=`strategy-executions-${data.end_day}.csv`;anchor.click();
