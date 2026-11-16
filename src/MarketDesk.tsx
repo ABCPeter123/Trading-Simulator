@@ -358,7 +358,7 @@ export default function MarketDesk() {
                 <button type="button" className={mode==="market"?"mode-selected":""} onClick={()=>changeMode("market")}><Activity size={14}/> {t("Market")}</button>
                 <button type="button" className={mode==="replay"?"mode-selected":""} onClick={()=>changeMode("replay")}><Clock3 size={14}/> {t("Replay")}</button>
               </div>
-              <span>{history ? `${history.source} · latest bar ${dt(history.bars.at(-1)!.time)}` : t("Connect local API for market history")}</span>
+              <span>{history ? `${history.source} · ${t("latest bar")} ${dt(history.bars.at(-1)!.time)}` : t("Connect local API for market history")}</span>
             </div>
             <div className="chart-body">
               {visibleBars.length ? <PriceChart asset={selectedAsset} range="1Y" style={chartStyle} bars={visibleBars}/> :
@@ -369,7 +369,7 @@ export default function MarketDesk() {
             </div>
             {mode==="replay" && <div className="replay-controls">
               <button type="button" onClick={resetReplay} title={t("Restart replay")}><RotateCcw size={15}/> {t("Restart")}</button>
-              <div className="replay-progress"><span>BAR {visibleBars.length} / {allBars.length}</span><span>{latestCandle ? dt(latestCandle.time) : "—"}</span></div>
+              <div className="replay-progress"><span>{t("BAR")} {visibleBars.length} / {allBars.length}</span><span>{latestCandle ? dt(latestCandle.time) : "—"}</span></div>
               <button type="button" disabled={replayCheckpoints.length<2||replayIndex<=replayCheckpoints[0].index}
                 onClick={()=>inspectReplayAt(replayIndex-1)}><ChevronLeft size={15}/>{t("Previous step")}</button>
               {inspectState&&<><button type="button" disabled={replayIndex>=inspectState.index}
@@ -469,7 +469,7 @@ export default function MarketDesk() {
             <form onSubmit={e=>void placeOrder(e)}>
               <div className="field-head"><label htmlFor="order-type">{t("Order type")}</label></div>
               <select id="order-type" value="market" onChange={()=>{}} aria-label={t("Order type")}><option value="market">{t(mode==="replay"?"Next-bar open (replay)":"Market (modeled)")}</option></select>
-              <div className="field-head"><label htmlFor="order-quantity">{t("Quantity")} {t(wholeUnits?"(whole units)":"(base units)")}</label><span className="field-hint">Held: {formatQuantity(held)}</span></div>
+              <div className="field-head"><label htmlFor="order-quantity">{t("Quantity")} {t(wholeUnits?"(whole units)":"(base units)")}</label><span className="field-hint">{t("Held:")} {formatQuantity(held)}</span></div>
               <div className="quantity-field"><input id="order-quantity" type="number" inputMode="decimal" step={wholeUnits?"1":"any"} min={wholeUnits?"1":"0.00000001"} value={quantity} onChange={e=>{setQuantity(e.target.value);setTradeError("");}} required/><span>{t("UNITS")}</span></div>
               <div className="ticket-summary">
                 <div><span>{t("Last reference price")}</span><strong>{snapshot==null?"—":formatPrice(snapshot, selectedAsset.decimals)}</strong></div>
@@ -477,7 +477,7 @@ export default function MarketDesk() {
                 <div><span>{t(mode==="replay"?"Model spread":"Modeled spread")}</span><strong>{selectedAsset.spreadBps} bps</strong></div>
                 <div className="ticket-total"><span>{t(mode==="replay"?"Illustrative order value":"Estimated order value")}</span><strong>{formatMoney(estimate)}</strong></div>
               </div>
-              {replayAccount.pending && mode==="replay" && <p className="support-text">Pending {replayAccount.pending.side} order for {formatQuantity(replayAccount.pending.quantity)} units. Advance replay to fill.</p>}
+              {replayAccount.pending && mode==="replay" && <p className="support-text">{t("Pending")} {t(replayAccount.pending.side)} {t("order for")} {formatQuantity(replayAccount.pending.quantity)} {t("units. Advance replay to fill.")}</p>}
               {tradeError && <p role="alert" className="form-error">{t(tradeError)}</p>}
               {!supported && <p className="support-text">{t(selectedAsset.assetClass==="Options"?"Choose a real dated contract in a future options-chain release.":selectedAsset.assetClass==="Futures"?"Chart-only until multiplier, margin, and settlement rules are implemented.":"CAD-to-USD conversion is not implemented.")}</p>}
               {supported && mode==="market" && !quoteReady && <p className="support-text">{t(quote?.block_reason ?? "No fresh market quote. Orders are blocked.")}</p>}
@@ -491,7 +491,7 @@ export default function MarketDesk() {
           <section className="account-card">
             <div className="account-heading"><span>{t("SIMULATION STATUS")}</span><span className="account-status"><span className={backendOnline?"local-dot":"offline-dot"}/>{t(backendOnline?"ONLINE":"OFFLINE")}</span></div>
             <div className="account-item"><Database size={17}/><div><strong>{t("Market data")}</strong><span>{history?.source ?? "Unavailable"}</span></div><span className="offline-tag">{t(history?"REAL":"NONE")}</span></div>
-            <div className="account-item"><Clock3 size={17}/><div><strong>{t("Last quote")}</strong><span>{quote ? dt(quote.timestamp) : "Unavailable"}</span></div></div>
+            <div className="account-item"><Clock3 size={17}/><div><strong>{t("Last quote")}</strong><span>{quote ? dt(quote.timestamp) : t("Unavailable")}</span></div></div>
             <div className="account-item">{mode==="replay"?<PauseCircle size={17}/>:<Check size={17}/>}<div><strong>{t(mode==="replay"?"Historical replay":"Quote freshness")}</strong><span>{t(mode==="replay"?"Step-by-step, next-open fills":quote?.fresh?"Fresh enough for paper model":"Stale or unavailable")}</span></div></div>
             <div className="account-item"><RefreshCw size={17}/><div><strong>{t("Market snapshots")}</strong><span>{t("Refresh quote roughly every 45 seconds")}</span></div>
               <button type="button" className="mini-icon-button" onClick={() => {void getQuote(selectedId).then(next=>{setQuote(next);setLastQuotes(p=>({...p,[selectedId]:next}));}).catch(e=>setMarketError(errorMessage(e)));}} title={t("Refresh quote")}><RefreshCw size={14}/></button>
@@ -500,7 +500,7 @@ export default function MarketDesk() {
           <div className="build-note"><span className="build-dot"/> {t("Trading Simulator")} <span>{t("v0.2 · LOCAL ENGINE")}</span></div>
         </aside>
       </div>
-      {notice && <div className="toast" role="status"><Check size={17}/><span>{notice}</span><button type="button" onClick={()=>setNotice("")} aria-label={t("Dismiss message")}><X size={16}/></button></div>}
+      {notice && <div className="toast" role="status"><Check size={17}/><span>{t(notice)}</span><button type="button" onClick={()=>setNotice("")} aria-label={t("Dismiss message")}><X size={16}/></button></div>}
     </div>
   );
 }
