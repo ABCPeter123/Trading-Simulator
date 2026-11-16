@@ -138,6 +138,7 @@ export function PriceChart({
     updateRef.current=(data,fills)=>{
       const scale = chart.timeScale();
       const currentRange = scale.getVisibleLogicalRange();
+      const wasAll=isEntireRangeVisible(currentRange,previousCount);
       // Preserve a user's manual zoom and leftward scroll on new candles.
       // Only follow live replay when the view was already near its right edge.
       const atRightEdge = currentRange === null ||
@@ -187,23 +188,30 @@ export function PriceChart({
       container.dataset.loadedBars=String(data.length);
       container.dataset.loadedTradeMarkers=String(fills.filter(f=>available.has(f.time)).length);
       scale.applyOptions({minBarSpacing:minBarSpacingFor(container.clientWidth,data.length)});
-      if (data.length > 0) {
-        if (previousCount === 0) {
-          if (visibleWindow && data.length > visibleWindow) {
+      loadedCount=data.length;
+      if(data.length>0){
+        if(previousCount===0){
+          const remembered=savedRangeRef.current;
+          if(remembered&&remembered.from<data.length){
             scale.setVisibleLogicalRange({
-              from: data.length - visibleWindow, to: data.length + 3,
+              from:Math.max(-0.5,remembered.from),
+              to:Math.min(data.length+0.5,remembered.to),
             });
           } else {
+            // Load every candle. A narrow phone should show the whole history
+            // until the user chooses to zoom or pan.
             scale.fitContent();
           }
-        } else if (timelineChanged &&
-                   (atRightEdge || (currentRange !== null &&
-                                    currentRange.from >= data.length))) {
+        }else if(timelineChanged&&wasAll){
+          scale.fitContent();
+        }else if(timelineChanged&&atRightEdge){
           scale.scrollToRealTime();
+        }else if(timelineChanged&&currentRange&&currentRange.from>=data.length){
+          scale.fitContent();
         }
       }
-      previousCount = data.length;
-      previousLastTime = lastTime;
+      previousCount=data.length;
+      previousLastTime=lastTime;
     };
     return ()=>{
       const range=chart.timeScale().getVisibleLogicalRange();
