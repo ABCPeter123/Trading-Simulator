@@ -69,7 +69,7 @@ export default function StrategyLibrary({mode,runId,code,symbols,activatedCode,o
       <button type="button" onClick={()=>{onLoad(current.code);setMessage(t("Loaded into editor as a draft. Activate separately when ready."));}}>
         <Download size={15}/>{t("Load into strategy editor")}</button>
     </div>}
-    {message&&<p className="sl-message" role="status">{message}</p>}
-    {error&&<p className="sl-error" role="alert">{error}</p>}
+    {message&&<p className="sl-message" role="status">{t(message)}</p>}
+    {error&&<p className="sl-error" role="alert">{t(error)}</p>}
   </section>;
 }
