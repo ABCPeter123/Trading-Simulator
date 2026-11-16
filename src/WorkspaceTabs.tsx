@@ -19,8 +19,10 @@ export default function WorkspaceTabs({active,onChange}:{
         {WORKSPACE_TABS.map(tab=><option key={tab} value={tab}>{t(label[tab])}</option>)}
       </select>
     </label>
-    {WORKSPACE_TABS.map(tab=><button type="button" key={tab}
-      aria-current={active===tab?"page":undefined}
-      className={active===tab?"selected":""} onClick={()=>onChange(tab)}>{t(label[tab])}</button>)}
+    <div className="ts-tab-strip" role="group" aria-label={t("Workspace sections")}>
+      {WORKSPACE_TABS.map(tab=><button type="button" key={tab}
+        aria-current={active===tab?"page":undefined}
+        className={active===tab?"selected":""} onClick={()=>onChange(tab)}>{t(label[tab])}</button>)}
+    </div>
   </nav>;
 }
