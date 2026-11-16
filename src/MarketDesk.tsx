@@ -18,7 +18,7 @@ import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 
 const formatQuantity = (n: number) => n.toLocaleString("en-US", {maximumFractionDigits: 8});
 const dt = (timestamp: number | string) =>
-  new Date(typeof timestamp === "number" ? timestamp * 1000 : timestamp).toLocaleString();
+  new Date(typeof timestamp === "number" ? timestamp * 1000 : timestamp).toLocaleString(typeof document!=="undefined"&&document.documentElement.lang==="zh-CN"?"zh-CN":"en-CA");
 const errorMessage = (err: unknown) => err instanceof Error ? err.message : "Unexpected error.";
 
 type ReplayCheckpoint = {index:number;account:ReplayAccount};
