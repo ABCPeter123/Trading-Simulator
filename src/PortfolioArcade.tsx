@@ -222,7 +222,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
     {setup || !season ? <main className="port-setup">
       <span className="arc-upper">{t("MULTI-ASSET RESEARCH")}</span>
       <h1>{t("Multi-asset Historical Simulator")}</h1>
-      <p>{t("Choose 2 to 5 instruments. All positions use a shared $100,000 USD account. Prices come from synchronized historical daily candles, with no future information revealed.")}</p>
+      <p>{t("Select 2 to 5 instruments using a shared $100,000 simulated USD account. Historical candles are synchronized and upcoming market data remain hidden.")}</p>
       <div className="port-picker">
         <div className="port-selected"><strong>{t("YOUR BASKET")} ({basket.length}/5)</strong>
           <div>{basket.map(id=><button key={id} onClick={()=>setBasket(prev=>prev.filter(x=>x!==id))}>{assetName(id)} ×</button>)}</div>
@@ -362,7 +362,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           onDraft={draft=>{setStrategy(draft);setWorkspaceTab("strategy");}}/>
           :<p className="ts-past-note">{t("AI research uses the latest session. Return to latest to ask questions.")}</p>}
         <div className="port-strategy">
-          <div className="arc-box-head"><div><Bot size={17}/><strong>{t("Cross-asset Strategy Editor")}</strong></div><span className="arc-tag">{t("SAFE RULE LANGUAGE")}</span></div>
+          <div className="arc-box-head"><div><Bot size={17}/><strong>{t("Cross-asset Strategy Editor")}</strong></div><span className="arc-tag">{t("Validated strategy syntax")}</span></div>
           <p>{t("A signal from one instrument can trade another. Orders queue after the signal candle closes and fill no earlier than the target symbol's next actual session.")}</p>
           <div className="port-rule-row">
             <label>{t("Signal symbol")}<select value={source} onChange={e=>setSource(e.target.value)}>{season.asset_ids.map(id=><option key={id} value={id}>{assetName(id)}</option>)}</select></label>
