@@ -46,7 +46,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const [search, setSearch] = useState("");
   const [external, setExternal] = useState<DiscoveredInstrument[]>([]);
   const [searchBusy, setSearchBusy] = useState(false);
-  const [period, setPeriod] = useState<ReplayWindow>("5Y");
+  const [period, setPeriod] = useState<ReplayWindow>("MAX");
   const [resolution,setResolution] = useState<ReplayResolution>("1d");
   const [chartView,setChartView] = useState<ReplayResolution>("1d");
   const [startDate, setStartDate] = useState("");
@@ -212,7 +212,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   return <div className="arc-page port-page">
     <header className="arc-top">
       <div className="arc-top-left">
-        <button className="arc-back" onClick={()=>{setPlaying(false);onExit();}} aria-label="Back to single-asset Arcade"><ArrowLeft size={18}/></button>
+        <button className="arc-back" onClick={()=>{setPlaying(false);onExit();}} aria-label={t("Back to single-asset simulator")}><ArrowLeft size={18}/></button>
         <div className="arc-logo"><BarChart3 size={23}/></div>
         <div className="arc-brand">{t("Portfolio")} <span>{t("Simulator")}</span><small>{t("Multi-asset historical research")}</small></div>
       </div>
@@ -248,7 +248,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           <label>{t("Replay candle interval")}
             <select value={resolution} onChange={e=>{
               const next=e.target.value as ReplayResolution;
-              setResolution(next);setPeriod(REPLAY_WINDOWS[next][0]);setStartDate("");
+              setResolution(next);setPeriod(next==="1d"?"MAX":REPLAY_WINDOWS[next][0]);setStartDate("");
             }}>{RESOLUTIONS.map(i=><option key={i} value={i}>{i}</option>)}</select>
           </label>
           <label>{t("Historical range")}
@@ -261,7 +261,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         <small className="arc-date-hint">{t("Intraday providers have limited historical coverage. Daily bars support longer backtests; missing minute prices are never manufactured.")}</small>
         {error&&<p className="arc-error" role="alert">{error}</p>}
         <button className="arc-cta" disabled={busy||basket.length<2}
-          onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate,resolution))}>
+          onClick={()=>void update(()=>newPortfolioSeason(basket,period,startDate,resolution,0.15))}>
           <Play size={16}/> {t(busy?"Loading real historical data...":"Create portfolio session")}
         </button>
         {saved.length>0 && <label>{t("Resume saved session")}<select defaultValue="" onChange={e=>{
@@ -281,6 +281,20 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
         </div>
         <div className="port-toolbar">
           <span><Clock3 size={15}/> {showReplayTime(season.day,baseResolution)} · {t("Step")} {season.current_step+1}/{season.total_steps}</span>
+          <div className="port-interval-bar">
+            <label>{t("Replay candle interval")}
+              <select value={baseResolution} aria-label={t("Replay candle interval")} onChange={e=>{
+                const selected=e.target.value as ReplayResolution;
+                setPlaying(false);
+                setResolution(selected);
+                setPeriod(selected==="1d"?"MAX":REPLAY_WINDOWS[selected][0]);
+                setStartDate("");
+                setBasket([...season.asset_ids]);
+                setSetup(true);
+              }}>{RESOLUTIONS.map(i=><option key={i} value={i}>{i}</option>)}</select>
+            </label>
+            <span>{t("Changing the replay interval starts a new session. The existing session stays saved.")}</span>
+          </div>
           <div><button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(1)}><ChevronRight size={16}/> {baseResolution==="1d"?t("1 day"):t("Next candle")}</button>
             <button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(5)}><FastForward size={15}/> +5</button>
             <button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(20)}><FastForward size={15}/> +20</button>
