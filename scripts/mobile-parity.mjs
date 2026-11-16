@@ -170,6 +170,11 @@ async function verifyFullGraph(page, selector, count, description) {
     await surface.getByRole("button",{name:"Latest candles"}).click();
     const now=await plotted.getAttribute("data-loaded-bars");
     if(Number(now)!==count)throw new Error(description+" cut data when zooming to latest");
+    await page.waitForFunction(({selector,count})=>{
+      const plot=document.querySelector(selector);
+      return plot&&Number(plot.dataset.visibleFrom)>=count-124 &&
+        Number(plot.dataset.visibleTo)>=count-1.5;
+    },{selector,count},{timeout:12000});
     await surface.getByRole("button",{name:"Fit all data"}).click();
     await page.waitForFunction(({selector,count})=>{
       const element=document.querySelector(selector);
