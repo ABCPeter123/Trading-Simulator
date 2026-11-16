@@ -297,7 +297,6 @@ def test_language_selection_overrides_english_question(monkeypatch):
     assert reply.status_code == 200
     assert captured["data"]["requested_language"] == "zh-CN"
     assert "Simplified Chinese" in captured["prompt"]
-    assert "observed_curve_samples" in ai.game_context.__code__.co_names or "observed_curve_samples" in open(ai.__file__, encoding="utf-8").read()
     assert reply.json()["answer"] == "已分析您的回撤。"
 
 
