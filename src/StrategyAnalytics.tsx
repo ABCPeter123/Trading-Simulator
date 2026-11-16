@@ -10,6 +10,7 @@ import type { StrategyReport, AnalyticsPoint } from "./strategyAnalyticsApi";
 import { useI18n } from "./i18n";
 import "./analytics.css";
 import { useChartDimensions } from "./components/useChartDimensions";
+import { isEntireRangeVisible, minBarSpacingFor } from "./components/chartViewport";
 
 type Window = "ALL" | "5" | "20" | "60" | "126" | "252" | "CUSTOM";
 const WINDOWS:Window[]=["ALL","5","20","60","126","252"];
@@ -22,15 +23,17 @@ interface PlotLine {
   color:string;
   points:{time:UTCTimestamp;value:number}[];
 }
-function LinePlot({data,format="money",area=false}:{
+function LinePlot({data,format="money",area=false,viewport,focusKey}:{
   data:PlotLine[];
   format?:"money"|"percent";
   area?:boolean;
+  viewport:{from:number;to:number}|null;
+  focusKey:string;
 }) {
   const {ref:node,width,height,visible}=useChartDimensions();
   const resizeRef=useRef<((width:number,height:number)=>void)|null>(null);
   const key=data.map(line=>line.name+"|"+line.color).join(",");
-  const updateRef=useRef<((lines:PlotLine[])=>void)|null>(null);
+  const updateRef=useRef<((lines:PlotLine[],viewport:{from:number;to:number}|null,focusKey:string)=>void)|null>(null);
   useEffect(()=>{
     const element=node.current;
     if(!element||!visible)return;
@@ -40,12 +43,20 @@ function LinePlot({data,format="money",area=false}:{
       grid:{vertLines:{color:"#1e3040"},horzLines:{color:"#1e3040"}},
       crosshair:{mode:CrosshairMode.Normal},
       rightPriceScale:{borderColor:"#293c4c",scaleMargins:{top:.1,bottom:.1}},
-      timeScale:{borderColor:"#293c4c",timeVisible:false,rightOffset:3},
+      timeScale:{borderColor:"#293c4c",timeVisible:false,rightOffset:0,
+        minBarSpacing:minBarSpacingFor(width,data[0]?.points.length??0)},
       localization:{
         priceFormatter:(value:number)=>format==="percent"?value.toFixed(2)+"%":formatMoney(value),
       },
     });
-    resizeRef.current=(nextWidth,nextHeight)=>chart.resize(nextWidth,nextHeight);
+    let lastCount=0;
+    resizeRef.current=(nextWidth,nextHeight)=>{
+      const scale=chart.timeScale();
+      const wasAll=isEntireRangeVisible(scale.getVisibleLogicalRange(),lastCount);
+      chart.resize(nextWidth,nextHeight);
+      scale.applyOptions({minBarSpacing:minBarSpacingFor(nextWidth,lastCount)});
+      if(wasAll&&lastCount)scale.fitContent();
+    };
     const plots=data.map((line,i)=>{
       const s=area&&i===0?chart.addSeries(AreaSeries,{
         lineColor:line.color,topColor:line.color+"44",bottomColor:line.color+"00",
@@ -55,14 +66,33 @@ function LinePlot({data,format="money",area=false}:{
       });
       return s;
     });
-    updateRef.current=(lines)=>{
+    let previousKey="";
+    updateRef.current=(lines,windowRange,selectedKey)=>{
+      const scale=chart.timeScale();
+      const wasAll=isEntireRangeVisible(scale.getVisibleLogicalRange(),lastCount);
       lines.forEach((line,i)=>plots[i].setData(line.points));
-      chart.timeScale().fitContent();
+      const count=lines[0]?.points.length??0;
+      element.dataset.loadedPoints=String(count);
+      scale.applyOptions({minBarSpacing:minBarSpacingFor(element.clientWidth,count)});
+      // Period selection only changes the VIEWPORT. All historic observations
+      // stay in every series and are accessible by panning to the left.
+      if(count&&(!lastCount||previousKey!==selectedKey)){
+        if(windowRange)scale.setVisibleLogicalRange(windowRange);
+        else scale.fitContent();
+      }else if(count>lastCount&&wasAll){
+        scale.fitContent();
+      }
+      previousKey=selectedKey;
+      lastCount=count;
     };
+    const syncRange=(range:{from:number;to:number}|null)=>{
+      if(range){element.dataset.visibleFrom=String(range.from);element.dataset.visibleTo=String(range.to);}
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(syncRange);
     return ()=>{updateRef.current=null;resizeRef.current=null;chart.remove();};
   },[key,area,format,visible]);
   useEffect(()=>{if(visible)resizeRef.current?.(width,height);},[visible,width,height]);
-  useEffect(()=>{if(visible)updateRef.current?.(data);},[data,key,area,format,visible]);
+  useEffect(()=>{if(visible)updateRef.current?.(data,viewport,focusKey);},[data,key,area,format,visible,viewport,focusKey]);
   return <div className="an-chart-canvas" ref={node}/>;
 }
 
