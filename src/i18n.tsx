@@ -563,6 +563,12 @@ const zh: Record<string, string> = {
   "To": "结束日期",
   "No data": "暂无数据",
   "Price return": "价格收益率",
+  "Chart interval": "图表周期",
+  "Replay candle interval": "回放K线周期",
+  "Signals and fills use replay resolution, not the aggregated chart view.": "策略信号与成交使用回放周期，而不是图表合并后的周期。",
+  "Intraday data has limited provider history. Daily bars support long-term seasons. The game never invents missing minute prices.": "分钟级行情的可回溯时间有限，长期回测请选择日K线。系统不会编造缺失的分钟价格。",
+  "No real intraday candles available for this instrument.": "当前品种没有可用的真实分钟级K线。",
+  "Intraday basket requires at least two overlapping real trading dates.": "分钟级组合至少需要两个行情有重叠的交易日。",
 };
 
 const LocaleContext = createContext<{
