@@ -681,6 +681,12 @@ const zh: Record<string, string> = {
   "Select 2 to 5 instruments using a shared $100,000 simulated USD account. Historical candles are synchronized and upcoming market data remain hidden.": "选择2至5种证券，共享10万美元模拟账户。历史K线同步，尚未到来的行情保持隐藏。",
   "Validated strategy syntax": "已验证的策略语法",
   "Historical inspection is read-only. Return to latest to trade.": "历史查看为只读模式，请返回最新时间点后交易。",
+  "Long replay · More history": "长期回放 · 更多历史数据",
+  "RESUME PREVIOUS SESSION": "继续之前的会话",
+  "Resume a saved simulation": "继续已保存的模拟",
+  "No active strategy": "尚无启用的策略",
+  "SAVED TO SESSION": "已保存到会话",
+  "Resume saved session": "继续已保存会话",
 };
 
 const LocaleContext = createContext<{
