@@ -35,3 +35,5 @@
 .ai-spin{animation:ai-spin 1.2s linear infinite}
 @keyframes ai-spin{to{transform:rotate(360deg)}}
 @media(max-width:650px){.ai-head{flex-wrap:wrap;padding:13px}.ai-suggestions{grid-template-columns:1fr;padding:11px}.ai-form{flex-direction:column;padding:10px}.ai-form button{align-self:flex-end}.ai-chip{margin-left:auto}}
+
+.ai-refresh{display:flex;align-items:center;gap:5px;border:1px solid #4c6185;background:#283650;border-radius:6px;color:#d0e0fa;font-size:10px;padding:7px 9px}
