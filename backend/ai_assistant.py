@@ -17,7 +17,11 @@ from .portfolio_dsl import compile_portfolio_rules
 
 # Local CPU inference can take well over 45 seconds on first warm-up.
 # Configurable read timeout, with bounded limits to avoid hanging indefinitely.
-OLLAMA_TIMEOUT_SECONDS = 240
+def ollama_timeout_seconds():
+    try:
+        return max(60, min(600, int(os.environ.get("TRADING_SIM_AI_TIMEOUT_SECONDS", "240"))))
+    except ValueError:
+        return 240
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 OPENAI_URL = "https://api.openai.com/v1/responses"
 MAX_QUESTION = 1200
@@ -146,12 +150,12 @@ def call_model(system: str, user: str) -> str:
         if config["provider"] == "ollama":
             # Fixed loopback destination; never let a user-supplied URL act as
             # a proxy to local services or sensitive external endpoints.
-            timeout = httpx.Timeout(connect=5.0, read=OLLAMA_TIMEOUT_SECONDS, write=15.0, pool=5.0)
+            timeout = httpx.Timeout(connect=5.0, read=ollama_timeout_seconds(), write=15.0, pool=5.0)
             with httpx.Client(timeout=timeout, trust_env=False) as client:
                 reply = client.post(OLLAMA_URL, json={
                     "model": config["model"], "stream": False, "format": "json",
                     "keep_alive": "20m",
-                    "options": {"num_predict": 700, "num_ctx": 4096},
+                    "options": {"num_predict": 550, "num_ctx": 4096},
                     "messages": [{"role": "system", "content": system},
                                  {"role": "user", "content": user}],
                 })
@@ -186,7 +190,7 @@ def call_model(system: str, user: str) -> str:
         # Do not return provider error bodies, auth headers, or API keys.
         status = getattr(getattr(exc, "response", None), "status_code", None)
         if isinstance(exc, httpx.TimeoutException):
-            description = ("Local AI inference timed out after 240 seconds. "
+            description = ("Local AI inference timed out after " + str(ollama_timeout_seconds()) + " seconds. "
                            "Try a smaller Ollama model (ollama pull llama3.2:1b), "
                            "or reduce other applications using your RAM. "
                            "No paid API is required." if config["provider"] == "ollama"
