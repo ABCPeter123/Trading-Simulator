@@ -90,9 +90,10 @@ const toSeries=(data:AnalyticsPoint[],key:keyof AnalyticsPoint)=>data.map(p=>({
   time:epoch(p.day),value:Number(p[key]),
 }));
 
-export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
+export default function StrategyAnalytics({runId,step,mode,assetName,onReport,atIndex}:{
   runId:string;step:number;mode:"portfolio"|"single";assetName:(id:string)=>string;
   onReport?:(report:StrategyReport)=>void;
+  atIndex?:number;
 }) {
   const {t}=useI18n();
   const [report,setReport]=useState<StrategyReport|null>(null);
@@ -104,13 +105,13 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
   useEffect(()=>{
     let cancelled=false;
     setLoading(true);
-    void getStrategyReport(mode,runId).then(value=>{
+    void getStrategyReport(mode,runId,atIndex).then(value=>{
       if(!cancelled){setReport(value);onReport?.(value);setError("");}
     }).catch(e=>{
       if(!cancelled)setError(e instanceof Error?e.message:"Analytics unavailable.");
     }).finally(()=>{if(!cancelled)setLoading(false);});
     return ()=>{cancelled=true;};
-  },[mode,runId,step]);
+  },[mode,runId,step,atIndex]);
   const data=useMemo(()=>{
     if(!report)return [];
     if (window==="ALL") return report.curve;
