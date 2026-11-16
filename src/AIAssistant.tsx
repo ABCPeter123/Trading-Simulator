@@ -24,6 +24,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
   const [busy,setBusy]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const [error,setError]=useState("");
+  const [retryQuestion,setRetryQuestion]=useState("");
 
   useEffect(()=>{
     let alive=true;
@@ -36,13 +37,14 @@ export default function AIAssistant({mode,runId,onDraft}: {
     const question=value.trim();
     if(!question||busy)return;
     const history=turns.slice(-6);
-    setBusy(true);setElapsed(0);setError("");setMessage("");
+    setBusy(true);setElapsed(0);setError("");setRetryQuestion("");setMessage("");
     try {
       const result=await askAI(mode,runId,question,history);
       setTurns(prev=>[...prev,{role:"user",content:question},{role:"assistant",content:result.answer}]);
       setAnswers(prev=>[...prev,result]);
     } catch(e) {
-      setMessage(question);
+      setMessage(previous=>previous.trim()?previous:question);
+      setRetryQuestion(question);
       setError(e instanceof Error?e.message:"AI request failed.");
     } finally {
       setBusy(false);
@@ -112,7 +114,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
       </div>)}
     </div>}
     {busy&&<p className="ai-processing" role="status">{t("Local AI is processing your request.")} {elapsed}s · {t("First response may take longer while Ollama loads the model.")}</p>}
-    {error&&<p role="alert" className="ai-error">{error}</p>}
+    {error&&<div role="alert" className="ai-error">{error}{retryQuestion&&<button type="button" disabled={busy||!status?.ready} onClick={()=>void send(retryQuestion)}><RefreshCcw size={14}/>{t("Retry question")}</button>}</div>}
     <form className="ai-form" onSubmit={e=>{e.preventDefault();void send(message);}}>
       <textarea rows={2} maxLength={1200} value={message} onChange={e=>setMessage(e.target.value)}
         placeholder={t("Ask me to analyze performance or suggest a strategy...")}
