@@ -1,3 +1,4 @@
+import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 import { request } from "./api";
 import type { MarketBar } from "./api";
 import type { TradeSide } from "./types";
@@ -38,7 +39,8 @@ export interface PortfolioFill {
 export interface PortfolioSeason {
   id: string;
   asset_ids: string[];
-  period: string;
+  period: ReplayWindow;
+  resolution: ReplayResolution;
   sources: Record<string, string>;
   day: string;
   current_step: number;
@@ -65,9 +67,9 @@ export interface PortfolioSaved {
 }
 const base = "/portfolio-seasons";
 export const listPortfolioSeasons = () => request<PortfolioSaved[]>(base);
-export const newPortfolioSeason = (assetIds: string[], period: string, startDate?: string) =>
+export const newPortfolioSeason = (assetIds: string[], period: ReplayWindow, startDate?: string, resolution: ReplayResolution = "1d") =>
   request<PortfolioSeason>(base, {method:"POST", body: JSON.stringify({
-    asset_ids: assetIds, period, start_date: startDate || null,
+    asset_ids: assetIds, period, resolution, start_date: startDate || null,
   })});
 export const loadPortfolioSeason = (id: string) =>
   request<PortfolioSeason>(`${base}/${encodeURIComponent(id)}`);
