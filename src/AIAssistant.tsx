@@ -69,7 +69,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
     <div className="ai-status">
       <ShieldCheck size={14}/>
       <span>{status?.description ? (status.provider==="ollama"&&!status.ready
-        ? status.description : status.provider==="ollama"
+        ? `${t("Ollama is unavailable or the model is missing. Run:")} ollama pull ${status.model}` : status.provider==="ollama"
         ? t("Ollama runs locally. Install Ollama and pull the model to ask questions.")
         : status.provider==="openai"
         ? t("OpenAI runs remotely. Each question sends summarized historical game data.")
