@@ -44,6 +44,11 @@ export interface PortfolioSeason {
   sources: Record<string, string>;
   day: string;
   current_step: number;
+  history_start: number;
+  live_index: number;
+  view_index: number;
+  viewing_past: boolean;
+  checkpoint_count: number;
   total_steps: number;
   progress_pct: number;
   finished: boolean;
@@ -91,3 +96,6 @@ export const savePortfolioRisk = (id: string, stop: number, target: number) =>
   request<PortfolioSeason>(`${base}/${id}/risk`, {method:"PUT", body:JSON.stringify({
     stop_loss_pct:stop, take_profit_pct:target,
   })});
+
+export const portfolioAt = (id: string, step: number) =>
+  request<PortfolioSeason>(`/portfolio-seasons/${encodeURIComponent(id)}/at/${step}`);
