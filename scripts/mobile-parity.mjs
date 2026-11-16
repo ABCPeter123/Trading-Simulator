@@ -226,6 +226,17 @@ try {
     await verifyMode(page,"single",width);
     await page.locator(".sim-mode-tabs").getByRole("button",{name:"Portfolio Simulator",exact:true}).click();
     await verifyMode(page,"portfolio",width);
+    const intervalPicker=page.locator(".port-interval-bar select");
+    await visible(page,".port-interval-bar select",width+" portfolio interval controls");
+    const values=await intervalPicker.locator("option").evaluateAll(nodes=>nodes.map(el=>el.value));
+    if(JSON.stringify(values)!==JSON.stringify(["1m","5m","15m","1h","1d"]))
+      throw new Error(width+"px portfolio replay intervals differ from desktop");
+    await intervalPicker.selectOption("1m");
+    await visible(page,".port-setup",width+" change interval opens setup");
+    const newInterval=await page.locator(".port-settings select").first().inputValue();
+    if(newInterval!=="1m")throw new Error("New portfolio session lost selected interval");
+    await page.getByRole("button",{name:"Return to current session"}).click();
+    await visible(page,".port-layout",width+" saved portfolio session preserved");
     await page.locator(".ts-lang-switch").getByRole("button",{name:"中文"}).click();
     if (await page.locator("html").getAttribute("lang") !== "zh-CN")
       throw new Error(width + "px Chinese locale not applied");
