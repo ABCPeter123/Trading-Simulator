@@ -2,6 +2,21 @@
 
 A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Mobile and tablet support
+
+The same Trading Simulator interface adapts to phones and tablets. On small screens, use the workspace section selector to navigate replay, orders, strategy editing, analytics and trade history. Financial tables scroll inside their panels and charts resize to fit the viewport.
+
+To use your phone on the same **trusted private Wi-Fi** as the Windows host:
+
+```powershell
+git pull
+powershell -ExecutionPolicy Bypass -File .\start-local.ps1 -Mobile
+```
+
+Open the local IPv4 address printed by the launcher (for example, `http://192.168.1.123:5173`) in your phone browser. Stop any already running frontend before enabling `-Mobile`. Keep the host PC running. This opt-in development server is unauthenticated and must not be exposed to public networks.
+
+See [Mobile setup and touch layout](docs/MOBILE.md) for device and firewall instructions. The regular launcher remains localhost-only.
+
 ## Unified Trading Simulator v1.1
 
 There is now **one application**, Trading Simulator. The old separate
