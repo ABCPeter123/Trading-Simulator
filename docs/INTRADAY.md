@@ -9,7 +9,8 @@ Arcade, and Portfolio Arcade. You can choose **1m, 5m, 15m, 1h or 1d**.
 2. Select a mode and pick a supported USD instrument or portfolio basket.
 3. Choose **Replay candle interval**, then select a permitted historical range.
 4. Create a season, submit orders or arm a bot and move forward using **Next
-   candle**, **+5**, **+20**, or autoplay. The unit is the game candle, not a
+   candle**, **+5**, **+20**, **+100**, or autoplay. Adjust the autoplay
+   speed up to 50 candles per tick. The unit is the game candle, not a
    fixed number of calendar days.
 5. During the game, use **Chart interval** to display your already revealed
    candles aggregated into a coarser timeframe. This affects **display only**.
