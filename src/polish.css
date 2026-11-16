@@ -1,0 +1,86 @@
+/* Compact, consistent research-workspace styling.
+   These rules change presentation only; every tab and control stays available. */
+:root{
+  --research-surface:#111d2b;
+  --research-raised:#172536;
+  --research-outline:#32465a;
+  --research-muted:#9eb0c5;
+}
+.arc-page,.market-desk{font-family:ui-sans-serif,system-ui,"Segoe UI",sans-serif}
+.sim-mode-tabs{gap:6px;min-height:52px;border-bottom-color:#304153;background:#0f1926}
+.sim-mode-title{letter-spacing:.045em;font-size:11px;color:#9aafc2}
+.sim-mode-tabs button{transition:background .15s ease,color .15s ease;border-radius:8px}
+.sim-mode-tabs button.selected{border-color:#7d78b2}
+.arc-top{position:relative;top:auto;min-height:65px;gap:12px;background:#0d1723;border-bottom:1px solid #2c3e50}
+.arc-top .arc-portfolio-shortcut{display:none}
+.arc-brand{font-size:18px;letter-spacing:-.02em}
+.arc-brand small{color:#96a8bb;letter-spacing:.07em}
+.arc-top-right{gap:8px}
+.arc-top-right .arc-outline-button{font-weight:650;font-size:11px}
+.arc-layout,.port-layout{max-width:1550px;gap:15px;padding-top:17px}
+.arc-main,.port-main{gap:14px}
+.arc-hero,.arc-metric,.arc-chart-box,.arc-time-panel,.arc-bot-section,
+.arc-history,.arc-trade-card,.arc-risk-card,.arc-pending-card,.arc-events,
+.port-chart-wrap,.port-positions,.port-strategy,.port-history,.port-trade,
+.port-risk,.port-queue,.port-toolbar,.an-dashboard,.forecast-panel,
+.market-desk,.sl-library,.ai-box{box-shadow:0 2px 13px rgba(0,0,0,.10);border-radius:11px}
+.arc-hero{background:linear-gradient(125deg,#17253a,#111d29 83%)}
+.arc-metric,.port-metrics>div,.an-metric{background:#142232;border-color:#304254}
+.arc-metric strong,.port-metrics strong{font-variant-numeric:tabular-nums}
+.arc-upper{letter-spacing:.09em}
+.arc-box-head{gap:10px;padding:13px 16px}
+.arc-box-head>div:first-child{flex-wrap:wrap}
+.arc-box-head strong,.an-plot>header strong{font-weight:750}
+.arc-chart-box,.port-chart-wrap,.an-plot,.forecast-panel{min-width:0;max-width:100%}
+.arc-chart-wrap{width:100%;min-width:0;overflow:hidden}
+.arc-chart-wrap>.chart-canvas,.chart-body>.chart-canvas,
+.an-chart-canvas,.forecast-plot{display:block;width:100%;min-width:0;position:relative}
+.arc-chart-view,.an-chart-controls,.ts-time-actions{max-width:100%}
+.an-chart-controls label{min-width:0;white-space:normal;gap:7px}
+.an-chart-controls input[type="checkbox"]{flex-shrink:0}
+.an-charts,.an-detail-grid{min-width:0}
+.an-plot{min-width:0}
+.an-legend{line-height:1.4}
+.an-date-label{white-space:normal}
+.arc-editor textarea,.port-strategy textarea{line-height:1.65}
+.arc-code-actions,.port-toolbar>div,.port-rule-row{gap:9px}
+.port-interval-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid #3d4762;padding-top:11px;margin-top:3px}
+.port-interval-bar label{display:flex;align-items:center;gap:9px;font-size:11px;color:#c9c6ef;font-weight:700}
+.port-interval-bar select{min-height:39px;min-width:86px;padding:8px 10px;color:#f1edff;background:#262947;border:1px solid #6d6794;border-radius:7px}
+.port-interval-bar>span{font-size:10px;color:#a1aec7;line-height:1.5;flex:1 1 180px}
+.ts-workspace-tabs{border-bottom:1px solid #314357;padding-bottom:9px}
+.ts-tab-strip{gap:4px}
+.ts-tab-strip>button{min-height:41px;font-weight:650;border-radius:7px;transition:background .15s ease}
+.ts-tab-strip>button.selected{box-shadow:inset 0 -2px #afa2e9}
+.arc-code-actions button,.port-toolbar button,.arc-time-actions button,
+.port-submit,.arc-buy-cta,.arc-sell-cta{transition:background-color .15s ease,border-color .15s ease}
+.arc-page button:focus-visible,.market-desk button:focus-visible,
+.arc-page select:focus-visible,.market-desk select:focus-visible{outline:2px solid #baa7f8;outline-offset:2px}
+@media(max-width:900px){
+  .arc-layout,.port-layout{max-width:100%;gap:11px}
+  .arc-chart-wrap{overflow:hidden}
+  .an-chart-controls{justify-content:flex-start}
+}
+@media(max-width:740px){
+  .sim-mode-tabs{min-height:0;padding-top:8px;padding-bottom:8px;gap:6px}
+  .sim-mode-title{font-size:10px}
+  .arc-top{padding:10px 12px}
+  .arc-top-right{gap:6px}
+  .arc-top-right .arc-outline-button{flex:1 1 auto}
+  .arc-layout,.port-layout{padding-top:10px;gap:10px}
+  .arc-main,.port-main{gap:11px}
+  .arc-box-head{padding:11px 12px;align-items:center}
+  .arc-chart-wrap{padding:4px 2px 0}
+  .arc-stat-grid,.port-metrics,.an-metrics{gap:7px}
+  .an-charts,.an-detail-grid{gap:8px}
+  .port-interval-bar{gap:9px}
+  .port-interval-bar label{flex:1 1 100%;justify-content:space-between}
+  .port-interval-bar select{min-height:44px}
+  .port-interval-bar>span{flex:1 1 100%}
+  .forecast-plot{min-height:260px}
+  .terminal-order-asset-picker select{font-size:16px}
+  .arc-hero,.arc-chart-box,.port-chart-wrap,.an-dashboard,.forecast-panel{border-radius:10px}
+}
+@media(prefers-reduced-motion:reduce){
+  .sim-mode-tabs button,.ts-tab-strip button,.arc-code-actions button,.port-toolbar button{transition:none}
+}
