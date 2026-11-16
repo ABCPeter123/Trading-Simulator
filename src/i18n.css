@@ -1,0 +1,18 @@
+.ts-lang-switch{
+  position:fixed;right:18px;bottom:18px;z-index:1000;
+  display:flex;align-items:center;gap:4px;padding:6px 7px;
+  border:1px solid #637291;border-radius:12px;background:#1b2740;
+  color:#c9bfff;box-shadow:0 8px 26px #0008;
+  font:700 12px ui-sans-serif,system-ui,sans-serif;
+}
+.ts-lang-switch svg{margin:0 5px 0 3px;flex-shrink:0}
+.ts-lang-switch button{
+  color:#aec1d7;border:1px solid transparent;min-width:40px;padding:8px 10px;
+  border-radius:7px;background:transparent;white-space:nowrap;cursor:pointer;
+}
+.ts-lang-switch button.active{background:#c3acff;border-color:#ddc8ff;color:#211333}
+.ts-lang-switch button:focus-visible{outline:2px solid #d2baff;outline-offset:2px}
+@media(max-width:640px){
+  .ts-lang-switch{right:10px;bottom:10px;padding:4px}
+  .ts-lang-switch button{min-width:38px;padding:7px 8px}
+}
