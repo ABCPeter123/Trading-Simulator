@@ -96,9 +96,15 @@ html,body,#root{max-width:100%}
   .market-desk-actions button{min-height:44px}
   .market-desk .terminal-workspace-tabs{width:100%;overflow-x:auto;scrollbar-width:thin}
   .market-desk .terminal-workspace-tabs button{min-height:44px}
-  .chart-toolbar{gap:8px}
-  .chart-actions{gap:6px;overflow-x:auto;justify-content:flex-start}
-  .timeframe-control,.style-control{flex-shrink:0}
+  .chart-toolbar{gap:8px;flex-direction:column;align-items:stretch}
+  .chart-toolbar-label{flex-wrap:wrap}
+  .chart-actions{display:flex;gap:7px;flex-wrap:wrap;overflow:visible;justify-content:flex-start;align-items:center}
+  .market-desk .category-tabs{flex-wrap:wrap;overflow:visible;gap:6px}
+  .market-desk .category-tabs button{min-height:40px}
+  .terminal-interval-picker{flex:0 1 auto;min-height:44px}
+  .terminal-interval-picker select{min-height:44px}
+  .timeframe-control{flex:1 1 auto;display:flex;flex-wrap:wrap;gap:4px}
+  .style-control{flex:0 0 auto;display:flex;flex-wrap:wrap}
   .timeframe-control button,.style-control button{min-width:40px;min-height:40px}
   .portfolio-metrics strong{font-size:clamp(14px,4vw,19px);white-space:normal;overflow-wrap:anywhere}
   .an-chart-controls{justify-content:flex-start;padding:10px}
