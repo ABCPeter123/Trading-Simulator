@@ -281,3 +281,67 @@ def test_local_ollama_timeout_explains_free_model_alternatives(monkeypatch):
     assert ai.ollama_timeout_seconds()==600
     monkeypatch.setenv("TRADING_SIM_AI_TIMEOUT_SECONDS","not_a_number")
     assert ai.ollama_timeout_seconds()==240
+
+
+def test_language_selection_overrides_english_question(monkeypatch):
+    captured = {}
+    def call(system, user):
+        captured["prompt"] = system
+        captured["data"] = json.loads(user)
+        return '{"answer":"已分析您的回撤。","strategy":null}'
+    monkeypatch.setattr(ai, "call_model", call)
+    reply = client.post("/api/ai/ask", json={
+        "mode": "single", "run_id": "existing", "question": "Analyze my drawdown",
+        "language": "zh-CN",
+    })
+    assert reply.status_code == 200
+    assert captured["data"]["requested_language"] == "zh-CN"
+    assert "Simplified Chinese" in captured["prompt"]
+    assert "observed_curve_samples" in ai.game_context.__code__.co_names or "observed_curve_samples" in open(ai.__file__, encoding="utf-8").read()
+    assert reply.json()["answer"] == "已分析您的回撤。"
+
+
+def test_compact_observed_equity_samples_never_include_future_points():
+    observed = [{
+        "day": f"day-{i}", "equity": 100000+i,
+        "benchmark": 100000+i/2, "cash": 50000+i,
+        "invested": 50000, "drawdown_pct": -i/100,
+    } for i in range(100)]
+    sample = ai._curve_samples(observed)
+    assert len(sample) <= 24
+    assert sample[0]["date"] == "day-0"
+    assert sample[-1]["date"] == "day-99"
+    assert all(p["date"] in {x["day"] for x in observed} for p in sample)
+
+
+def test_warmup_uses_local_generate_endpoint_nonblocking(monkeypatch):
+    requests = []
+    monkeypatch.setattr(ai, "provider_status", lambda: {"ready": True})
+    class FakeResponse:
+        def raise_for_status(self): pass
+    class FakeClient:
+        def __init__(self, **kwargs):
+            assert kwargs["trust_env"] is False
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def post(self, url, json):
+            requests.append((url, json))
+            return FakeResponse()
+    class InlineThread:
+        def __init__(self, target, **kwargs):
+            self.target = target
+            assert kwargs["daemon"] is True
+        def start(self):
+            self.target()
+    monkeypatch.setattr(ai.httpx, "Client", FakeClient)
+    monkeypatch.setattr(ai, "Thread", InlineThread)
+    ai._WARM_STATE.update(model=None, phase="idle", started=0.0)
+    result = client.post("/api/ai/warmup")
+    assert result.status_code == 200
+    assert result.json()["started"] is True
+    assert requests[0][0] == "http://127.0.0.1:11434/api/generate"
+    assert requests[0][1]["stream"] is False
+    assert requests[0][1]["prompt"] == ""
+    assert requests[0][1]["keep_alive"] == "30m"
+    assert client.post("/api/ai/warmup").json()["started"] is False
+    ai._WARM_STATE.update(model=None, phase="idle", started=0.0)
