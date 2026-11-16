@@ -746,6 +746,10 @@ const zh: Record<string, string> = {
   "Contract/currency not supported": "不支持该合约或币种",
   "Basket intraday histories are not recent enough to align.": "组合中各资产的分钟历史无法对齐。",
   "Max available": "全部可用",
+  "order for": "订单，共",
+  "units. Advance replay to fill.": "单位。推进历史回放以模拟成交。",
+  "Return to current session": "返回当前会话",
+  "MAX source coverage varies by symbol. Existing runs remain unchanged; create a new session for longer history.": "最大历史覆盖期因交易品种而异。已有会话不会改变，如需更长历史请新建会话。",
 };
 
 const LocaleContext = createContext<{
