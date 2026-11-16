@@ -343,13 +343,15 @@ def strategy(run_id, code):
     with LOCK, closing(connection()) as db, db:
         row, snap, state = _load(db, run_id)
         rules = compile_portfolio_rules(code, set(json.loads(row["basket"])))
+        previous = state["strategy"]
         state["strategy"] = code
         event(state, f"Cross-asset bot armed with {len(rules)} rules.")
         _save(db, run_id, state)
         response = public(run_id, row, snap, state)
     try:
         from .strategy_library import capture
-        capture("portfolio", code, json.loads(row["basket"]), run_id)
+        for version in (previous, code):
+            capture("portfolio", version, json.loads(row["basket"]), run_id)
     except Exception:
         import logging
         logging.getLogger(__name__).exception("Could not archive activated portfolio strategy")
