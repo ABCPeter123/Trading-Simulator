@@ -1,7 +1,7 @@
 import { useI18n } from "./i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity, ArrowDownRight, ArrowLeft, ArrowUpRight, Award, Bot, Check,
+  Activity, ArrowDownRight, ArrowUpRight, Award, Bot, Check,
   ChevronLeft, ChevronRight, Clock3, Code2, FastForward, Flag, Gauge, Medal, Pause,
   Play, Plus, Save, ShieldCheck, Sparkles, Target, Terminal,
   Trash2, Trophy, Wallet, Zap,
@@ -14,6 +14,8 @@ import AIAssistant from "./AIAssistant";
 import WorkspaceTabs from "./WorkspaceTabs";
 import type { WorkspaceTab } from "./WorkspaceTabs";
 import StochasticResearch from "./StochasticResearch";
+import MarketDesk from "./MarketDesk";
+import StrategyLibrary from "./StrategyLibrary";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { PriceChart } from "./components/PriceChart";
 import { REPLAY_WINDOWS, RESOLUTIONS, aggregateBars, chartTrades as mapChartTrades, chartViewsFor, showReplayTime } from "./replayIntervals";
@@ -36,7 +38,7 @@ function Metric({label, value, note, positive}: {label: string; value: string; n
   return <div className="arc-metric"><span>{label}</span><strong className={positive===undefined?"":positive?"positive":"negative"}>{value}</strong>{note && <small>{note}</small>}</div>;
 }
 
-export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void;onOpenPortfolio:()=>void}) {
+export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>void}) {
   const {t} = useI18n();
   const [game, setGame] = useState<ArcadeRun|null>(null);
   const [workspaceTab,setWorkspaceTab] = useState<WorkspaceTab>("overview");
@@ -268,24 +270,30 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
   return <div className="arc-page">
     <header className="arc-top">
       <div className="arc-top-left">
-        <button className="arc-back" title={t("Back to trading terminal")} onClick={()=>{setPlaying(false);onExit();}}><ArrowLeft size={18}/></button>
+        
         <div className="arc-logo"><Zap size={23} fill="currentColor"/></div>
         <div className="arc-brand">{t("Historical Trading")} <span>{t("Simulator")}</span><small>{t("Market research workspace")}</small></div>
       </div>
       <div className="arc-top-right">
         <span className="arc-live"><span/> {t("Historical market simulation")}</span>
+        <button className="arc-outline-button" onClick={()=>{setPlaying(false);setWorkspaceTab("market");}}>{t("Market Data & Paper")}</button>
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);onOpenPortfolio();}}><Wallet size={15}/> {t("Portfolio Simulator")}</button>
         {q && <div className="arc-player"><div className="arc-avatar"><Trophy size={17}/></div><div><strong>{t("LEVEL")} {q.level}</strong><span>{q.xp} XP · {q.score.toLocaleString()} {t("score")}</span></div></div>}
-        <button className="arc-outline-button" onClick={()=>{setPlaying(false);setNewGame(true);setError("");}}><Plus size={15}/> {t("New session")}</button>
+        <button className="arc-outline-button" onClick={()=>{setPlaying(false);setWorkspaceTab("overview");setNewGame(true);setError("");}}><Plus size={15}/> {t("New session")}</button>
       </div>
     </header>
 
     {initializing ? <div className="arc-intro"><Activity className="spin" size={30}/><h2>{t("Loading historical sessions")}</h2><p>{t("Reading local game saves.")}</p></div> :
+     workspaceTab==="market" ? <main className="arc-layout" data-tab="market">
+       <WorkspaceTabs active={workspaceTab} onChange={setWorkspaceTab}/>
+       <MarketDesk/>
+     </main> :
      newGame || !game ? <main className="arc-intro">
        <div className="arc-intro-icon"><Activity size={35}/></div>
        <span className="arc-upper">{t("HISTORICAL MARKET RESEARCH")}</span>
        <h1>{t("Historical Trading Simulator")}</h1>
        <p>{t("Start with $100,000 in simulated capital. Analyze real historical candles, test rule-based strategies, and compare performance with a benchmark.")}</p>
+       <button type="button" className="arc-outline-button" onClick={()=>setWorkspaceTab("market")}>{t("Open market data and paper account")}</button>
        <div className="arc-start-form">
          <label htmlFor="arc-market-search">Find a market · {catalog.length} {t("instruments indexed")}</label>
          <input id="arc-market-search" type="search" value={catalogSearch} placeholder={t("Search symbol or company...")} onChange={e=>{setCatalogSearch(e.target.value);setRemoteResults([]);}}/>
@@ -434,6 +442,9 @@ export default function TradingArcade({onExit,onOpenPortfolio}: {onExit:()=>void
              <div className="arc-code-actions"><span>{t(game.strategy.trim()?"Bot armed":"No active strategy")}</span><button disabled={busy||validating||codeSaved||viewingPast} onClick={()=>void saveCode()}><Save size={15}/>{t(validating?"Validating...":"Save & activate strategy")}</button></div>
            </div>}
          </section>
+         <StrategyLibrary mode="single" runId={game.id} symbols={[game.asset_id]}
+           code={code} activatedCode={game.strategy}
+           onLoad={draft=>{setCode(draft);setCodeError("");setEditorOpen(true);setWorkspaceTab("strategy");}}/>
 
          <section className="arc-history">
            <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong><span className="arc-tag">{game.fills.length} {t("RECENT FILLS")}</span></div></div>
