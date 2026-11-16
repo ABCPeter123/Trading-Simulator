@@ -84,3 +84,14 @@
 @media(prefers-reduced-motion:reduce){
   .sim-mode-tabs button,.ts-tab-strip button,.arc-code-actions button,.port-toolbar button{transition:none}
 }
+
+
+/* Charts store every observed point. The canvas renders the current viewport
+   and provides explicit full-history and latest-candle navigation. */
+.ts-chart-surface{position:relative;width:100%;height:100%;min-height:0;min-width:0;overflow:hidden}
+.ts-chart-surface>.chart-canvas{width:100%;height:100%;min-height:0;display:block}
+.ts-chart-viewport-actions{position:absolute;top:6px;left:9px;z-index:3;display:flex;flex-wrap:wrap;gap:5px;pointer-events:none}
+.ts-chart-viewport-actions button{pointer-events:auto;color:#d7e5f3;background:rgba(21,34,48,.93);border:1px solid #4b657c;border-radius:6px;min-height:30px;padding:5px 9px;font-size:10px;line-height:1.2;cursor:pointer;box-shadow:0 1px 4px #09101788}
+.ts-chart-viewport-actions button:hover{background:#273d52;border-color:#7192ac}
+.ts-chart-viewport-actions button:focus-visible{outline:2px solid #c8b3fd;outline-offset:2px}
+@media(max-width:740px){.ts-chart-viewport-actions{top:5px;left:5px;gap:4px}.ts-chart-viewport-actions button{min-height:34px;padding:6px 8px}}
