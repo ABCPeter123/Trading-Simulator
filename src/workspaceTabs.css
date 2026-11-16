@@ -40,3 +40,7 @@
 
 .arc-top .arc-player{display:none!important}
 .arc-layout .arc-level-card{display:none!important}
+
+/* Market chart and top-line figures belong to Overview, not every tab. */
+.arc-layout[data-tab]:not([data-tab="overview"]) .arc-main>.arc-stat-grid,
+.arc-layout[data-tab]:not([data-tab="overview"]) .arc-main>.arc-chart-box{display:none!important}
