@@ -713,6 +713,12 @@ const zh: Record<string, string> = {
   "Local AI is processing your request.": "本地 AI 正在处理请求。",
   "First response may take longer while Ollama loads the model.": "首次回答可能较慢，因为 Ollama 需要加载模型。",
   "Trading": "交易",
+  "Loading saved simulation sessions.": "正在加载已保存的模拟会话。",
+  "Intraday providers have limited historical coverage. Daily bars support longer backtests; missing minute prices are never manufactured.": "分钟行情的可用历史有限，长期回测可使用日K线。系统不会编造缺失的分钟价格。",
+  "Choose the replay start date. Leave blank to use the configured starting point.": "选择历史回放起始日期，留空则使用默认开始位置。",
+  "VALIDATED STRATEGY DSL": "已验证的策略规则语言",
+  "AUTOMATED · ": "自动策略 · ",
+  "(automated)": "（自动策略）",
 };
 
 const LocaleContext = createContext<{
