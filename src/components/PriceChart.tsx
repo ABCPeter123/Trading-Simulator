@@ -47,7 +47,7 @@ export function PriceChart({
   const { ref: containerRef, width, height, visible } = useChartDimensions();
   const fitAllRef=useRef<(()=>void)|null>(null);
   const latestRef=useRef<(()=>void)|null>(null);
-  const savedRangeRef=useRef<{from:number;to:number}|null>(null);
+  const savedRangeRef=useRef<{from:number;to:number;all:boolean;identity:string}|null>(null);
   const resizeRef = useRef<((width: number, height: number) => void) | null>(null);
   const updateRef = useRef<((bars: MarketBar[], fills: ChartTrade[]) => void) | null>(null);
   const key = smaPeriods.join(",");
@@ -231,7 +231,9 @@ export function PriceChart({
       if(data.length>0){
         if(previousCount===0){
           const remembered=savedRangeRef.current;
-          if(remembered&&remembered.from<data.length){
+          if(remembered?.identity===asset.id+"/"+range&&remembered.all){
+            scale.fitContent();
+          }else if(remembered?.identity===asset.id+"/"+range&&remembered.from<data.length){
             scale.setVisibleLogicalRange({
               from:Math.max(-0.5,remembered.from),
               to:Math.min(data.length+0.5,remembered.to),
@@ -252,9 +254,11 @@ export function PriceChart({
       previousCount=data.length;
       previousLastTime=lastTime;
     };
+    const rangeKey=range;
     return ()=>{
       const range=chart.timeScale().getVisibleLogicalRange();
-      if(range)savedRangeRef.current={from:range.from,to:range.to};
+      if(range)savedRangeRef.current={from:range.from,to:range.to,
+        all:isEntireRangeVisible(range,loadedCount),identity:asset.id+"/"+rangeKey};
       updateRef.current=null;resizeRef.current=null;
       fitAllRef.current=null;latestRef.current=null;chart.remove();
     };
