@@ -2,7 +2,7 @@ import "./marketDesk.css";
 import { useI18n } from "./i18n";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, BarChart3, CandlestickChart,
+  Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, CandlestickChart,
   Check, ChevronDown, ChevronLeft, Clock3, Database, FastForward, LineChart, PauseCircle,
   Play, RefreshCw, RotateCcw, Search, ShieldCheck, Wallet, X,
 } from "lucide-react";
