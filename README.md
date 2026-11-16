@@ -2,6 +2,22 @@
 
 A **local-first paper trading and historical replay terminal** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Intraday Trading Arcade v0.8
+
+Both Arcade modes and the original Trading Terminal now offer real provider
+**1-minute, 5-minute, 15-minute, hourly and daily candles**, with interval-
+appropriate historical ranges. Portfolio replay uses the actual UTC timestamps
+of each observed instrument candle, without fabricating stock prices during
+closed sessions. Switch an Arcade chart to a wider timeframe without changing
+the original execution or strategy clock.
+
+Historical minute data has strict provider limits; Yahoo minute history is
+recent-only, and Coinbase data are fetched in bounded 300-candle pages with up
+to 5,000 actual intraday observations retained per symbol. Long-term daily
+history and existing saved games remain unchanged.
+
+See [Intraday data and replay guide](docs/INTRADAY.md). No new dependencies.
+
 ## Strategy analytics v0.7
 
 **Detailed game performance research** is now built into both Arcade modes.
