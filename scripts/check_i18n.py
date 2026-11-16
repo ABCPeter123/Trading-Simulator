@@ -14,7 +14,7 @@ translations = {key for key, _ in entries}
 assert len(entries) == len(translations), "Duplicate keys in localization catalog"
 assert len(translations) >= 300, "Unexpectedly incomplete Simplified Chinese catalog"
 missing: dict[str, list[str]] = {}
-for relative in ["App.tsx", "TradingArcade.tsx", "PortfolioArcade.tsx", "VisualStrategyBuilder.tsx", "StrategyAnalytics.tsx", "AIAssistant.tsx", "WorkspaceTabs.tsx", "StochasticResearch.tsx"]:
+for relative in ["MarketDesk.tsx", "StrategyLibrary.tsx", "TradingArcade.tsx", "PortfolioArcade.tsx", "VisualStrategyBuilder.tsx", "StrategyAnalytics.tsx", "AIAssistant.tsx", "WorkspaceTabs.tsx", "StochasticResearch.tsx"]:
     file = ROOT / "src" / relative
     content = file.read_text(encoding="utf-8")
     assert 'useI18n' in content, f"Missing locale hook in {relative}"
@@ -30,4 +30,4 @@ root = (ROOT / "src" / "main.tsx").read_text(encoding="utf-8")
 assert "<I18nProvider>" in root and "<LanguageSwitcher/>" in root
 assert 'localStorage.setItem(STORAGE_KEY' in src, "Locale choice is not persistent"
 assert 'document.documentElement.lang = locale' in src, "HTML language not updated"
-print(f"Localization check passed: {len(translations)} translated labels, all 4 screens wired.")
+print(f"Localization check passed: {len(translations)} translated labels, all simulator workspaces wired.")
