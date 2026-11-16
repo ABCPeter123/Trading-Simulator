@@ -2,6 +2,23 @@
 
 A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Research UI, longer history, and local AI improvements
+
+- Cleaner layouts on mobile and desktop, improved chart sizing, chart-canvas
+  checks, and English/Simplified Chinese translations for dynamic simulation
+  events.
+- New daily simulations default to **MAX** historical data with an earlier
+  replay start. Existing saved sessions are unchanged.
+- Active portfolio simulations expose 1m, 5m, 15m, 1h and daily execution
+  intervals. Selecting another interval starts a fresh session while retaining
+  previous portfolio saves.
+- Ollama preloads its configured model when the website opens. Quantitative
+  instructions, revealed-only curve checkpoints and explicit UI language
+  improve the context supplied for research.
+
+See [history depth](docs/HISTORY_DEPTH.md) and
+[local AI setup](docs/AI_ASSISTANT.md). No new app dependencies.
+
 ## Mobile and tablet support
 
 The same Trading Simulator interface adapts to phones and tablets. On small screens, use the workspace section selector to navigate replay, orders, strategy editing, analytics and trade history. Financial tables scroll inside their panels and charts resize to fit the viewport.
