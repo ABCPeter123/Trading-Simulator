@@ -140,3 +140,25 @@ def test_http_create_minute_portfolio_rejects_invalid_windows(monkeypatch,tmp_pa
         "asset_ids":["spy","qqq"],"period":"10Y","resolution":"1m",
     })
     assert bad.status_code==422
+
+
+def test_terminal_market_api_can_request_minute_candles(monkeypatch):
+    from backend import intraday as module
+    monkeypatch.setattr(module, "replay_history", fake_source)
+    client=TestClient(app)
+    result=client.get("/api/market/aapl?range=7D&resolution=1m")
+    assert result.status_code==200
+    assert result.json()["resolution"]=="1m"
+    assert len(result.json()["bars"])==420
+
+
+def test_intraday_and_daily_archives_use_distinct_files(tmp_path, monkeypatch):
+    from backend import archive
+    monkeypatch.setenv("TRADING_SIM_MARKET_DIR", str(tmp_path))
+    daily=archive.archive_path("spy","1Y")
+    minute=archive.archive_path("spy","7D_1m")
+    hourly=archive.archive_path("spy","1Y_1h")
+    assert daily != minute != hourly
+    assert minute.name == "7D_1m.parquet"
+    with pytest.raises(HTTPException):
+        archive.archive_path("spy","../7D_1m")
