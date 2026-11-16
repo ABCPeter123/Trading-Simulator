@@ -129,7 +129,7 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
     ],
   }),[data,t]);
   const windowResult=useMemo(()=>{
-    if(data.length<2)return null;
+    if(data.length===0)return null;
     const first=data[0],last=data.at(-1)!;
     return {
       own:((last.equity/first.equity)-1)*100,
@@ -162,11 +162,11 @@ export default function StrategyAnalytics({runId,step,mode,assetName,onReport}:{
         <span className="an-range">{data[0]?.day??t("No data")} / {data.at(-1)?.day??t("No data")}</span>
       </div>
       <div className="an-metrics">
-        <Metric name={t("Strategy return")} value={pct(windowResult?.own??report.summary.total_return_pct)}
+        <Metric name={t("Strategy return")} value={pct(windowResult?.own??null)}
           note={t("Selected period")}/>
-        <Metric name={t("Benchmark return")} value={pct(windowResult?.benchmark??report.summary.benchmark_return_pct)}
+        <Metric name={t("Benchmark return")} value={pct(windowResult?.benchmark??null)}
           note={t("Equal-weight price-only")}/>
-        <Metric name={t("Excess return")} value={pct((windowResult?.own??report.summary.total_return_pct)-(windowResult?.benchmark??report.summary.benchmark_return_pct))}/>
+        <Metric name={t("Excess return")} value={pct(windowResult?windowResult.own-windowResult.benchmark:null)}/>
         <Metric name={t("Maximum drawdown")} value={pct(report.summary.max_drawdown_pct)} note={t("Full season to date")}/>
         <Metric name={t("Capital invested")} value={formatMoney(report.summary.current_invested)}
           note={`${shortNum(report.summary.current_invested/Math.max(report.summary.current_equity,1)*100)}% ${t("of equity")}`}/>
