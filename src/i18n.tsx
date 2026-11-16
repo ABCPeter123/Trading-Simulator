@@ -570,6 +570,10 @@ const zh: Record<string, string> = {
   "No real intraday candles available for this instrument.": "当前品种没有可用的真实分钟级K线。",
   "Intraday basket requires at least two overlapping real trading dates.": "分钟级组合至少需要两个行情有重叠的交易日。",
   "Candle interval": "K线周期",
+  "+100 candles": "前进100根K线",
+  "25 bars / tick": "每次25根",
+  "50 bars / tick": "每次50根",
+  "tick": "次更新",
 };
 
 const LocaleContext = createContext<{
