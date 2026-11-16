@@ -277,7 +277,7 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
       <div className="arc-top-right">
         <span className="arc-live"><span/> {t("Historical market simulation")}</span>
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);setWorkspaceTab("market");}}>{t("Market Data & Paper")}</button>
-        <button className="arc-outline-button" onClick={()=>{setPlaying(false);onOpenPortfolio();}}><Wallet size={15}/> {t("Portfolio Simulator")}</button>
+        <button className="arc-outline-button arc-portfolio-shortcut" onClick={()=>{setPlaying(false);onOpenPortfolio();}}><Wallet size={15}/> {t("Portfolio Simulator")}</button>
 
         <button className="arc-outline-button" onClick={()=>{setPlaying(false);setWorkspaceTab("overview");setNewGame(true);setError("");}}><Plus size={15}/> {t("New session")}</button>
       </div>
