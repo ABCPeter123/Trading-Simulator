@@ -91,6 +91,11 @@ def _prepare(histories, resolution="1d"):
         common = sorted(shared_dates)
         if len(common) < 2:
             raise HTTPException(422, detail="Intraday basket requires at least two overlapping real trading dates.")
+        # A symbol that stopped trading weeks ago cannot share a playable
+        # recent timeline with a continuously traded cryptocurrency.
+        from datetime import date, timedelta
+        if date.fromisoformat(days[-1][:10]) - date.fromisoformat(common[-1]) > timedelta(days=7):
+            raise HTTPException(422, detail="Basket intraday histories are not recent enough to align.")
         common_warmup = common[0]
     seen = {asset_id: 0 for asset_id in by_id}
     first = None
