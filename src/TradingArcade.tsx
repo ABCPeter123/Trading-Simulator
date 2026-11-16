@@ -283,7 +283,7 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
       </div>
     </header>
 
-    {initializing ? <div className="arc-intro"><Activity className="spin" size={30}/><h2>{t("Loading historical sessions")}</h2><p>{t("Reading local game saves.")}</p></div> :
+    {initializing ? <div className="arc-intro"><Activity className="spin" size={30}/><h2>{t("Loading historical sessions")}</h2><p>{t("Loading saved simulation sessions.")}</p></div> :
      workspaceTab==="market" ? <main className="arc-layout" data-tab="market">
        <WorkspaceTabs active={workspaceTab} onChange={setWorkspaceTab}/>
        <MarketDesk/>
@@ -323,9 +323,9 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
          <select id="arc-historical-range" value={period} onChange={e=>setPeriod(e.target.value as ReplayWindow)}>
            {REPLAY_WINDOWS[resolution].map(w=><option key={w} value={w}>{w==="MAX"?t("Maximum available history"):w}</option>)}
          </select>
-         <small className="arc-date-hint">{t("Intraday data has limited provider history. Daily bars support long-term seasons. The game never invents missing minute prices.")}</small>
+         <small className="arc-date-hint">{t("Intraday providers have limited historical coverage. Daily bars support longer backtests; missing minute prices are never manufactured.")}</small>
          <label htmlFor="arc-choose-date">{t("Historical start date (optional)")}</label>
-         <input id="arc-choose-date" type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} title={t("Choose the date when the game should start. Leave blank to use the standard starting point.")}/>
+         <input id="arc-choose-date" type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} title={t("Choose the replay start date. Leave blank to use the configured starting point.")}/>
          <small className="arc-date-hint">{t("Choose a date such as 2008-09-15 or 2020-03-01. Requires source coverage and indicator warmup.")}</small>
          <label htmlFor="arc-start-point">{t("Starting point")} {startDate?t("(ignored when date is set)"):""}</label>
          <select id="arc-start-point" value={startingPoint} onChange={e=>setStartingPoint(Number(e.target.value))}>
@@ -425,7 +425,7 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
            onDraft={draft=>{setCode(draft);setEditorOpen(true);setCodeError("");setWorkspaceTab("strategy");}}/>
            :<p className="ts-past-note">{t("AI research uses the latest session. Return to latest to ask questions.")}</p>}
          <section className="arc-bot-section">
-           <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Editor")}</strong><span className="arc-tag">{t("NO CODING EXPERIENCE NEEDED")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{t(editorOpen?"Collapse":"Expand")}</button></div>
+           <div className="arc-box-head"><div><Bot size={18}/><strong>{t("Strategy Editor")}</strong><span className="arc-tag">{t("VALIDATED STRATEGY DSL")}</span></div><button className="arc-subtle-button" onClick={()=>setEditorOpen(v=>!v)}>{t(editorOpen?"Collapse":"Expand")}</button></div>
            <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Define algorithmic trading rules")}</strong><p>{t("Write safe deterministic strategy rules. Signals evaluate on revealed candle closes, and orders enter the next available trading candle.")}</p></div></div>
            {editorOpen&&<div className="arc-editor">
              <VisualStrategyBuilder onAdd={rule=>{setCode(prev=>prev.trim()?prev.trim()+"\n"+rule:rule);setCodeError("");}}/>
@@ -448,7 +448,7 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
 
          <section className="arc-history">
            <div className="arc-box-head"><div><Clock3 size={17}/><strong>{t("Trade journal")}</strong><span className="arc-tag">{game.fills.length} {t("RECENT FILLS")}</span></div></div>
-           {game.fills.length?<div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SIDE")}</th><th>{t("TYPE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th></tr></thead><tbody>{game.fills.slice(0,20).map((fill,index)=><tr key={fill.order_id+"-"+index}><td>{asTime(fill.time,baseResolution)}</td><td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td><td>{fill.source==="bot"?t("BOT · "):""}{t(fill.kind.toUpperCase())}</td><td>{fill.quantity.toLocaleString("en-US",{maximumFractionDigits:8})}</td><td>{formatPrice(fill.price,asset?.decimals??2)}</td><td>{formatMoney(fill.fee)}</td></tr>)}</tbody></table></div>
+           {game.fills.length?<div className="arc-table-scroll"><table><thead><tr><th>{t("DATE")}</th><th>{t("SIDE")}</th><th>{t("TYPE")}</th><th>{t("QTY")}</th><th>{t("PRICE")}</th><th>{t("FEE")}</th></tr></thead><tbody>{game.fills.slice(0,20).map((fill,index)=><tr key={fill.order_id+"-"+index}><td>{asTime(fill.time,baseResolution)}</td><td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td><td>{fill.source==="bot"?t("AUTOMATED · "):""}{t(fill.kind.toUpperCase())}</td><td>{fill.quantity.toLocaleString("en-US",{maximumFractionDigits:8})}</td><td>{formatPrice(fill.price,asset?.decimals??2)}</td><td>{formatMoney(fill.fee)}</td></tr>)}</tbody></table></div>
              : <div className="arc-empty">{t("No fills yet. Place a trade, then advance the timeline.")}</div>}
          </section>
        </div>
