@@ -27,6 +27,7 @@ from .ledger import dec, positive_quantity
 from .market import history
 from .intraday import replay_history, validate_replay_window
 from .portfolio_dsl import compile_portfolio_rules
+from .time_navigation import checkpoint, snapshot_at, history_info
 
 LOCK = RLock()
 DB_PATH = Path(os.environ.get(
@@ -121,6 +122,7 @@ def _load(db, run_id):
 
 
 def _save(db, run_id, state):
+    checkpoint(state)
     db.execute("UPDATE portfolio_seasons SET state=?, updated_at=? WHERE id=?",
                (json.dumps(state), datetime.now(timezone.utc).isoformat(), run_id))
 
@@ -158,6 +160,7 @@ def create_season(symbols, period="5Y", starting_point=0.3, start_date=None, res
         "events": ["Multi-asset season started. No future candles are visible."],
         "curve": [{"day": days[index], "value": float(INITIAL_CASH)}],
     }
+    checkpoint(state)
     compressed = zlib.compress(json.dumps(snapshot, separators=(",", ":")).encode("utf-8"), level=6)
     run_id = str(uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -240,6 +243,7 @@ def public(run_id, row, snap, state):
         "id": run_id, "asset_ids": json.loads(row["basket"]),
         "period": row["period"], "resolution": state.get("resolution", "1d"), "sources": snap["sources"],
         "day": days[idx], "current_step": idx, "total_steps": len(days),
+        **history_info(state), "view_index": idx, "viewing_past": False,
         "progress_pct": round(100*idx/(len(days)-1), 1),
         "finished": idx == len(days)-1, "bars": visible,
         "metrics": {
@@ -255,11 +259,15 @@ def public(run_id, row, snap, state):
     }
 
 
-def get_analysis(run_id):
+def get_analysis(run_id, at_index=None):
     """Read-only analytics from frozen bars and full untruncated fill ledger."""
     from .strategy_analytics import build_report
     with LOCK, closing(connection()) as db:
         row, snap, state = _load(db, run_id)
+        if at_index is not None:
+            if at_index > state["index"]:
+                raise HTTPException(422, detail="Cannot analyze an unrevealed step.")
+            state = snapshot_at(state, at_index)
         return build_report(
             snap["days"], snap["daily"], json.loads(row["basket"]),
             state["start_index"], state["index"], state["fills"],
@@ -446,6 +454,7 @@ def advance(run_id, count=1, until_action=False):
                 break
             cash, exposure, _ = _equity(snap, state, next_idx)
             state["curve"].append({"day": day, "value": float(cash+exposure)})
+            checkpoint(state)
             if until_action and (traded or signaled):
                 break
         if state["index"] == len(days)-1:
@@ -455,3 +464,17 @@ def advance(run_id, count=1, until_action=False):
                 state["completed"] = True
         _save(db, run_id, state)
         return public(run_id, row, snap, state)
+
+def get_at(run_id, index: int):
+    """Non-destructive read of recorded historic positions/orders/strategy."""
+    with LOCK, closing(connection()) as db:
+        row, snap, state = _load(db, run_id)
+        if not state.get("checkpoints"):
+            checkpoint(state)
+        if index < state["start_index"] or index > state["index"]:
+            raise HTTPException(422, detail="Cannot navigate to an unrevealed step.")
+        old = snapshot_at(state,index)
+        result = public(run_id,row,snap,old)
+        result.update(**history_info(state),view_index=index,
+                      viewing_past=index < state["index"])
+        return result
