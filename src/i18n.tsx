@@ -712,6 +712,7 @@ const zh: Record<string, string> = {
   "Delete this saved strategy version? The active simulation will not change.": "确定删除此策略版本吗？当前模拟不会改变。",
   "Local AI is processing your request.": "本地 AI 正在处理请求。",
   "First response may take longer while Ollama loads the model.": "首次回答可能较慢，因为 Ollama 需要加载模型。",
+  "Trading": "交易",
 };
 
 const LocaleContext = createContext<{
