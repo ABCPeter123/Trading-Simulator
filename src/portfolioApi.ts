@@ -72,9 +72,9 @@ export interface PortfolioSaved {
 }
 const base = "/portfolio-seasons";
 export const listPortfolioSeasons = () => request<PortfolioSaved[]>(base);
-export const newPortfolioSeason = (assetIds: string[], period: ReplayWindow, startDate?: string, resolution: ReplayResolution = "1d") =>
+export const newPortfolioSeason = (assetIds: string[], period: ReplayWindow, startDate?: string, resolution: ReplayResolution = "1d", startingPoint = 0.15) =>
   request<PortfolioSeason>(base, {method:"POST", body: JSON.stringify({
-    asset_ids: assetIds, period, resolution, start_date: startDate || null,
+    asset_ids: assetIds, period, resolution, starting_point: startingPoint, start_date: startDate || null,
   })});
 export const loadPortfolioSeason = (id: string) =>
   request<PortfolioSeason>(`${base}/${encodeURIComponent(id)}`);
