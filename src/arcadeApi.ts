@@ -1,3 +1,4 @@
+import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 import type { MarketBar } from "./api";
 import { request } from "./api";
 import type { TradeSide } from "./types";
@@ -43,7 +44,8 @@ export interface ArcadeRun {
   id: string;
   asset_id: string;
   source: string;
-  period: string;
+  period: ReplayWindow;
+  resolution: ReplayResolution;
   risk: {stop_loss_pct: number; take_profit_pct: number};
   current_bar: number;
   total_bars: number;
@@ -82,8 +84,8 @@ export const gameSetRisk = (id: string, stopLossPct: number, takeProfitPct: numb
   });
 export const gameRuns = () => request<SavedArcadeRun[]>("/arcade/runs");
 export const gameLoad = (id: string) => request<ArcadeRun>(`/arcade/${encodeURIComponent(id)}`);
-export const gameStart = (assetId: string, startingPoint: number, period: "1Y"|"2Y"|"5Y"|"10Y"|"MAX", startDate?: string) =>
-  request<ArcadeRun>("/arcade/new", {method: "POST", body: JSON.stringify({asset_id: assetId, starting_point: startingPoint, period, start_date: startDate || null})});
+export const gameStart = (assetId: string, startingPoint: number, period: ReplayWindow, startDate?: string, resolution: ReplayResolution = "1d") =>
+  request<ArcadeRun>("/arcade/new", {method: "POST", body: JSON.stringify({asset_id: assetId, starting_point: startingPoint, period, resolution, start_date: startDate || null})});
 export const gameStep = (id: string, count: number, untilAction = false) =>
   request<ArcadeRun>(`/arcade/${id}/advance`, {method: "POST", body: JSON.stringify({count, until_action: untilAction})});
 export const gameTrade = (id: string, order: {side: TradeSide; kind: OrderKind; size: string; size_type: "percent" | "units"; price?: string}) =>
