@@ -107,7 +107,8 @@ must not promise simultaneous 50/50 allocation or risk-free performance.
 ## API and developer notes
 
 - `GET /api/ai/status`: returns selected provider and model information,
-  not credentials; it does not prove a model is installed or reachable
+  not credentials. For Ollama it probes localhost for the selected installed
+  model; this does not guarantee all later inference requests will succeed
 - `POST /api/ai/ask`: accepts `mode` (`single` or `portfolio`),
   `run_id`, `question`, and up to 6 short history entries
 - `backend/ai_assistant.py`: safe read-only orchestration and DSL validation
