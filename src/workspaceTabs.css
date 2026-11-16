@@ -37,3 +37,6 @@
 .port-layout[data-tab="execution"] .port-side .port-trade{grid-row:span 2}
 .port-layout[data-tab="history"] .port-history{width:100%}
 @media(max-width:700px){.ts-workspace-tabs{padding-bottom:9px}.ts-workspace-tabs button{padding:10px 11px;font-size:11px}.port-layout[data-tab="execution"] .port-side{display:flex;flex-direction:column}}
+
+.arc-top .arc-player{display:none!important}
+.arc-layout .arc-level-card{display:none!important}
