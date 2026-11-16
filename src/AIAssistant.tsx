@@ -94,7 +94,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
       {status?.model&&<strong>{status.model}</strong>}
       {status?.provider==="ollama"&&<button className="ai-refresh" type="button" onClick={()=>void getAIStatus().then(setStatus).catch(e=>setStatusError(e instanceof Error?e.message:t("AI status unavailable.")))}><RefreshCcw size={13}/>{t("Recheck AI")}</button>}
     </div>
-    {statusError&&<p role="alert" className="ai-error">{statusError}</p>}
+    {statusError&&<p role="alert" className="ai-error">{t(statusError)}</p>}
     {!status?.ready&&status&&<p className="ai-setup">{t("Configure the backend AI provider to enable questions. See the AI setup guide.")}</p>}
     <div className="ai-suggestions">
       {suggestions.map((question,i)=><button key={i} type="button" disabled={busy||status?.ready===false}
@@ -105,7 +105,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
         <span>{turn.role==="user"?t("You"):t("Research assistant")}</span>
         <p>{turn.content}</p>
         {turn.role==="assistant"&&answers[Math.floor(i/2)]?.warning&&
-          <p className="ai-warning">{answers[Math.floor(i/2)].warning}</p>}
+          <p className="ai-warning">{t(answers[Math.floor(i/2)].warning ?? "")}</p>}
         {turn.role==="assistant"&&answers[Math.floor(i/2)]?.proposed_strategy&&
           <div className="ai-proposal">
             <div className="ai-proposal-heading"><Check size={14}/>{t("Validated strategy proposal")}</div>
@@ -121,7 +121,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
       </div>)}
     </div>}
     {busy&&<p className="ai-processing" role="status">{t("Local AI is processing your request.")} {elapsed}s · {t("First response may take longer while Ollama loads the model.")}</p>}
-    {error&&<div role="alert" className="ai-error">{error}{retryQuestion&&<button type="button" disabled={busy||!status?.ready} onClick={()=>void send(retryQuestion)}><RefreshCcw size={14}/>{t("Retry question")}</button>}</div>}
+    {error&&<div role="alert" className="ai-error">{t(error)}{retryQuestion&&<button type="button" disabled={busy||!status?.ready} onClick={()=>void send(retryQuestion)}><RefreshCcw size={14}/>{t("Retry question")}</button>}</div>}
     <form className="ai-form" onSubmit={e=>{e.preventDefault();void send(message);}}>
       <textarea rows={2} maxLength={1200} value={message} onChange={e=>setMessage(e.target.value)}
         placeholder={t("Ask me to analyze performance or suggest a strategy...")}
