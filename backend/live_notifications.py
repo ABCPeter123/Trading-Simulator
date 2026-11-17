@@ -48,32 +48,103 @@ def _email_targets():
     if not result:raise ValueError("At least one email recipient is required")
     return result
 
-def _send_email(title:str,body:str,html_body:str|None=None):
-    host=os.environ["TRADING_SIM_SMTP_HOST"].strip()
-    port=int(os.environ.get("TRADING_SIM_SMTP_PORT","465"))
-    sender=(os.environ.get("TRADING_SIM_EMAIL_FROM") or os.environ.get("TRADING_SIM_SMTP_USER","")).strip()
-    if not host or not sender or any(c.isspace() for c in sender) or port not in (465,587):
+class SMTPDeliveryFailure(RuntimeError):
+    """Credential-free, recipient-free failure classification for the owner."""
+    def __init__(self, stage: str, port: int, cause: str):
+        self.stage = stage
+        self.port = port
+        self.cause = cause
+        super().__init__(f"{stage} on port {port} ({cause})")
+
+
+def _smtp_connect_and_auth(host: str, port: int, user: str, password: str):
+    """Both supported paths require authenticated server TLS certificates.
+
+    Never catch and print raw server replies, which may contain sensitive
+    recipient or account information. Close sockets without using QUIT, which
+    can fail after a successful send and falsely imply nondelivery.
+    """
+    smtp = None
+    stage = "connect"
+    try:
+        context = ssl.create_default_context()
+        if port == 465:
+            smtp = smtplib.SMTP_SSL(host, port, timeout=30, context=context)
+        elif port == 587:
+            smtp = smtplib.SMTP(host, port, timeout=30)
+            stage = "starttls"
+            smtp.starttls(context=context)
+        else:
+            raise ValueError("SMTP requires TLS on port 465 or 587")
+        if user:
+            stage = "authenticate"
+            smtp.login(user, password)
+        return smtp
+    except (smtplib.SMTPException, OSError) as exc:
+        if smtp is not None:
+            try:
+                smtp.close()
+            except Exception:
+                pass
+        raise SMTPDeliveryFailure(stage, port, type(exc).__name__) from None
+
+
+def _send_email(title: str, body: str, html_body: str | None = None):
+    host = os.environ["TRADING_SIM_SMTP_HOST"].strip()
+    port = int(os.environ.get("TRADING_SIM_SMTP_PORT", "465"))
+    sender = (os.environ.get("TRADING_SIM_EMAIL_FROM")
+              or os.environ.get("TRADING_SIM_SMTP_USER", "")).strip()
+    if not host or not sender or any(c.isspace() for c in sender) or port not in (465, 587):
         raise ValueError("Invalid SMTP sender or port")
-    targets=_email_targets()
-    msg=EmailMessage()
-    msg["From"]=sender
-    msg["To"]=", ".join(targets)
-    msg["Subject"]="Trading Simulator: "+title.replace(chr(13)," ").replace(chr(10)," ")[:160]
+    targets = _email_targets()
+    msg = EmailMessage()
+    msg["From"] = sender
+    msg["To"] = ", ".join(targets)
+    msg["Subject"] = "Trading Simulator: " + title.replace(chr(13), " ").replace(chr(10), " ")[:160]
     msg.set_content(body)
-    if html_body:msg.add_alternative(html_body,subtype="html")
-    user=os.environ.get("TRADING_SIM_SMTP_USER","").strip()
-    password=os.environ.get("TRADING_SIM_SMTP_PASSWORD","")
-    if host.lower()=="smtp.gmail.com" and (not user or not password):
-        raise ValueError("Gmail requires authenticated SMTP")
-    if port==465:
-        with smtplib.SMTP_SSL(host,port,timeout=15,context=ssl.create_default_context()) as smtp:
-            if user:smtp.login(user,password)
-            smtp.send_message(msg,to_addrs=targets)
-    else:
-        with smtplib.SMTP(host,port,timeout=15) as smtp:
-            smtp.starttls(context=ssl.create_default_context())
-            if user:smtp.login(user,password)
-            smtp.send_message(msg,to_addrs=targets)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
+    user = os.environ.get("TRADING_SIM_SMTP_USER", "").strip()
+    password = os.environ.get("TRADING_SIM_SMTP_PASSWORD", "")
+    if host.lower() == "smtp.gmail.com":
+        if not user or not password:
+            raise ValueError("Gmail requires an authenticated SMTP sender and app password")
+        # Google sometimes visually groups its 16-character app password.
+        compact = password.replace(" ", "")
+        if len(compact) == 16 and len(password) != 16:
+            password = compact
+
+    try_ports = [port]
+    # Port 587 with STARTTLS is an encrypted fallback if Gmail's implicit TLS
+    # connection fails BEFORE authentication and BEFORE submitting a message.
+    if host.lower() == "smtp.gmail.com" and port == 465:
+        try_ports.append(587)
+    for number, trial_port in enumerate(try_ports):
+        try:
+            smtp = _smtp_connect_and_auth(host, trial_port, user, password)
+        except SMTPDeliveryFailure as exc:
+            if number + 1 < len(try_ports) and exc.stage in ("connect", "starttls"):
+                continue
+            raise
+        try:
+            # Do not retry on failures during or after DATA. The remote server
+            # might have accepted the message even if its reply was lost.
+            refused = smtp.send_message(msg, to_addrs=targets)
+            if refused:
+                raise SMTPDeliveryFailure("deliver", trial_port, "RecipientRefused")
+            return
+        except SMTPDeliveryFailure:
+            raise
+        except (smtplib.SMTPException, OSError) as exc:
+            raise SMTPDeliveryFailure("deliver", trial_port, type(exc).__name__) from None
+        finally:
+            # No QUIT call on exit: QUIT failures after sending must not
+            # turn a successful delivery into an apparent failed attempt.
+            try:
+                smtp.close()
+            except Exception:
+                pass
+
 
 def _send(channel: str, title: str, message: str):
     if channel=="discord":
