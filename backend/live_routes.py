@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from . import live_machine as engine
 from . import live_notifications
+from . import research_optimizer
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -132,3 +133,32 @@ def acknowledge_alert(alert_id:str,body:AlertBody):
 def notifications():
     private()
     return live_notifications.delivery_status()
+
+
+class OptimizeRequest(BaseModel):
+    asset_id:str=Field(min_length=1,max_length=32,pattern=r"^[A-Za-z0-9._-]+$")
+    max_drawdown_pct:float=Field(default=15,ge=1,le=50)
+    allocation_pct:float=Field(default=20,ge=1,le=25)
+
+class NameRequest(BaseModel):
+    name:str=Field(min_length=1,max_length=80)
+
+@router.post("/research/optimize")
+def optimize(body:OptimizeRequest):
+    private()
+    return research_optimizer.optimize(**body.model_dump())
+
+@router.get("/research/runs")
+def research_runs():
+    private()
+    return research_optimizer.list_runs()
+
+@router.get("/research/runs/{run_id}")
+def research_run(run_id:str):
+    private()
+    return research_optimizer.load_run(run_id)
+
+@router.post("/research/runs/{run_id}/save")
+def save_selected(run_id:str,body:NameRequest):
+    private()
+    return research_optimizer.save_selected(run_id,body.name)
