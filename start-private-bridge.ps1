@@ -120,9 +120,21 @@ try {
     }
     if(-not $tunnelUrl){throw "Could not obtain Cloudflare Quick Tunnel address. See .local-state/private-bridge/cloudflared.stderr.log."}
     if(-not $LegacyToken){
+        $statusFile=Join-Path $stateDir "publish-status.txt"
+        Remove-Item Env:TRADING_SIM_PUBLISH_STATUS_PATH -ErrorAction SilentlyContinue
+        $env:TRADING_SIM_PUBLISH_STATUS_PATH=$statusFile
+        Remove-Item -LiteralPath $statusFile -ErrorAction SilentlyContinue
+        # Child Python stderr may be hidden by terminal launchers; always read
+        # back the safe structured diagnostic from local, ignored state.
         & $python (Join-Path $root "scripts\publish_tunnel.py") $tunnelUrl
-        if($LASTEXITCODE -ne 0){
-            throw "Tunnel directory publish failed (exit $LASTEXITCODE). See the safe HTTP status above. To replace the local Vercel token, rerun with -ResetVercelToken."
+        $publishExit=$LASTEXITCODE
+        if($publishExit -ne 0){
+            $detail="Publisher failed before recording a diagnosis; see the local Python environment."
+            if(Test-Path -LiteralPath $statusFile){
+                $saved=(Get-Content -LiteralPath $statusFile -Raw -ErrorAction SilentlyContinue).Trim()
+                if(-not [string]::IsNullOrWhiteSpace($saved)){ $detail=$saved }
+            }
+            throw "Could not publish private tunnel address: $detail (exit $publishExit)"
         }
         Write-Host "[private] Website: $AllowedOrigin" -ForegroundColor Green
         Write-Host "[private] Visitors enter ONLY the shared password. Do not give them the tunnel address." -ForegroundColor Green
