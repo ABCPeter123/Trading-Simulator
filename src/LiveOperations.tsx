@@ -37,6 +37,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
   const [library,setLibrary]=useState<SavedStrategy[]>([]);
   const [selectedStrategy,setSelectedStrategy]=useState("");
   const [capital,setCapital]=useState("100000");
+  const [monitorResolution,setMonitorResolution]=useState<"1d"|"1h"|"15m">("1d");
   const [allocation,setAllocation]=useState("10");
   const [dailyLimit,setDailyLimit]=useState("4");
   const [lossLimit,setLossLimit]=useState("5");
@@ -176,12 +177,18 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
         <div className="ops-field-grid">
           <label>{t("Reference capital")}<input inputMode="decimal" type="number" min="100" value={capital} onChange={e=>setCapital(e.target.value)}/></label>
           <label>{t("Max allocation per signal (%)")}<input type="number" min="0.01" max="25" step=".5" value={allocation} onChange={e=>setAllocation(e.target.value)}/></label>
+          <label>{t("Signal evaluation interval")}<select value={monitorResolution}
+            onChange={e=>setMonitorResolution(e.target.value as "1d"|"1h"|"15m")}>
+            <option value="1d">{t("Daily, previous completed session")}</option>
+            <option value="1h">{t("Hourly, completed candle")}</option>
+            <option value="15m">{t("15-minute, completed candle")}</option>
+          </select></label>
           <label>{t("Daily signal limit")}<input type="number" min="1" max="20" value={dailyLimit} onChange={e=>setDailyLimit(e.target.value)}/></label>
           <label>{t("Realized-loss stop (%)")}<input type="number" min="0.5" max="25" step=".5" value={lossLimit} onChange={e=>setLossLimit(e.target.value)}/></label>
         </div>
         <button className="ops-primary" disabled={running||!selectedStrategy} onClick={()=>void mutate(
           ()=>newDeployment({strategy_id:selectedStrategy,state:"paper",capital:Number(capital),
-          max_allocation_pct:Number(allocation),max_daily_signals:Number(dailyLimit),max_realized_loss_pct:Number(lossLimit)}),
+          max_allocation_pct:Number(allocation),max_daily_signals:Number(dailyLimit),max_realized_loss_pct:Number(lossLimit),resolution:monitorResolution}),
           "Strategy deployed to paper signal monitoring.")}>
           {t("Deploy to paper monitoring")}</button>
         <p className="ops-muted">{t("Short selling, leverage and broker automation remain disabled until their risk models are validated.")}</p>
@@ -189,10 +196,10 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
       <section className="ops-card">
         <h2><Clock3 size={18}/>{t("Worker & evaluations")}</h2>
         <div className="ops-line"><span>{t("Last heartbeat")}</span><strong>{when(status?.heartbeat_at??null)}</strong></div>
-        <div className="ops-line"><span>{t("Monitoring mode")}</span><strong>{t("Daily, completed candles")}</strong></div>
+        <div className="ops-line"><span>{t("Monitoring mode")}</span><strong>{t("Daily / hourly / 15-minute completed candles")}</strong></div>
         <button disabled={running} onClick={()=>void mutate(checkMachine,"Evaluation cycle complete (eligible trading hours only).")}>
           <RefreshCw size={15}/>{t("Evaluate now")}</button>
-        <p className="ops-muted">{t("Only completed prior-day bars are used. Evaluations occur on trading weekdays from 9:15 AM to 4 PM New York time.")}</p>
+        <p className="ops-muted">{t("Daily monitoring uses completed prior-day bars. Intraday monitoring evaluates only closed 15-minute/hourly candles with fresh provider timestamps. Evaluations run during trading hours, with a 90-second worker cycle.")}</p>
         <div className="ops-recent">
           {(status?.recent_evaluations??[]).slice(0,8).map((e,i)=><div className="ops-line" key={i}>
             <span>{e.symbol.toUpperCase()} · {t(e.result)}</span><small>{when(e.evaluated_at)}</small>
@@ -203,7 +210,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
         <h2>{t("Deployed strategies")}</h2>
         {!deployments.length&&<p className="ops-muted">{t("No deployed strategies yet.")}</p>}
         {deployments.map(d=><div className="ops-deployment" key={d.id}>
-          <div><strong>{d.name}</strong><small>{d.symbols.join(", ").toUpperCase()} · {t(d.state)} · {t("Last evaluation")}: {when(d.last_evaluated_at)} · {t("Loss stop")}: {d.max_realized_loss_pct}%</small>
+          <div><strong>{d.name}</strong><small>{d.symbols.join(", ").toUpperCase()} · {d.resolution??"1d"} · {t(d.state)} · {t("Last evaluation")}: {when(d.last_evaluated_at)} · {t("Loss stop")}: {d.max_realized_loss_pct}%</small>
             {d.last_error&&<small className="ops-danger">{t("Data check failed. No recommendation generated.")}</small>}</div>
           <div className="ops-action-buttons">
             {d.state!=="retired"&&<button disabled={running} onClick={()=>void mutate(
