@@ -18,12 +18,15 @@ TEAM_ID="team_elvyiHWjiraAZdyCWdNiuzpA"
 CONFIG_ID="ecfg_5rfeza6sw9tnu0rikwgu0ugv46qt"
 ROOT=Path(__file__).resolve().parents[1]
 TOKEN_FILE=ROOT/".local-state"/"private-bridge"/"vercel-token.txt"
+STATUS_FILE=ROOT/".local-state"/"private-bridge"/"publish-status.txt"
 TUNNEL=re.compile(r"^https://[a-z0-9-]+\.trycloudflare\.com$")
 
 def publish(url:str):
     if not TUNNEL.fullmatch(url):
         raise ValueError("Expected a Cloudflare Quick Tunnel HTTPS origin.")
     token=os.environ.get("TRADING_SIM_VERCEL_TOKEN","").strip()
+    if token:
+        print("[publisher] Using existing TRADING_SIM_VERCEL_TOKEN environment credential (overrides local token file).")
     if not token and TOKEN_FILE.exists():
         token=TOKEN_FILE.read_text(encoding="utf-8").strip()
     if not token or any(c.isspace() for c in token):
@@ -56,8 +59,39 @@ def publish(url:str):
         raise RuntimeError("Cannot reach Vercel Global Config API. Check DNS and Internet connectivity.") from None
     print("Private engine address updated. Visitors only need the shared web password.")
 
+def _save_status(message:str):
+    """Store only a previously constructed, credential-free diagnostic."""
+    try:
+        path=Path(os.environ.get("TRADING_SIM_PUBLISH_STATUS_PATH") or STATUS_FILE)
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(message+"\\n",encoding="utf-8")
+    except OSError:
+        # Status recording must never expose confidential paths or credentials.
+        pass
+
+def main(argv=None)->int:
+    args=list(sys.argv[1:] if argv is None else argv)
+    if len(args)!=1:
+        status="Expected one Cloudflare tunnel URL. Run start-private-bridge.ps1 instead."
+        _save_status(status)
+        print("[publisher] "+status,file=sys.stderr)
+        return 2
+    try:
+        publish(args[0])
+    except (RuntimeError,ValueError) as exc:
+        # The known exceptions have static descriptions, not raw API bodies.
+        status=str(exc)
+        _save_status(status)
+        print("[publisher] "+status,file=sys.stderr)
+        return 1
+    except Exception as exc:
+        # Unexpected failures can contain sensitive URL or token details.
+        status="Unexpected Python publisher error: "+type(exc).__name__+". Check local environment."
+        _save_status(status)
+        print("[publisher] "+status,file=sys.stderr)
+        return 1
+    _save_status("OK")
+    return 0
+
 if __name__=="__main__":
-    if len(sys.argv)!=2:
-        raise SystemExit("Use: python scripts/publish_tunnel.py https://...trycloudflare.com")
-    try:publish(sys.argv[1])
-    except (ValueError,RuntimeError) as error:raise SystemExit(str(error))
+    sys.exit(main())
