@@ -52,7 +52,8 @@ def db():
           capital REAL NOT NULL, max_allocation_pct REAL NOT NULL,
           max_realized_loss_pct REAL NOT NULL DEFAULT 5,
           max_daily_signals INTEGER NOT NULL, created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL, last_evaluated_at TEXT, last_error TEXT
+          updated_at TEXT NOT NULL, last_evaluated_at TEXT, last_error TEXT,
+          resolution TEXT NOT NULL DEFAULT '1d'
         );
         CREATE TABLE IF NOT EXISTS evaluations(
           id TEXT PRIMARY KEY, deployment_id TEXT NOT NULL,
@@ -101,6 +102,8 @@ def db():
         columns={row["name"] for row in conn.execute("PRAGMA table_info(deployments)")}
         if "max_realized_loss_pct" not in columns:
             conn.execute("ALTER TABLE deployments ADD COLUMN max_realized_loss_pct REAL NOT NULL DEFAULT 5")
+        if "resolution" not in columns:
+            conn.execute("ALTER TABLE deployments ADD COLUMN resolution TEXT NOT NULL DEFAULT '1d'")
         yield conn
     finally:
         conn.close()
@@ -126,7 +129,7 @@ def _public_signal(s):
 
 def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
            max_allocation_pct: float = 10., max_daily_signals: int = 4,
-           max_realized_loss_pct: float = 5.):
+           max_realized_loss_pct: float = 5.,resolution: str = "1d"):
     if state not in ("paper","live-monitor"):
         raise HTTPException(422, detail="Start in paper or live-monitor mode only.")
     if not (math.isfinite(capital) and 100 <= capital <= 1e10):
@@ -137,6 +140,8 @@ def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
         raise HTTPException(422, detail="Daily signal cap must be 1-20.")
     if not math.isfinite(max_realized_loss_pct) or not 0.5<=max_realized_loss_pct<=25:
         raise HTTPException(422,detail="Realized-loss stop must be between 0.5% and 25%.")
+    if resolution not in ("1d","1h","15m"):
+        raise HTTPException(422,detail="Monitoring interval must be 1d, 1h or 15m.")
     item = get_saved_strategy(strategy_id)
     if item["mode"] == "single":
         rules = compile_rules(item["code"])
@@ -148,10 +153,13 @@ def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
     with LOCK, db() as conn:
         conn.execute("BEGIN IMMEDIATE")
         conn.execute(
-            "INSERT INTO deployments VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            """INSERT INTO deployments (id,strategy_id,name,mode,code,symbols,state,
+               capital,max_allocation_pct,max_realized_loss_pct,max_daily_signals,
+               created_at,updated_at,last_evaluated_at,last_error,resolution)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (identifier, strategy_id, item["name"], item["mode"], item["code"],
              _json(item["symbols"]), state, capital, max_allocation_pct,
-             max_realized_loss_pct, max_daily_signals, now, now, None, None),
+             max_realized_loss_pct, max_daily_signals, now, now, None, None,resolution),
         )
         conn.commit()
         return _public_deploy(_one(conn, "SELECT * FROM deployments WHERE id=?", (identifier,)))
@@ -414,6 +422,8 @@ def _evaluate_deployment(dep,now,source):
         rules=[(symbol,symbol,r) for r in compile_rules(dep["code"])]
     else:
         rules=[(r.signal_id,r.target_id,r.rule) for r in compile_portfolio_rules(dep["code"],allowed)]
+    resolution=dep.get("resolution","1d")
+    step_seconds={"1d":86400,"1h":3600,"15m":900}[resolution]
     for source_symbol in sorted({a for a,_,_ in rules}):
         with LOCK,db() as conn:
             recent=_one(conn, "SELECT evaluated_at FROM evaluations WHERE deployment_id=? AND symbol=? ORDER BY evaluated_at DESC LIMIT 1",
@@ -422,7 +432,8 @@ def _evaluate_deployment(dep,now,source):
                                 ("feed:"+dep["id"]+":"+source_symbol,))
         # Already evaluated this signal source today. Avoid needlessly hitting
         # Yahoo/Coinbase feeds every 90 seconds or emitting duplicate alerts.
-        if recent and datetime.fromisoformat(recent["evaluated_at"]).astimezone(NY).date()==now.astimezone(NY).date():
+        if (resolution=="1d" and recent and
+            datetime.fromisoformat(recent["evaluated_at"]).astimezone(NY).date()==now.astimezone(NY).date()):
             continue
         # Persist error backoff across worker restarts.
         if previous_issue and now-datetime.fromisoformat(previous_issue["last_seen_at"])<timedelta(minutes=10):
@@ -433,15 +444,34 @@ def _evaluate_deployment(dep,now,source):
                          "Unsupported live signal instrument",source_symbol+" is not a stock/ETF.")
             continue
         try:
-            response=source(source_symbol,"1Y")
+            if resolution=="1d":
+                response=source(source_symbol,"1Y")
+            else:
+                window="30D" if resolution=="15m" else "6M"
+                if source is None:
+                    from .intraday import replay_history
+                    response=replay_history(source_symbol,window,resolution)
+                else:
+                    # Synthetic tests may provide an injectable OHLC provider
+                    # matching the intraday replay_history call signature.
+                    response=source(source_symbol,window,resolution)
             if response.get("is_demo") or response.get("offline_cache"):
                 raise ValueError("Demo or offline cached candles are not acceptable for live signals")
-            bars=_last_complete(response["bars"],now)
-            if len(bars)<102:raise ValueError("Insufficient completed daily candles")
+            if resolution=="1d":
+                bars=_last_complete(response["bars"],now)
+            else:
+                cutoff=now.timestamp()
+                # A candle is final only after its full interval has elapsed.
+                bars=[bar for bar in response["bars"]
+                      if int(bar["time"])+step_seconds<=cutoff]
+            if len(bars)<102:raise ValueError("Insufficient completed historical candles")
             latest=bars[-1]
             latest_date=datetime.fromtimestamp(latest["time"],NY).date()
-            age=(now.astimezone(NY).date()-latest_date).days
-            if age>5 or age<1:raise ValueError("Last completed candle is stale or timestamp invalid")
+            if resolution=="1d":
+                age=(now.astimezone(NY).date()-latest_date).days
+                if age>5 or age<1:raise ValueError("Last completed daily candle is stale")
+            elif not 0<=now.timestamp()-int(latest["time"])<=max(3600,step_seconds*4):
+                raise ValueError("The most recent completed intraday candle is stale")
             if latest["close"]<=0 or any(not math.isfinite(float(latest[k])) for k in ("open","high","low","close")):
                 raise ValueError("Invalid candle OHLC")
             valid_rules=[(target,rule) for signal_id,target,rule in rules if signal_id==source_symbol]
@@ -479,7 +509,7 @@ def _evaluate_deployment(dep,now,source):
                         continue
                     allocation=min(float(rule.percent),float(dep["max_allocation_pct"]))
                     try:
-                        forecast=probability_up(bars,20)
+                        forecast=probability_up(bars,20) if resolution=="1d" else None
                     except Exception:
                         forecast=None
                     conn.execute("""INSERT INTO signals VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -487,7 +517,8 @@ def _evaluate_deployment(dep,now,source):
                        rule.side,allocation,float(dep["capital"])*allocation/100,
                        float(latest["close"]),int(latest["time"]),now_iso,_next_expiry(now),
                        "pending",f"Rule {rule.line}: {rule.left} {rule.operator} {rule.right}; "
-                       f"observed {lhs:.3f} vs {rhs:.3f} on completed {latest_date} candle. "
+                       f"observed {lhs:.3f} vs {rhs:.3f} on completed {resolution} candle at "
+                       f"{datetime.fromtimestamp(latest['time'],NY).isoformat()}. "
                        f"Indicative only; confirm live price and risk before executing.",
                        forecast))
                     count+=1
@@ -556,5 +587,11 @@ def run_once(now: datetime | None=None, source=None, worker_heartbeat: bool=Fals
     local=now.astimezone(NY)
     if local.weekday()<5 and local.time()>=time(9,15) and local.time()<time(16):
         for dep in dep_rows:
-            _evaluate_deployment(dep,now,source or history)
+            # A completed intraday candle can exist only after the 9:30
+            # exchange open. Avoid stale-price alerts before first close.
+            resolution=dep.get("resolution","1d")
+            if resolution!="1d" and local.time()<time(10,0):
+                continue
+            _evaluate_deployment(dep,now,source if source is not None else
+                                  (history if resolution=="1d" else None))
     return status()
