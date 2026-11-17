@@ -89,7 +89,7 @@ def _send_imessage(title: str, message: str):
         raise ValueError("An existing iMessage chat GUID and relay password are required")
     if os.environ.get("TRADING_SIM_IMESSAGE_INCLUDE_DETAILS")=="1":
         # Explicit opt-in: messaging providers will process these details.
-        content=("Trading Simulator: "+title+"\\n"+message)[:1500]
+        content=("Trading Simulator: "+title+"\n"+message)[:1500]
     elif title.upper().startswith("CRITICAL:"):
         content="Trading Simulator: Critical alert. Open your private workspace to review and acknowledge."
     else:
