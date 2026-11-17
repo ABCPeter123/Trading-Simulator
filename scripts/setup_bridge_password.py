@@ -6,6 +6,8 @@ from __future__ import annotations
 import getpass
 import os
 from pathlib import Path
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from backend.bridge_password import hash_password
 
 def main():
