@@ -39,3 +39,8 @@
 .ai-refresh{display:flex;align-items:center;gap:5px;border:1px solid #4c6185;background:#283650;border-radius:6px;color:#d0e0fa;font-size:10px;padding:7px 9px}
 
 .ai-processing{margin:0;padding:10px 17px 5px;font-size:11px;line-height:1.5;color:#c9c0fa}
+
+
+.ai-model-picker{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#b0c2d0;flex-wrap:wrap}
+.ai-model-picker select{appearance:auto;background:#182839;color:#eef4fa;border:1px solid #51677b;border-radius:6px;padding:7px 9px;max-width:230px;min-height:36px}
+.ai-model-picker select:disabled{opacity:.6}
