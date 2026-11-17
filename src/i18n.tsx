@@ -20,6 +20,8 @@ const zh: Record<string, string> = {
   "Within freshness threshold": "符合新鲜度阈值",
   "Stale or unavailable quote": "报价过期或不可用",
   "TwIL runs on your laptop. Model responses are research-only and require validation.": "TwIL 在你的电脑本地运行。模型回复仅供研究，必须经过验证。",
+  "The selected llama.cpp model runs locally. AI output still requires validation.": "所选 llama.cpp 模型在本机运行。AI 输出仍需验证。",
+  "Start the llama.cpp router with a supported GGUF model on port 8081.": "请在 8081 端口启动 llama.cpp 路由服务并加载受支持的 GGUF 模型。",
   "Start llama.cpp with a licensed local GGUF model on port 8081.": "请在端口 8081 启动已获授权的本地 GGUF llama.cpp 模型。",
   "Indices": "指数",
   "Funds": "基金",
