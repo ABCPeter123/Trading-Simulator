@@ -120,9 +120,50 @@ TRADING_SIM_EMAIL_FROM=private-user@example.com
 TRADING_SIM_EMAIL_TO=recipient@example.com
 ```
 
-For nonstandard SMTP port 587, the worker uses STARTTLS instead of
-SMTPS. Your mail provider may require an app password. There is
-no iMessage integration in this phase.
+For SMTP port 587, the worker uses STARTTLS instead of SMTPS on port 465.
+For Gmail, use `smtp.gmail.com` and a Google **app password** from an
+account with 2-Step Verification enabled. Do not use your normal Gmail
+password, share an app password in chat, or check it into Git. Your sender
+account must allow authenticated SMTP.
+
+To email comprehensive private trading briefings to multiple recipients,
+add these extra keys to the private `.env` on the Windows computer:
+
+```dotenv
+TRADING_SIM_NOTIFICATION_CHANNELS=email
+TRADING_SIM_EMAIL_TO=recipient-one@example.com,recipient-two@example.com
+TRADING_SIM_EMAIL_DIGEST_ENABLED=1
+TRADING_SIM_EMAIL_DIGEST_TIME=17:15
+```
+
+The live worker sends an **end-of-day briefing on weekdays at 5:15 PM Toronto
+time** (or the next worker cycle after that time). Critical alerts and new
+trading signals trigger separate prompt emails. Ordinary alerts are
+once-per-alert; unresolved critical incidents can repeat every 15 minutes.
+
+The briefing includes action items, signal side/allocation/reference price,
+expiry and rationale, active strategies/risk limits, health and market-data
+issues, open alerts, confirmed positions, realized P/L by currency, manually
+recorded fills, execution deviations, latest evaluations, saved strategy
+names and recent optimization progress. It sends both styled HTML and plain
+text in the same email. Broker cash, unrealized returns and live valuations
+are explicitly marked unavailable instead of invented. Strategy source code
+and credentials are not included, although decisions and financial records
+inside a report remain sensitive when email is forwarded.
+
+To send a full report **right now** without waiting for 5:15 PM:
+
+```powershell
+cd E:\\Trading-Simulator
+powershell -ExecutionPolicy Bypass -File .\\start-live-machine.ps1 -SendEmailReport
+```
+
+The manual command asks permission before sending a real email, and does not
+change the regular weekday schedule. It uses all addresses in
+`TRADING_SIM_EMAIL_TO`. A separate email service account may be used as
+sender. There is an optional iMessage adapter described in
+[IMESSAGE_NOTIFICATIONS.md](IMESSAGE_NOTIFICATIONS.md), but it stays inactive
+when `TRADING_SIM_NOTIFICATION_CHANNELS=email`.
 
 Restart the worker after changing its environment variables.
 Discord/email traffic leaves your PC by design. Never put tokens,
