@@ -19,9 +19,17 @@ def diagnose():
         print("[email] SMTP server, username or password is missing from your private .env.", file=sys.stderr)
         return 2
     if host.lower() == "smtp.gmail.com":
-        compact = password.replace(" ", "")
-        if len(compact) == 16 and len(password) != 16:
-            password = compact
+        compact = "".join(password.split())
+        if len(compact) != 16:
+            print("[email] Gmail credential format INVALID: expected a 16-character Google app password.", file=sys.stderr)
+            print("[email] No login was attempted. Generate an app password at https://myaccount.google.com/apppasswords", file=sys.stderr)
+            return 2
+        password = compact
+        print("[email] Gmail app password length is valid (this does not confirm the password itself).")
+        if user.lower().endswith("@gmail.com"):
+            print("[email] SMTP username format: consumer Gmail account.")
+        else:
+            print("[email] SMTP username format: non-Gmail address. Confirm the account owns the SMTP credential.")
     requested = int(os.environ.get("TRADING_SIM_SMTP_PORT", "465"))
     if requested not in (465, 587):
         print("[email] SMTP port must be 465 (SSL) or 587 (STARTTLS).", file=sys.stderr)
