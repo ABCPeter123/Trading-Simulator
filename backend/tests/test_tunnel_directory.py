@@ -86,3 +86,40 @@ def test_publisher_network_error_is_safe(monkeypatch):
         publisher.publish(FAKE_URL)
     assert FAKE_TOKEN not in str(exc.value)
     assert "connectivity" in str(exc.value)
+
+def test_command_line_records_safe_http_reason(tmp_path,monkeypatch,capsys):
+    status_path=tmp_path/"publish-status.txt"
+    monkeypatch.setenv("TRADING_SIM_PUBLISH_STATUS_PATH",str(status_path))
+    monkeypatch.setenv("TRADING_SIM_VERCEL_TOKEN",FAKE_TOKEN)
+    def fail(request,timeout):
+        raise HTTPError(request.full_url,403,"confidential response",{},
+                        io.BytesIO(FAKE_TOKEN.encode()))
+    monkeypatch.setattr(publisher,"urlopen",fail)
+    code=publisher.main([FAKE_URL])
+    assert code==1
+    stored=status_path.read_text(encoding="utf-8")
+    assert "HTTP 403" in stored
+    assert "Global Config" in stored
+    assert FAKE_TOKEN not in stored
+    assert FAKE_URL not in stored
+    streams=capsys.readouterr()
+    assert FAKE_TOKEN not in streams.err
+    assert "HTTP 403" in streams.err
+
+def test_command_line_records_unexpected_runtime_type_without_secrets(tmp_path,monkeypatch):
+    status_path=tmp_path/"publish-status.txt"
+    monkeypatch.setenv("TRADING_SIM_PUBLISH_STATUS_PATH",str(status_path))
+    def fail(url):
+        raise OSError("contains secret private-local-token")
+    monkeypatch.setattr(publisher,"publish",fail)
+    assert publisher.main([FAKE_URL])==1
+    stored=status_path.read_text(encoding="utf-8")
+    assert "OSError" in stored
+    assert "private-local-token" not in stored
+
+def test_command_line_success_status(tmp_path,monkeypatch):
+    status_path=tmp_path/"publish-status.txt"
+    monkeypatch.setenv("TRADING_SIM_PUBLISH_STATUS_PATH",str(status_path))
+    monkeypatch.setattr(publisher,"publish",lambda url:None)
+    assert publisher.main([FAKE_URL])==0
+    assert status_path.read_text(encoding="utf-8").strip()=="OK"
