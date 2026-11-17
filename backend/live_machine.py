@@ -149,6 +149,15 @@ def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
         rules = compile_portfolio_rules(item["code"], set(item["symbols"]))
     if not rules:
         raise HTTPException(422, detail="Strategy must include at least one rule.")
+    from .assets import get_instrument
+    # Suggestions express notional and risk limits in USD. Do not silently
+    # issue USD-sized recommendations for a Canadian quote in CAD.
+    for symbol in item["symbols"]:
+        instrument=get_instrument(symbol)
+        if (instrument.currency!="USD" or instrument.kind not in ("Stocks","ETFs")
+                or not instrument.tradable):
+            raise HTTPException(
+                422,detail="Live strategy monitoring currently supports USD-denominated tradable stocks and ETFs only. CAD assets are available for historical research.")
     identifier, now = str(uuid4()), _utc()
     with LOCK, db() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -439,9 +448,10 @@ def _evaluate_deployment(dep,now,source):
         if previous_issue and now-datetime.fromisoformat(previous_issue["last_seen_at"])<timedelta(minutes=10):
             continue
         instrument=get_instrument(source_symbol)
-        if instrument.kind not in ("Stocks","ETFs"):
+        if (instrument.kind not in ("Stocks","ETFs") or instrument.currency!="USD"
+                or not instrument.tradable):
             record_alert("unsupported:"+dep["id"]+":"+source_symbol,"warning",
-                         "Unsupported live signal instrument",source_symbol+" is not a stock/ETF.")
+                         "Unsupported live signal instrument",source_symbol+" requires a verified USD stock/ETF feed.")
             continue
         try:
             if resolution=="1d":
