@@ -1,15 +1,32 @@
 # Start a temporary, public Cloudflare Tunnel with fully isolated demo data.
-param([switch]$SkipSetup)
+param(
+    [switch]$SkipSetup,
+    [string]$CloudflaredPath = ""
+)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 $demo = Join-Path $root ".local-state\public-demo"
 New-Item -ItemType Directory -Path $demo -Force | Out-Null
 
-$cloudflare = Get-Command cloudflared -ErrorAction SilentlyContinue
-if (-not $cloudflare) {
-    throw "Install cloudflared with: winget install -e --id Cloudflare.cloudflared. Then reopen PowerShell and rerun this script."
+# winget MSI installs commonly live in Program Files (x86) but
+# may not be added to PATH. Resolve those paths without reinstalling.
+. (Join-Path $root "scripts\find-cloudflared.ps1")
+$cloudflareExe = Find-CloudflaredExecutable -ExplicitPath $CloudflaredPath
+if (-not $cloudflareExe) {
+    throw @"
+Cannot locate cloudflared.exe. If winget says it is installed, run:
+  winget list -e --id Cloudflare.cloudflared
+  Get-ChildItem "${env:ProgramFiles(x86)}\cloudflared" -Filter cloudflared.exe -ErrorAction SilentlyContinue
+
+If the executable is in another folder, start with:
+  .\start-public.ps1 -CloudflaredPath "C:\path\to\cloudflared.exe"
+
+To install it if truly missing:
+  winget install -e --id Cloudflare.cloudflared
+"@
 }
+Write-Host "[tunnel] Found cloudflared at: $cloudflareExe" -ForegroundColor Green
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) { throw "Node.js missing. Install Node.js 22+." }
 if (-not $SkipSetup) {
@@ -88,7 +105,7 @@ try {
     Write-Host "[public] Cloudflare will print the public HTTPS trycloudflare.com URL below." -ForegroundColor Cyan
     Write-Host "[public] Keep this terminal and PC running. Press Ctrl+C to stop the public tunnel." -ForegroundColor Cyan
     Write-Host ""
-    & $cloudflare.Source tunnel --url http://127.0.0.1:4173
+    & $cloudflareExe tunnel --url http://127.0.0.1:4173
 } finally {
     Write-Host "[public] Stopping demo backend and preview..." -ForegroundColor Yellow
     foreach ($process in @($frontend,$api)) {
