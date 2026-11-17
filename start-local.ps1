@@ -3,7 +3,8 @@
 param(
     [switch]$SetupOnly,
     [switch]$NoBrowser,
-    [switch]$Mobile
+    [switch]$Mobile,
+    [switch]$NoResearchWorker
 )
 
 $ErrorActionPreference = "Stop"
@@ -146,6 +147,28 @@ if (Test-LocalPort 5173) {
     Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList $frontendArgs
     Write-Host "[run] Started frontend in another PowerShell window." -ForegroundColor Green
 }
+# Portfolio research is a durable laptop process, not a browser action.
+# Start a single consumer for local development, reusing a worker already
+# started by the private bridge when present.
+if (-not $NoResearchWorker) {
+    $foundWorker = $false
+    try {
+        $existingWorkers = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' or Name='pythonw.exe'" -ErrorAction Stop |
+            Where-Object { $_.CommandLine -match 'backend[.]research_worker' })
+        $foundWorker = $existingWorkers.Count -gt 0
+    } catch {
+        Write-Host "[research] Unable to inspect existing worker processes; start manually if queue remains idle." -ForegroundColor Yellow
+        $foundWorker = $true
+    }
+    if ($foundWorker) {
+        Write-Host "[research] Existing laptop portfolio worker reused." -ForegroundColor Green
+    } else {
+        $researchScript = Join-Path $root "scripts\run-research-worker.ps1"
+        Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList "-NoExit -ExecutionPolicy Bypass -File `"$researchScript`""
+        Write-Host "[research] Started background research queue worker in another PowerShell window." -ForegroundColor Green
+    }
+}
+
 Write-Host "[ready] PC browser: http://127.0.0.1:5173" -ForegroundColor Cyan
 if ($mobileFrontendReady) {
     # Suggest private IPv4 addresses; the user picks their Wi-Fi adapter.
