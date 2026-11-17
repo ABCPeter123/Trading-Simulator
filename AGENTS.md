@@ -3,6 +3,17 @@
 **First read:** [docs/PRODUCT_VISION.md](docs/PRODUCT_VISION.md). It is the
 project's canonical, enduring product context. Future changes must align with it.
 
+**Mandatory strategy confidentiality:** Read
+[docs/STRATEGY_PRIVACY.md](docs/STRATEGY_PRIVACY.md) before ANY coding,
+Git commit, GitHub issue/PR, CI logging, data export, demo or deployment.
+The engine implementation may be public; **the owner's real/generated/optimized
+strategy rules, selected parameters, strategy versions, outputs, signals,
+positions and actual trades must NEVER enter the public repository**, commit
+messages, workflow artifacts, screenshots or shared demo. Use Git-ignored
+local storage and independently synthetic examples only. Inspect every
+staged change before committing, and never copy private trading logic into
+a public fixture or documentation.
+
 ## Mission
 
 Develop a personal, professional quantitative trading platform that:
