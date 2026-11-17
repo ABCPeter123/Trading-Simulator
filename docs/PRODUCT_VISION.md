@@ -1,6 +1,7 @@
 # Trading Simulator: Product Vision and System Requirements
 
 **Status:** Canonical product goal and long-term requirements, recorded 2026-11-17.
+**Release policy:** Local npm/Python development only; Vercel Git auto-deploy disabled until an owner-approved major milestone. See [LOCAL_FIRST_RELEASE_POLICY.md](LOCAL_FIRST_RELEASE_POLICY.md).
 **Audience:** All future contributors, coding agents, UI/design agents, and project discussions.
 **Product name:** Trading Simulator. Keep a professional, finance-oriented interface.
 
