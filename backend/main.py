@@ -64,6 +64,11 @@ if PRIVATE_BRIDGE:
         raise RuntimeError("Private bridge requires exact HTTPS origins in TRADING_SIM_ALLOWED_ORIGINS.")
 
 app = FastAPI(title="Trading Simulator Local API", version="1.1.0")
+
+# The live strategy machine is disabled for shared public demos. It is an
+# owner-only, durable private service, not a browser-based trading bot.
+from .live_routes import router as private_live_router
+app.include_router(private_live_router)
 if PRIVATE_BRIDGE:
     app.add_middleware(
         CORSMiddleware, allow_origins=BRIDGE_ORIGINS,
