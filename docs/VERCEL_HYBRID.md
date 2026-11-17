@@ -147,10 +147,19 @@ this legacy mode is not the normal website sign-in experience.
   `powershell -ExecutionPolicy Bypass -File .\\start-private-bridge.ps1 -ResetVercelToken`.
   The flag replaces only the locally saved Vercel publishing token. It does
   NOT replace the website's shared password.
-- **HTTP 403:** Create the replacement token with scope set to the **team**
-  that owns the Trading Simulator Vercel project, not your personal account.
-  It must allow updating that team's Global Config items. Re-run with
-  `-ResetVercelToken`.
+- **HTTP 403:** The saved publishing token cannot write Global Config for
+  the **PP (`pp-48b0`) team**. Create a new access token at
+  https://vercel.com/account/tokens and choose PP, not Personal Account.
+  Restart with `-ResetVercelToken` and enter the new token at the hidden prompt.
+  The password and local trading data are unchanged.
+  **Recovery behavior:** On HTTP 401 or 403, the current launcher keeps the
+  password-protected desktop API and tunnel running and prints the temporary
+  Cloudflare address for the owner. The permanent Vercel website cannot find
+  that bridge until the owner manually registers the displayed URL into the
+  team's Global Config `bridge` key (value shape `{"url":"https://...trycloudflare.com"}`)
+  using an authenticated Vercel client. Only submit the ephemeral URL. Never
+  submit a password, authorization token or private trading data. This manual
+  registration must be repeated whenever the Quick Tunnel changes.
 - **HTTP 404:** Pull the latest code, which uses the current
   `/v1/global-config` endpoint. If it still fails, the token may belong
   to another Vercel team or account.
