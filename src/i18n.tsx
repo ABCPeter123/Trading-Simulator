@@ -13,6 +13,10 @@ const STORAGE_KEY = "trading-simulator-language";
  */
 const zh: Record<string, string> = {
   "Canadian asset prices and simulated fills are converted to USD using the previous completed USD/CAD FX close. Results use a shared USD cash account and are indicative.": "加拿大资产价格及模拟成交价采用上一已完成交易日的 USD/CAD 收盘汇率折算成美元。结果以共同的美元现金账户计算，仅供参考。",
+  "Open AI chat": "打开 AI 聊天",
+  "Close AI chat": "关闭 AI 聊天",
+  "Backend is still using Ollama. Set TRADING_SIM_AI_PROVIDER=llama_cpp in .env and restart the local backend.": "后端仍在使用 Ollama。请在 .env 中设置 TRADING_SIM_AI_PROVIDER=llama_cpp，然后重启本地后端。",
+  "Check the llama.cpp router on port 8081, then restart the local backend and recheck AI.": "请检查 8081 端口的 llama.cpp 路由服务，重启本地后端并重新检测 AI。",
   "Latest provider quote": "最新数据提供方报价",
   "No quote timestamp": "暂无报价时间戳",
   "source age": "数据滞后",
