@@ -4,6 +4,7 @@ param(
     [string]$CloudflaredPath = "",
     [switch]$SetPassword,
     [switch]$ResetVercelToken,
+    [switch]$ManualDirectory,
     [switch]$SkipSetup,
     [switch]$LegacyToken,
     [switch]$RotateToken
@@ -68,7 +69,7 @@ if ($LegacyToken) {
     }
     $env:TRADING_SIM_PRIVATE_PASSWORD_HASH=$hash
     $vercelFile=Join-Path $stateDir "vercel-token.txt"
-    if ($ResetVercelToken -or -not (Test-Path $vercelFile)) {
+    if (-not $ManualDirectory -and ($ResetVercelToken -or -not (Test-Path $vercelFile))) {
         Write-Host "[setup] Create a Vercel access token at https://vercel.com/account/tokens" -ForegroundColor Yellow
         Write-Host "[setup] IMPORTANT: select the Vercel team PP (pp-48b0), not your Personal Account." -ForegroundColor Yellow
         Write-Host "[setup] The token must be permitted to WRITE Global Config items in that team." -ForegroundColor Yellow
@@ -119,7 +120,12 @@ try {
         Start-Sleep -Milliseconds 500
     }
     if(-not $tunnelUrl){throw "Could not obtain Cloudflare Quick Tunnel address. See .local-state/private-bridge/cloudflared.stderr.log."}
-    if(-not $LegacyToken){
+    if($ManualDirectory -and -not $LegacyToken){
+        Write-Host "[private] Directory registration skipped by owner request." -ForegroundColor Yellow
+        Write-Host "[private] This password-protected tunnel is running at: $tunnelUrl" -ForegroundColor Cyan
+        Write-Host "[private] Only the tunnel URL (not your password or tokens) can be published manually through the connected Vercel account." -ForegroundColor Cyan
+        Write-Host "[private] Website: $AllowedOrigin" -ForegroundColor Green
+    }elseif(-not $LegacyToken){
         $statusFile=Join-Path $stateDir "publish-status.txt"
         Remove-Item Env:TRADING_SIM_PUBLISH_STATUS_PATH -ErrorAction SilentlyContinue
         $env:TRADING_SIM_PUBLISH_STATUS_PATH=$statusFile
