@@ -7,6 +7,9 @@ param(
     [switch]$TestIMessage,
     [switch]$SendEmailReport,
     [switch]$DiagnoseEmail,
+    [switch]$ComparePortfolio,
+    [string]$PortfolioAssets = "spy,qqq,ief,gld,eem,vnq",
+    [switch]$EmailPortfolioStudy,
     [switch]$SkipSetup,
     [switch]$InstallAtLogon,
     [switch]$Foreground,
@@ -74,6 +77,20 @@ if (Test-Path $envFile) {
     }
 }
 $env:TRADING_SIM_PUBLIC_DEMO="0"
+if ($ComparePortfolio) {
+    Write-Host "[research] Comparing portfolio models across private historical asset data." -ForegroundColor Cyan
+    if ($EmailPortfolioStudy) {
+        $approval=Read-Host "Email portfolio research and financial data to the configured recipients? [y/N]"
+        if ($approval -notmatch '^(y|yes)$') {
+            Write-Host "[research] Email study canceled. Local research remains available." -ForegroundColor Yellow
+            exit 0
+        }
+        & $python -m backend.portfolio_research_cli --symbols $PortfolioAssets --email
+    } else {
+        & $python -m backend.portfolio_research_cli --symbols $PortfolioAssets
+    }
+    exit $LASTEXITCODE
+}
 if ($DiagnoseEmail) {
     Write-Host "[live] Test secure SMTP connection and authentication without sending an email." -ForegroundColor Cyan
     & $python -m backend.email_report_probe --diagnose
