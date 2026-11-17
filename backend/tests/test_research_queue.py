@@ -26,8 +26,8 @@ def workspace(tmp_path,monkeypatch):
     monkeypatch.setattr(portfolio_research,"DB_PATH",tmp_path/"private_models.sqlite3")
     monkeypatch.delenv("TRADING_SIM_PUBLIC_DEMO",raising=False)
     monkeypatch.setattr(main,"PUBLIC_DEMO",False)
-    def synthetic(asset,range):
-        assert range=="5Y"
+    def synthetic(asset,window):
+        assert window=="5Y"
         prices=[]
         base=100.+ASSETS.index(asset)*30
         for i in range(510):
@@ -56,16 +56,7 @@ def workspace(tmp_path,monkeypatch):
     return tmp_path
 
 
-def test_queue_survives_browser_lifecycle_and_worker_completes(workspace,monkeypatch):
-    original_compare=portfolio_research.compare
-    failure=[]
-    def capture_failure(*args,**kwargs):
-        try:
-            return original_compare(*args,**kwargs)
-        except Exception as exc:
-            failure.append(exc)
-            raise
-    monkeypatch.setattr(portfolio_research,"compare",capture_failure)
+def test_queue_survives_browser_lifecycle_and_worker_completes(workspace):
     response=CLIENT.post("/api/live/research/portfolio/jobs",
                          json={"symbols":ASSETS,"max_drawdown_pct":50})
     assert response.status_code==202,response.text
@@ -76,8 +67,6 @@ def test_queue_survives_browser_lifecycle_and_worker_completes(workspace,monkeyp
     assert research_queue.DB_PATH.exists()
     # No page or API callback is needed to run the research after it queues.
     outcome=research_queue.process_one()
-    if failure:
-        raise failure[0]
     assert outcome["status"]=="completed",outcome["error_code"]
     assert outcome["progress"]==100
     assert outcome["result_run_id"]==job["id"]
