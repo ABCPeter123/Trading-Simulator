@@ -33,14 +33,18 @@ REBALANCE_SESSIONS = 21
 WARMUP = 180
 MODELS = ("equal_weight", "inverse_volatility", "trend_filter",
           "relative_momentum", "volatility_target")
-GROUP_CAPS = {"equity": .70, "bond": .55, "commodity": .35, "crypto": .10}
+GROUP_CAPS = {"equity": .70, "bond": .55, "commodity": .35, "real_estate": .20, "crypto": .10}
 BONDS = frozenset(("tlt", "ief", "shy", "bnd", "lqd", "hyg", "tip", "agg", "vgit"))
 COMMODITIES = frozenset(("gld", "slv", "uso", "dbc", "pdbc", "iau", "sgol"))
+REAL_ESTATE = frozenset(("vnq", "reit", "iyr", "xlre"))
+CRYPTO_ETFS = frozenset(("ibit",))
 
 
 def _group(symbol: str, kind: str) -> str:
-    if kind == "Crypto":
+    if kind == "Crypto" or symbol in CRYPTO_ETFS:
         return "crypto"
+    if symbol in REAL_ESTATE:
+        return "real_estate"
     if symbol in BONDS:
         return "bond"
     if symbol in COMMODITIES:
