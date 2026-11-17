@@ -73,3 +73,26 @@ export function getBacktest(assetId: string, fast: number, slow: number) {
 export function supportsCashTrading(assetId: string, assetClass: AssetClass) {
   return !["Options", "Futures"].includes(assetClass) && assetId !== "vfv";
 }
+
+export interface MarketCoverage {
+  asset_id:string;window:string;resolution:string;provider:string;currency:string;
+  bars:number;status:string;first_bar:number|null;last_bar:number|null;
+  age_seconds:number|null;coverage_pct:number|null;
+  gaps:{after:number;before:number;missing_estimate:number}[];
+  duplicate_timestamps:number;note?:string;
+}
+export interface MarketSubscription {
+  asset_id:string;resolution:string;active:number;last_attempt:string|null;
+  last_success:string|null;last_bar:number|null;records:number;failure_code:string|null;
+}
+export const getMarketCoverage=(assetId:string,window:string,resolution:string)=>
+  request<MarketCoverage>("/market-data/coverage/"+encodeURIComponent(assetId)+
+    "?window="+encodeURIComponent(window)+"&resolution="+encodeURIComponent(resolution));
+export const getMarketSubscriptions=()=>request<MarketSubscription[]>("/market-data/subscriptions");
+export const subscribeMarket=(assetId:string,resolution:string)=>
+  request<{asset_id:string;resolution:string;active:boolean}>("/market-data/subscriptions",{
+    method:"POST",body:JSON.stringify({asset_id:assetId,resolution}),
+  });
+export const unsubscribeMarket=(assetId:string,resolution:string)=>
+  request<{asset_id:string;resolution:string;active:boolean}>("/market-data/subscriptions/"+
+    encodeURIComponent(assetId)+"/"+encodeURIComponent(resolution),{method:"DELETE"});
