@@ -104,7 +104,15 @@ def test_fail_closed_on_stale_feed_and_offline_cache(private_workspace):
     assert len(m.signals())==1
     assert not any(a["status"]=="open" for a in m.alerts())
 
-def test_manual_trade_journal_audit_and_positions(private_workspace):
+def test_manual_trade_journal_audit_and_positions(private_workspace,monkeypatch):
+    # The synthetic signal uses a fixed historical date. Freeze this test's
+    # approval clock so it does not start failing when real time moves on.
+    class FixtureClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            instant = morning()
+            return instant.astimezone(tz) if tz is not None else instant.replace(tzinfo=None)
+    monkeypatch.setattr(m, "datetime", FixtureClock)
     deploy_fixture()
     m.run_once(now=morning(),source=source)
     signal=m.signals()[0]
