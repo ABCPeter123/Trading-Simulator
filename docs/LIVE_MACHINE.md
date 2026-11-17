@@ -172,12 +172,26 @@ powershell -ExecutionPolicy Bypass -File .\\start-live-machine.ps1 -DiagnoseEmai
 ```
 
 The diagnostic tests both encrypted Gmail SMTP options, **465/SSL** and
-**587/STARTTLS**, and authenticates without sending any email. It only prints
+**587/STARTTLS**, and authenticates without sending any email. It distinguishes
+**connect**, **starttls**, **ehlo**, and **authenticate** failures. The raw
+SMTP greeting and server messages are never printed. It only prints
 the port, safe failure stage, and exception type. It never prints your
-username, app password, recipient addresses or report content. For Gmail,
-use your own 16-character app password, not the regular Google password.
-The program accepts a password displayed with spaces in groups of four and
-normalizes it locally. The sender automatically falls back from Gmail SSL
+username, app password, recipient addresses or report content.
+
+**If both ports disconnect at authenticate:** Google may have rejected the
+app password, or a network/security filter may be interrupting SMTP login.
+Verify that `TRADING_SIM_SMTP_USER` is the Gmail account that generated
+the app password. The password must be a **16-character app password**
+created at https://myaccount.google.com/apppasswords while that account has
+2-Step Verification enabled, not the regular Google login password. If
+the diagnostic reports the wrong password length, no SMTP login is attempted.
+Update only the private `.env` file. Do not paste any credentials in chat.
+
+**If both ports disconnect at ehlo:** the connection drops before password
+verification; check VPN, antivirus SMTP scanning, firewall filtering and
+the network connection. Try from a different trusted network after fixing
+any configuration issues. The program accepts a password displayed with
+spaces in groups of four and normalizes it locally. The sender automatically falls back from Gmail SSL
 465 to STARTTLS 587 if the connection fails **before login**. Failures
 during message submission are not retried on another port because an SMTP
 server could have accepted the message before dropping the reply. In that
