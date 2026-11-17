@@ -95,3 +95,7 @@
 .ts-chart-viewport-actions button:hover{background:#273d52;border-color:#7192ac}
 .ts-chart-viewport-actions button:focus-visible{outline:2px solid #c8b3fd;outline-offset:2px}
 @media(max-width:740px){.ts-chart-viewport-actions{top:5px;left:5px;gap:4px}.ts-chart-viewport-actions button{min-height:34px;padding:6px 8px}}
+
+/* Prominent, permanent disclosure when the compiled site is publicly shared. */
+.public-demo-banner{position:relative;z-index:10;width:100%;padding:10px 16px;text-align:center;background:#24354b;border-bottom:1px solid #67809e;color:#f1f5fa;font-size:12px;font-weight:650;line-height:1.5;letter-spacing:.01em}
+@media(max-width:740px){.public-demo-banner{font-size:11px;padding:9px 12px}}
