@@ -175,3 +175,23 @@ def test_read_and_list_api_return_private_runs(isolated):
     detail=CLIENT.get("/api/live/research/portfolio/runs/"+experiment["id"])
     assert detail.status_code==200
     assert detail.json()["selected"]["model"]==experiment["selected"]["model"]
+
+
+def test_cli_offline_comparison_uses_private_data_path_not_public_demo(isolated,monkeypatch,capsys):
+    from backend import portfolio_research_cli as cli
+    data=synthetic()
+    monkeypatch.setattr(p,"history",lambda symbol,window:data[symbol])
+    assert cli.main(["--symbols",",".join(SYMBOLS),"--max-drawdown","50"])==0
+    output=capsys.readouterr().out
+    assert "validation net return" in output
+    assert "HELD-OUT" in output
+    assert "No broker orders" in output
+    assert len(p.list_runs())==1
+    assert p.DB_PATH.exists()
+
+
+def test_reit_and_bitcoin_etf_use_exposure_group_caps(isolated):
+    assert p._group("vnq","ETFs")=="real_estate"
+    assert p._group("ibit","ETFs")=="crypto"
+    assert p.GROUP_CAPS["real_estate"]<=.2
+    assert p.GROUP_CAPS["crypto"]<=.1
