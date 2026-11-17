@@ -50,25 +50,29 @@ portfolio risk controls and brokerage reconciliation remain on the roadmap.
 
 ## Vercel cloud frontend, private local data
 
-The **Vercel deployment hosts only the static React website**. Your actual
-strategy versions, trained models, private market archives, broker
-records, Python backend and local AI stay on your PC. The Vercel page
-shows an illustrative synthetic chart until you explicitly connect your
-private engine using a temporary authenticated Cloudflare tunnel.
+The **Vercel deployment hosts the React website and a tiny, non-secret
+connection directory endpoint**. Your strategy versions, trained models,
+market archives, broker records, Python backend and Ollama remain on your PC.
+Approved website visitors enter **one fixed shared password**. The
+Cloudflare Quick Tunnel URL is discovered automatically, even when it changes
+after restarting the PC.
 
-The full local app still works with `start-local.ps1`. To use the Vercel
-site for your private workspace, run:
+To run the password-protected bridge on your own Windows computer:
 
 ```powershell
 git pull
-powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -AllowedOrigin "https://YOUR-VERCEL-URL.vercel.app"
+powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1
 ```
 
-Paste the tunnel HTTPS URL and the locally generated access token into
-the Vercel connection screen. No database is uploaded to Vercel.
-The browser keeps its token in memory only, and private API responses
-are never stored on Vercel. See [hybrid Vercel setup](docs/VERCEL_HYBRID.md)
-for security constraints, setup and troubleshooting.
+The owner sets the shared password on first launch and provides one
+Vercel access token, stored only in the ignored local state directory,
+to authorize updating a tiny URL-only Vercel Global Config record.
+The visitor never needs a Cloudflare account, a tunnel URL, or an API token.
+
+The browser keeps temporary authenticated sessions in memory only.
+Vercel never receives passwords or financial data. See
+[one-password hybrid Vercel setup](docs/VERCEL_HYBRID.md) for the
+one-time owner instructions, security restrictions and troubleshooting.
 
 ## Keep your generated trading strategies private
 
