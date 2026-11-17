@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Bot, Check, Copy, LoaderCircle, RefreshCcw, Send, ShieldCheck, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Bot, Check, Copy, LoaderCircle, RefreshCcw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import { askAI, getAIStatus } from "./aiAssistantApi";
 import type { AIAnswer, AIMode, AIMessage, AIStatus } from "./aiAssistantApi";
 import { useI18n } from "./i18n";
@@ -18,6 +19,15 @@ export default function AIAssistant({mode,runId,onDraft}: {
   const {t,locale}=useI18n();
   const [status,setStatus]=useState<AIStatus|null>(null);
   const [selectedModel,setSelectedModel]=useState("");
+  const [open,setOpen]=useState(false);
+  const chatInput=useRef<HTMLTextAreaElement>(null);
+  useEffect(()=>{
+    if(!open)return;
+    chatInput.current?.focus();
+    const onKey=(event:KeyboardEvent)=>{if(event.key==="Escape")setOpen(false);};
+    window.addEventListener("keydown",onKey);
+    return()=>window.removeEventListener("keydown",onKey);
+  },[open]);
   const [statusError,setStatusError]=useState("");
   const [message,setMessage]=useState("");
   const [turns,setTurns]=useState<AIMessage[]>([]);
@@ -76,13 +86,24 @@ export default function AIAssistant({mode,runId,onDraft}: {
       ]
     : sampleQuestions;
 
-  return <section className="ai-box" aria-label={t("AI Strategy Assistant")}>
+  return createPortal(<div className="ai-floating">
+    <button type="button" className="ai-float-trigger"
+      aria-expanded={open} aria-controls="trading-ai-chat-panel"
+      aria-label={t(open?"Close AI chat":"Open AI chat")}
+      onClick={()=>setOpen(value=>!value)}>
+      {open?<X size={21}/>:<Bot size={22}/>}
+      <span>{t("AI Strategy Assistant")}</span>
+      <span className={"ai-float-state"+(status?.ready?" ready":"")} aria-hidden="true"/>
+    </button>
+    {open&&<section id="trading-ai-chat-panel" role="dialog" aria-modal="false"
+      className="ai-box ai-popup" aria-label={t("AI Strategy Assistant")}>
     <div className="ai-head">
       <span className="ai-bot-icon"><Bot size={19}/></span>
       <div>
         <h2>{t("AI Strategy Assistant")}</h2>
         <p>{t("Ask about your actual replay results, or request an editable trading strategy.")}</p>
       </div>
+      <button type="button" className="ai-close" aria-label={t("Close AI chat")} onClick={()=>setOpen(false)}><X size={18}/></button>
       <span className="ai-chip">{status?.provider==="openai"?"OpenAI":status?.provider==="ollama"?"Ollama":status?.provider==="llama_cpp"?"llama.cpp":t("Not configured")} · {status?.loaded?t("Model loaded"):status?.warming?t("Loading model"):status?.ready?t("Connected"):t("Not ready")}</span>
     </div>
     <div className="ai-status">
@@ -114,7 +135,11 @@ export default function AIAssistant({mode,runId,onDraft}: {
       {(status?.provider==="ollama"||status?.provider==="llama_cpp")&&<button className="ai-refresh" type="button" onClick={()=>void getAIStatus(status?.provider==="llama_cpp" ? selectedModel : undefined).then(setStatus).catch(e=>setStatusError(e instanceof Error?e.message:t("AI status unavailable.")))}><RefreshCcw size={13}/>{t("Recheck AI")}</button>}
     </div>
     {statusError&&<p role="alert" className="ai-error">{t(statusError)}</p>}
-    {!status?.ready&&status&&<p className="ai-setup">{t("Configure the backend AI provider to enable questions. See the AI setup guide.")}</p>}
+    {!status?.ready&&status&&<p className="ai-setup">{status.provider==="ollama"
+      ? t("Backend is still using Ollama. Set TRADING_SIM_AI_PROVIDER=llama_cpp in .env and restart the local backend.")
+      : status.provider==="llama_cpp"
+      ? t("Check the llama.cpp router on port 8081, then restart the local backend and recheck AI.")
+      : t("Configure the backend AI provider to enable questions. See the AI setup guide.")}</p>}
     <div className="ai-suggestions">
       {suggestions.map((question,i)=><button key={i} type="button" disabled={busy||status?.ready===false}
         onClick={()=>void send(question)}><Sparkles size={13}/>{question}</button>)}
@@ -142,7 +167,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
     {busy&&<p className="ai-processing" role="status">{t("Local AI is processing your request.")} {elapsed}s · {status?.provider==="llama_cpp" ? (locale==="zh-CN"?"模型加载和推理可能需要更长时间。":"Loading and reasoning may take longer on the first request.") : t("First response may take longer while Ollama loads the model.")}</p>}
     {error&&<div role="alert" className="ai-error">{t(error)}{retryQuestion&&<button type="button" disabled={busy||!status?.ready} onClick={()=>void send(retryQuestion)}><RefreshCcw size={14}/>{t("Retry question")}</button>}</div>}
     <form className="ai-form" onSubmit={e=>{e.preventDefault();void send(message);}}>
-      <textarea rows={2} maxLength={1200} value={message} onChange={e=>setMessage(e.target.value)}
+      <textarea ref={chatInput} rows={2} maxLength={1200} value={message} onChange={e=>setMessage(e.target.value)}
         placeholder={t("Ask me to analyze performance or suggest a strategy...")}
         disabled={busy||status?.configured===false}/>
       <button type="submit" disabled={!message.trim()||busy||!status?.ready}>
@@ -151,5 +176,6 @@ export default function AIAssistant({mode,runId,onDraft}: {
       </button>
     </form>
     <p className="ai-footnote">{t("Read-only historical analysis. AI suggestions are not guaranteed and require your explicit approval.")}</p>
-  </section>;
+    </section>}
+  </div>, document.body);
 }
