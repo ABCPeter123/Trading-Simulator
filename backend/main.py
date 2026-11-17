@@ -4,8 +4,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 import os
+import hmac
+from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .assets import get_instrument, list_instruments, search_yahoo, import_yahoo
@@ -35,7 +39,53 @@ if PUBLIC_DEMO:
     if os.environ.get("TRADING_SIM_AI_PROVIDER") != "off":
         raise RuntimeError("Public demo cannot expose a local or paid AI provider.")
 
+# The private API bridge is opt-in and protected by a long random bearer token.
+# Vercel hosts ONLY static code. This service and its databases stay on the
+# owner's computer; the temporary tunnel transports requests, not storage.
+PRIVATE_BRIDGE = os.environ.get("TRADING_SIM_PRIVATE_BRIDGE") == "1"
+BRIDGE_TOKEN = os.environ.get("TRADING_SIM_PRIVATE_API_TOKEN", "")
+BRIDGE_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("TRADING_SIM_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if PRIVATE_BRIDGE:
+    if PUBLIC_DEMO:
+        raise RuntimeError("A public shared demo cannot be a private trading bridge.")
+    if len(BRIDGE_TOKEN) < 48:
+        raise RuntimeError("Private bridge requires a random API token of at least 48 characters.")
+    if not BRIDGE_ORIGINS or any(
+        urlparse(origin).scheme != "https"
+        or not urlparse(origin).hostname
+        or urlparse(origin).path not in ("", "/")
+        or urlparse(origin).query or urlparse(origin).fragment
+        for origin in BRIDGE_ORIGINS
+    ):
+        raise RuntimeError("Private bridge requires exact HTTPS origins in TRADING_SIM_ALLOWED_ORIGINS.")
+
 app = FastAPI(title="Trading Simulator Local API", version="1.1.0")
+if PRIVATE_BRIDGE:
+    app.add_middleware(
+        CORSMiddleware, allow_origins=BRIDGE_ORIGINS,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+        allow_credentials=False, max_age=600,
+    )
+
+@app.middleware("http")
+async def protect_private_bridge(request: Request, call_next):
+    if PRIVATE_BRIDGE and request.url.path.startswith("/api/"):
+        origin = request.headers.get("origin")
+        if origin and origin not in BRIDGE_ORIGINS:
+            return JSONResponse({"detail": "Origin not authorized."}, status_code=403)
+        expected = "Bearer " + BRIDGE_TOKEN
+        if not hmac.compare_digest(request.headers.get("authorization", ""), expected):
+            return JSONResponse({"detail": "Private engine authorization required."}, status_code=401)
+    response = await call_next(request)
+    if PRIVATE_BRIDGE:
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 class NewOrder(BaseModel):
     asset_id: str
@@ -48,7 +98,7 @@ def instruments(search: str = Query("", max_length=80), category: str = Query(""
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "mode": "public-demo" if PUBLIC_DEMO else "local", "version": "1.1.0"}
+    return {"status": "ok", "mode": "public-demo" if PUBLIC_DEMO else "private-bridge" if PRIVATE_BRIDGE else "local", "version": "1.1.0"}
 
 @app.get("/api/market/{asset_id}")
 def market_history(asset_id: str, range: str = Query("1M"), resolution: str | None = Query(None)):
