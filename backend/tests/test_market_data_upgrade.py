@@ -186,3 +186,25 @@ def test_optional_twil_provider_and_private_reasoning_strip(monkeypatch):
     assert rule is None
     with pytest.raises(HTTPException):
         ai.parse_answer("<think>unfinished synthetic reasoning")
+
+
+def test_live_monitor_rejects_unconverted_cad_instrument(tmp_path,monkeypatch):
+    monkeypatch.setattr(live,"DB_PATH",tmp_path/"live-usd.sqlite3")
+    monkeypatch.setattr(library,"DB_PATH",tmp_path/"strategy-usd.sqlite3")
+    monkeypatch.delenv("TRADING_SIM_PUBLIC_DEMO",raising=False)
+    saved=library.store("single","Synthetic CAD test only",
+                        "WHEN SMA(2) CROSSES ABOVE SMA(3) BUY 20%",["vfv"])
+    with pytest.raises(HTTPException) as denied:
+        live.deploy(saved["id"],resolution="15m")
+    assert denied.value.status_code==422
+    assert live.deployments()==[]
+
+
+def test_mutual_fund_cannot_request_intraday_ingestion(local_data,monkeypatch):
+    from backend.assets import Instrument
+    monkeypatch.setattr(ingest,"get_instrument",lambda _:Instrument(
+        "example-fund","EXAMPLE","Funds","USD",tradable=False))
+    with pytest.raises(HTTPException) as denied:
+        ingest.subscribe("example-fund","5m")
+    assert denied.value.status_code==422
+    assert ingest.subscribe("example-fund","1d")["active"] is True
