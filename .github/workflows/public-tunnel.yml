@@ -1,0 +1,70 @@
+name: Validate public tunnel demo isolation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/main.py"
+      - "backend/tests/test_public_demo.py"
+      - "start-public.ps1"
+      - "vite.config.ts"
+      - "src/**"
+      - ".github/workflows/public-tunnel.yml"
+  pull_request:
+    paths:
+      - "backend/main.py"
+      - "backend/tests/test_public_demo.py"
+      - "start-public.ps1"
+      - "vite.config.ts"
+      - "src/**"
+      - ".github/workflows/public-tunnel.yml"
+
+jobs:
+  public-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          python -m pip install -r backend/requirements.txt
+          npm ci --no-audit --no-fund
+      - name: Verify isolated demo refuses unsafe configurations
+        run: python -m pytest -q backend/tests/test_public_demo.py
+      - name: Build public site
+        env:
+          VITE_PUBLIC_DEMO: '1'
+        run: |
+          npm run build
+          grep -rl 'PUBLIC DEMO' dist/assets/ > /dev/null
+      - name: Verify external hostname routes only to isolated API
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/public-demo"
+          export TRADING_SIM_PUBLIC_DEMO=1
+          export TRADING_SIM_AI_PROVIDER=off
+          export TRADING_SIM_ARCADE_DB="$RUNNER_TEMP/public-demo/arcade.sqlite3"
+          export TRADING_SIM_DB="$RUNNER_TEMP/public-demo/trading.sqlite3"
+          export TRADING_SIM_STRATEGY_DB="$RUNNER_TEMP/public-demo/strategy_library.sqlite3"
+          export TRADING_SIM_CUSTOM_INSTRUMENTS="$RUNNER_TEMP/public-demo/custom_instruments.json"
+          export TRADING_SIM_MARKET_DIR="$RUNNER_TEMP/public-demo/market"
+          python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 > /tmp/public-api.log 2>&1 &
+          API_PID=$!
+          node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 4173 --strictPort > /tmp/public-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $API_PID $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8001/api/health >/dev/null && curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --show-error --header 'Host: public-demo.trycloudflare.com' http://127.0.0.1:4173/ > /tmp/public-index.html
+          grep -q 'root' /tmp/public-index.html
+          curl --fail --silent --show-error --header 'Host: public-demo.trycloudflare.com' http://127.0.0.1:4173/api/health > /tmp/public-health.json
+          grep -q '"mode":"public-demo"' /tmp/public-health.json
+          test ! -e data/trading.sqlite3
