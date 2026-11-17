@@ -28,6 +28,14 @@ try{
   assert.deepEqual(reply.payload,{online:true,url:"https://synthetic-example.trycloudflare.com"});
   assert.equal(reply.headers["cache-control"],"private, no-store, max-age=0");
   assert.ok(called);
+  // Real Global Config APIs may wrap data as an item with a value field.
+  globalThis.fetch=async()=>({ok:true,json:async()=>({
+    key:"bridge",value:{url:"https://synthetic-nested.trycloudflare.com",
+      password:"synthetic-not-returned",strategy_code:"synthetic-not-returned"}
+  })});
+  reply=res();await handler(req(),reply);
+  assert.equal(reply.statusCode,200);
+  assert.deepEqual(reply.payload,{online:true,url:"https://synthetic-nested.trycloudflare.com"});
   globalThis.fetch=async()=>({ok:true,json:async()=>({url:"https://attacker.example"})});
   reply=res();await handler(req(),reply);
   assert.equal(reply.statusCode,503);
