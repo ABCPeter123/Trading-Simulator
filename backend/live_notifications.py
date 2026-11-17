@@ -1,6 +1,6 @@
 """Local-only notification dispatcher. No paid service or cloud database required.
 
-Discord webhook or SMTP email configured through private environment variables.
+Discord, SMTP email, or opt-in BlueBubbles iMessage through private variables.
 Persistent delivery receipts and retries prevent duplicate ordinary alerts.
 Critical alerts repeat after cooldown while unresolved/unacknowledged.
 """
@@ -13,6 +13,7 @@ import ssl
 from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import httpx
 
@@ -24,6 +25,12 @@ def _channels():
         channels.append("discord")
     if os.environ.get("TRADING_SIM_SMTP_HOST","") and os.environ.get("TRADING_SIM_EMAIL_TO",""):
         channels.append("email")
+    if all(os.environ.get(k, "").strip() for k in (
+        "TRADING_SIM_IMESSAGE_SERVER_URL",
+        "TRADING_SIM_IMESSAGE_PASSWORD",
+        "TRADING_SIM_IMESSAGE_CHAT_GUID",
+    )):
+        channels.append("imessage")
     return channels
 
 def _send(channel: str, title: str, message: str):
@@ -55,8 +62,55 @@ def _send(channel: str, title: str, message: str):
                 if os.environ.get("TRADING_SIM_SMTP_USER"):
                     smtp.login(os.environ["TRADING_SIM_SMTP_USER"],os.environ["TRADING_SIM_SMTP_PASSWORD"])
                 smtp.send_message(letter)
+    elif channel=="imessage":
+        _send_imessage(title,message)
     else:
         raise ValueError("Unknown notification channel")
+
+def _send_imessage(title: str, message: str):
+    """Send an owner-approved notification through a Mac BlueBubbles server.
+
+    BlueBubbles' documented API requires the Mac server password as a URL query
+    parameter. Only HTTPS and a user-configured host are allowed; no redirects,
+    URL fragments, embedded credentials, or arbitrary paths are accepted.
+    Vercel never sees this password or the message.
+    """
+    base=os.environ["TRADING_SIM_IMESSAGE_SERVER_URL"].strip().rstrip("/")
+    password=os.environ["TRADING_SIM_IMESSAGE_PASSWORD"].strip()
+    chat=os.environ["TRADING_SIM_IMESSAGE_CHAT_GUID"].strip()
+    parsed=urlparse(base)
+    if (parsed.scheme!="https" or not parsed.hostname or parsed.username or
+        parsed.password or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
+        raise ValueError("iMessage relay must be an HTTPS origin without credentials")
+    # Explicitly prohibit automatic SMS fallback. The owner must choose an
+    # existing iMessage chat on the paired Mac, not an arbitrary contact.
+    if (not chat.startswith(("iMessage;-;", "iMessage;+;")) or
+        len(chat)>256 or len(chat)<12 or not password):
+        raise ValueError("An existing iMessage chat GUID and relay password are required")
+    if os.environ.get("TRADING_SIM_IMESSAGE_INCLUDE_DETAILS")=="1":
+        # Explicit opt-in: messaging providers will process these details.
+        content=("Trading Simulator: "+title+"\\n"+message)[:1500]
+    elif title.upper().startswith("CRITICAL:"):
+        content="Trading Simulator: Critical alert. Open your private workspace to review and acknowledge."
+    else:
+        content="Trading Simulator: A trading action or system alert needs review in your private workspace."
+    # BlueBubbles' REST API accepts chatGuid, tempGuid, and message in JSON.
+    # Its password query param may be visible to the owner's Mac proxy logs;
+    # never include it in our own errors, delivery receipts, or application logs.
+    response=httpx.post(base+"/api/v1/message/text",
+        params={"password":password},
+        json={"chatGuid":chat,"tempGuid":"ts-"+uuid4().hex,"message":content},
+        timeout=15,follow_redirects=False,trust_env=False)
+    if not 200<=response.status_code<300:
+        raise RuntimeError("iMessage relay returned a non-success HTTP status")
+    try:
+        result=response.json()
+    except ValueError:
+        raise RuntimeError("iMessage relay returned an invalid response") from None
+    if (not isinstance(result,dict) or
+        not isinstance(result.get("status"),int) or
+        result["status"]<200 or result["status"]>=300 or result.get("error")):
+        raise RuntimeError("iMessage relay did not confirm the send")
 
 def _init(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS deliveries (
