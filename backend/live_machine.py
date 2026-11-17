@@ -366,6 +366,18 @@ def _evaluate_deployment(dep,now,source):
     else:
         rules=[(r.signal_id,r.target_id,r.rule) for r in compile_portfolio_rules(dep["code"],allowed)]
     for source_symbol in sorted({a for a,_,_ in rules}):
+        with LOCK,db() as conn:
+            recent=_one(conn, "SELECT evaluated_at FROM evaluations WHERE deployment_id=? AND symbol=? ORDER BY evaluated_at DESC LIMIT 1",
+                        (dep["id"],source_symbol))
+            previous_issue=_one(conn, "SELECT last_seen_at FROM alerts WHERE key=? AND status='open'",
+                                ("feed:"+dep["id"]+":"+source_symbol,))
+        # Already evaluated this signal source today. Avoid needlessly hitting
+        # Yahoo/Coinbase feeds every 90 seconds or emitting duplicate alerts.
+        if recent and datetime.fromisoformat(recent["evaluated_at"]).astimezone(NY).date()==now.astimezone(NY).date():
+            continue
+        # Persist error backoff across worker restarts.
+        if previous_issue and now-datetime.fromisoformat(previous_issue["last_seen_at"])<timedelta(minutes=10):
+            continue
         instrument=get_instrument(source_symbol)
         if instrument.kind not in ("Stocks","ETFs"):
             record_alert("unsupported:"+dep["id"]+":"+source_symbol,"warning",
@@ -453,6 +465,16 @@ def run_once(now: datetime | None=None, source=None):
     with LOCK,db() as conn:
         dep_rows=_rows(conn,"SELECT * FROM deployments WHERE state IN ('paper','live-monitor')")
         conn.execute("UPDATE signals SET status='expired' WHERE status IN ('pending','acknowledged') AND expires_at < ?",(now.isoformat(),))
+        expiring=_rows(conn,"SELECT id,asset_id,side,expires_at,status FROM signals WHERE status IN ('pending','acknowledged')")
+    for sig in expiring:
+        remaining=(datetime.fromisoformat(sig["expires_at"])-now).total_seconds()
+        alert_key="unacknowledged:"+sig["id"]
+        if sig["status"]=="pending" and 0<remaining<=3600:
+            record_alert(alert_key,"critical","Time-sensitive trade recommendation unacknowledged",
+                sig["side"].upper()+" "+sig["asset_id"].upper()+
+                " expires within one hour. Review the signal and market before placing any trade.")
+        else:
+            resolve_alert(alert_key)
     # Run at a well-defined daily decision window, not continuously generating
     # new suggestions from unfinished intraday bars.
     local=now.astimezone(NY)
