@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from . import live_machine as engine
 from . import live_notifications
 from . import research_optimizer
+from . import portfolio_research
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -163,3 +164,27 @@ def research_run(run_id:str):
 def save_selected(run_id:str,body:NameRequest):
     private()
     return research_optimizer.save_selected(run_id,body.name)
+
+
+class PortfolioCompareBody(BaseModel):
+    symbols:list[str]=Field(min_length=2,max_length=10)
+    max_drawdown_pct:float=Field(default=25,ge=1,le=50)
+    max_position_pct:float=Field(default=35,ge=5,le=50)
+
+
+@router.post("/research/portfolio/compare")
+def compare_portfolios(body:PortfolioCompareBody):
+    private()
+    return portfolio_research.compare(**body.model_dump())
+
+
+@router.get("/research/portfolio/runs")
+def portfolio_research_runs():
+    private()
+    return portfolio_research.list_runs()
+
+
+@router.get("/research/portfolio/runs/{run_id}")
+def portfolio_research_run(run_id:str):
+    private()
+    return portfolio_research.load_run(run_id)
