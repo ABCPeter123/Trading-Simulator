@@ -3,11 +3,13 @@ on:
   push:
     paths:
       - "start-local.ps1"
+      - "start-live-machine.ps1"
       - "scripts/*.ps1"
       - ".github/workflows/local-setup-check.yml"
   pull_request:
     paths:
       - "start-local.ps1"
+      - "start-live-machine.ps1"
       - "scripts/*.ps1"
       - ".github/workflows/local-setup-check.yml"
 
@@ -19,7 +21,7 @@ jobs:
       - name: Parse PowerShell without running installers
         shell: powershell
         run: |
-          $paths = @("start-local.ps1", "scripts/run-backend.ps1", "scripts/run-frontend.ps1")
+          $paths = @("start-local.ps1", "start-live-machine.ps1", "scripts/run-backend.ps1", "scripts/run-frontend.ps1")
           foreach ($path in $paths) {
             $tokens = $null
             $parseErrors = $null
