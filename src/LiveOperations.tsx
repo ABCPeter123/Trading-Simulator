@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useState} from "react";
-import {Activity,AlertTriangle,Bell,Check,Clock3,PauseCircle,PlayCircle,RefreshCw,Save,ShieldCheck,Wallet} from "lucide-react";
+import {Activity,AlertTriangle,Bell,Check,Clock3,PlayCircle,RefreshCw,Save,ShieldCheck,Wallet} from "lucide-react";
 import {useI18n} from "./i18n";
 import {listStrategies} from "./strategyLibraryApi";
 import type {SavedStrategy} from "./strategyLibraryApi";
@@ -104,7 +104,6 @@ export default function LiveOperations({section}:{section:OperationsSection}){
       recordConfirmedFill(ready),editing?"Trade correction saved with revision history.":"Confirmed broker execution recorded.");
     setEditing(null);setDraft(emptyFill());setRevisions([]);
   }
-  const live=deployments.filter(d=>d.state==="live-monitor"||d.state==="paper");
   return <main className="ops-shell">
     <header className="ops-header">
       <div><p className="ops-kicker">{t("PRIVATE TRADING OPERATIONS")}</p>
