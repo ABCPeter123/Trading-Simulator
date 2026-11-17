@@ -12,6 +12,8 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Indices": "指数",
+  "Funds": "基金",
   "Supports USD/CAD stocks and ETFs, plus USD cryptocurrencies. Canadian securities are converted using the previous completed USD/CAD daily FX close. Crypto weekends are excluded when mixed with stock assets.": "支持美元／加元计价的股票与 ETF，以及美元计价的加密资产。加拿大证券使用前一已完成交易日的 USD/CAD 收盘汇率折算。混合股票资产时排除加密资产周末交易日。",
   "Coverage varies by session": "覆盖率因交易时段而异",
   "Incremental ingestion": "增量数据采集",
