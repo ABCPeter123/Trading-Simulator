@@ -14,20 +14,6 @@ $root=Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 $stateDir=Join-Path $root ".local-state\private-bridge"
 New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
-function Request-VercelPublishingToken {
-    param([string]$TokenPath)
-    Write-Host "[setup] Create a Vercel access token at https://vercel.com/account/tokens" -ForegroundColor Yellow
-    Write-Host "[setup] Scope it to team PP (pp-48b0), with permission to write Global Config items." -ForegroundColor Yellow
-    Write-Host "[setup] This credential is for bridge registration only; visitors still enter just the web password." -ForegroundColor Cyan
-    $secure=Read-Host -AsSecureString "Paste PP-scoped Vercel token (hidden, local storage only)"
-    $bstr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try { $newToken=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-    if ([string]::IsNullOrWhiteSpace($newToken)) { throw "The Vercel token cannot be empty." }
-    Set-Content -LiteralPath $TokenPath -Value $newToken.Trim() -Encoding ASCII -NoNewline
-    Remove-Variable newToken -ErrorAction SilentlyContinue
-    Write-Host "[setup] Publishing credential saved locally. No password or trading data was uploaded." -ForegroundColor Green
-}
 $uri=$null
 if (-not [Uri]::TryCreate($AllowedOrigin,[UriKind]::Absolute,[ref]$uri) -or $uri.Scheme -ne "https" -or $uri.AbsolutePath -ne "/" -or $uri.Query -ne "" -or $uri.Fragment -ne "" -or $uri.UserInfo -ne "") {
     throw "Use the exact HTTPS Vercel website origin with -AllowedOrigin."
@@ -84,7 +70,17 @@ if ($LegacyToken) {
     $env:TRADING_SIM_PRIVATE_PASSWORD_HASH=$hash
     $vercelFile=Join-Path $stateDir "vercel-token.txt"
     if (-not $ManualDirectory -and ($ResetVercelToken -or -not (Test-Path $vercelFile))) {
-        Request-VercelPublishingToken -TokenPath $vercelFile
+        Write-Host "[setup] Create a Vercel access token at https://vercel.com/account/tokens" -ForegroundColor Yellow
+        Write-Host "[setup] IMPORTANT: select the Vercel team PP (pp-48b0), not your Personal Account." -ForegroundColor Yellow
+        Write-Host "[setup] The token must be permitted to WRITE Global Config items in that team." -ForegroundColor Yellow
+        $secure=Read-Host -AsSecureString "Paste Vercel access token (hidden, local storage only)"
+        $bstr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+        try { $vercelToken=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+        finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        if ([string]::IsNullOrWhiteSpace($vercelToken)) { throw "Vercel token is required for automatic tunnel discovery." }
+        Set-Content -LiteralPath $vercelFile -Value $vercelToken.Trim() -Encoding ASCII -NoNewline
+        Remove-Variable vercelToken -ErrorAction SilentlyContinue
+        Write-Host "[setup] Vercel token stored locally in the Git-ignored bridge directory." -ForegroundColor Green
     }
 }
 $backend=$null
@@ -161,81 +157,7 @@ try {
                 $saved=(Get-Content -LiteralPath $statusFile -Raw -ErrorAction SilentlyContinue).Trim()
                 if(-not [string]::IsNullOrWhiteSpace($saved)){ $detail=$saved }
             }
-            if($detail -match 'HTTP 40[13]' -and -not $SkipSetup){
-                # Repair authorization in place. Do not tear down the healthy
-                # tunnel, change the visitor password, or require manual URL sync.
-                Write-Host "[private] Current Vercel credential was rejected (HTTP 401/403)." -ForegroundColor Yellow
-                $repair=Read-Host "Replace the PP team's publishing token now and retry? [y/N]"
-                if($repair -match '^(y|yes)
-                # password-protected API or Cloudflare tunnel.
-                Write-Host "[private] Auto-registration failed: $detail" -ForegroundColor Yellow
-                Write-Host "[private] Recovery mode: the protected bridge stays online." -ForegroundColor Yellow
-                Write-Host "[private] Temporary tunnel URL (owner only): $tunnelUrl" -ForegroundColor Cyan
-                Write-Host "[private] Publish ONLY that URL into the PP team's Global Config bridge item via your connected Vercel account." -ForegroundColor Cyan
-                Write-Host "[private] For automatic registration next time, restart with -ResetVercelToken and a PP-scoped Vercel token." -ForegroundColor Yellow
-            }elseif(-not $published){
-                throw "Could not publish private tunnel address: $detail (exit $publishExit)"
-            }
-        }
-        Write-Host "[private] Website: $AllowedOrigin" -ForegroundColor Green
-        if($published){
-            Write-Host "[private] Visitors enter ONLY the shared password. Do not give them the tunnel address." -ForegroundColor Green
-        }else{
-            Write-Host "[private] Website discovery is offline until the tunnel URL is registered manually." -ForegroundColor Yellow
-        }
-    }else{
-        Write-Host "[legacy] Private tunnel: $tunnelUrl" -ForegroundColor Cyan
-        Write-Host "[legacy] API token (never share publicly): $secret" -ForegroundColor Yellow
-    }
-    Write-Host "[private] Keep your computer on and this PowerShell window open. Ctrl+C stops the tunnel." -ForegroundColor Cyan
-    # The publisher may fail temporarily during a network interruption.
-    # Retry automatically when the problem was not an invalid/mis-scoped
-    # credential (401/403). Never retry a rejected credential continuously.
-    $retryAt=(Get-Date).AddSeconds(30)
-    while(-not $tunnel.HasExited){
-        Start-Sleep -Seconds 3
-        if(-not $LegacyToken -and -not $ManualDirectory -and -not $published -and (Get-Date) -ge $retryAt){
-            $lastStatus=""
-            if(Test-Path -LiteralPath $statusFile){
-                $lastStatus=(Get-Content -LiteralPath $statusFile -Raw -ErrorAction SilentlyContinue)
-            }
-            if($lastStatus -notmatch 'HTTP 40[13]'){
-                & $python (Join-Path $root "scripts\\publish_tunnel.py") $tunnelUrl
-                $published=($LASTEXITCODE -eq 0)
-                if($published){
-                    Write-Host "[private] Directory connection recovered automatically." -ForegroundColor Green
-                }else{
-                    Write-Host "[private] Directory publish retry failed; will retry if recoverable." -ForegroundColor Yellow
-                }
-            }
-            $retryAt=(Get-Date).AddSeconds(60)
-        }
-    }
-    # A Quick Tunnel URL is ephemeral. Replace it automatically after a
-    # Cloudflare exit rather than asking the owner to copy/paste the new URL.
-    $tunnel=$null
-    $restartCount++
-    $pause=[Math]::Min(60, 5 * $restartCount)
-    Write-Host "[private] Cloudflare disconnected. Reconnecting in $pause seconds..." -ForegroundColor Yellow
-    Start-Sleep -Seconds $pause
-    }
-
-} finally {
-    if($null -ne $tunnel -and -not $tunnel.HasExited){Stop-Process -Id $tunnel.Id -Force -ErrorAction SilentlyContinue}
-    if($null -ne $backend -and -not $backend.HasExited){Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue}
-}
-){
-                    Request-VercelPublishingToken -TokenPath $vercelFile
-                    & $python (Join-Path $root "scripts\\publish_tunnel.py") $tunnelUrl
-                    $published=($LASTEXITCODE -eq 0)
-                    if($published){
-                        Write-Host "[private] Automatic URL registration is now configured for this and future tunnel starts." -ForegroundColor Green
-                    }elseif(Test-Path -LiteralPath $statusFile){
-                        $detail=(Get-Content -LiteralPath $statusFile -Raw -ErrorAction SilentlyContinue).Trim()
-                    }
-                }
-            }
-            if(-not $published -and $detail -match 'HTTP 40[13]'){
+            if($detail -match 'HTTP 40[13]'){
                 # A bad/mis-scoped Vercel token must not kill an otherwise healthy
                 # password-protected API or Cloudflare tunnel.
                 Write-Host "[private] Auto-registration failed: $detail" -ForegroundColor Yellow
