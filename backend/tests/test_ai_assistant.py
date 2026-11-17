@@ -428,7 +428,41 @@ def test_llama_cpp_request_stays_on_loopback(monkeypatch):
                        model="Qwen3.5-9B-Q4_K_M.gguf")
     assert answer["applied"] is False
     assert observed["url"] == "http://127.0.0.1:8081/v1/chat/completions"
-    assert observed["model"] == "Qwen3.5-9B-Q4_K_M.gguf"
+    assert observed["model"] == "Qwen3.5-9B-Q4_K_M"
     assert 1024 <= observed["max_tokens"] <= 16384
     monkeypatch.setenv("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "invalid")
     assert ai.local_output_token_limit() == 8192
+
+
+def test_llama_cpp_router_stems_are_detected_and_protected(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL", "TwIL-8B-Q4_K_M-balanced.gguf")
+    monkeypatch.setenv("TRADING_SIM_AI_MODELS",
+                       "TwIL-8B-Q4_K_M-balanced.gguf,Qwen3.5-9B-Q4_K_M.gguf")
+    class FakeReply:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": [
+                {"id": "Qwen3.5-9B-Q4_K_M"},
+                {"id": "TwIL-8B-Q4_K_M-balanced"},
+                {"id": "unapproved-private-model"}]}
+    class FakeClient:
+        def __init__(self, **kwargs): assert kwargs["trust_env"] is False
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def get(self, url):
+            assert url == "http://127.0.0.1:8081/v1/models"
+            return FakeReply()
+    monkeypatch.setattr(ai.httpx, "Client", FakeClient)
+    status = client.get("/api/ai/status").json()
+    assert status["provider"] == "llama_cpp"
+    assert status["ready"] is True
+    assert status["model"] == "TwIL-8B-Q4_K_M-balanced"
+    assert status["available_models"] == [
+        "Qwen3.5-9B-Q4_K_M", "TwIL-8B-Q4_K_M-balanced"]
+    qwen = client.get("/api/ai/status?model=Qwen3.5-9B-Q4_K_M.gguf").json()
+    assert qwen["ready"] is True
+    assert qwen["model"] == "Qwen3.5-9B-Q4_K_M"
+    assert ai.selected_local_model("Qwen3.5-9B-Q4_K_M") == "Qwen3.5-9B-Q4_K_M"
+    assert ai.selected_local_model("TwIL-8B-Q4_K_M-balanced.gguf") == "TwIL-8B-Q4_K_M-balanced"
+    assert client.get("/api/ai/status?model=unapproved-private-model").status_code == 422
