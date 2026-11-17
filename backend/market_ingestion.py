@@ -145,8 +145,13 @@ def ingest_once(asset_id:str,resolution:str,now:datetime|None=None):
     # resolution. Each file retains its original history and receives only
     # the latest provider observations. Do not create missing long archives.
     if bars:
-        windows=(("2Y","5Y","10Y","MAX") if resolution=="1d" else
-                 ("7D","30D","60D","6M","1Y"))
+        windows={
+            "1d":("2Y","5Y","10Y","MAX"),
+            "1h":("7D","30D","60D","6M","1Y"),
+            "15m":("7D","30D","60D"),
+            "5m":("7D","30D","60D"),
+            "1m":("7D",),
+        }[resolution]
         for window_name in windows:
             key=window_name if resolution=="1d" else f"{window_name}_{resolution}"
             if archive_path(asset_id,key).exists():
