@@ -14,6 +14,7 @@ from . import live_machine as machine
 from . import live_notifications as notices
 from . import research_optimizer
 from . import strategy_library
+from . import portfolio_research
 
 LOCAL_TZ = ZoneInfo("America/Toronto")
 MAX_ITEMS = 60
@@ -151,6 +152,40 @@ def build_report(now: datetime | None = None):
         ]))
     except Exception:
         sections.append(("RECENT STRATEGY OPTIMIZATION RUNS",["Unavailable; check the local research database."]))
+    # Multi-asset research is a separate, read-only hypothetical study.
+    # Keep actual strategy rule code, optimizer source, and private model
+    # checkpoints on the owner's disk, not in the email.
+    try:
+        portfolio_runs=portfolio_research.list_runs(limit=3)
+        descriptions=[]
+        for run in portfolio_runs:
+            detail=portfolio_research.load_run(run["id"])
+            descriptions.append(
+                "Portfolio: "+", ".join(x.upper() for x in detail["basket"])+
+                " | "+_date(detail["created_at"])+
+                " | qualified "+str(detail["eligible_count"])+"/"+
+                str(detail["candidate_count"])+
+                " | validation ranking: "+
+                "; ".join(c["model"]+" "+_num(c["validation"]["return_pct"])+
+                          "% return, "+_num(c["validation"]["max_drawdown_pct"])+
+                          "% drawdown" for c in detail["candidates"])
+            )
+            if detail["selected"]:
+                chosen=detail["selected"]
+                test=chosen["held_out_test"]
+                benchmark=chosen["held_out_equal_weight_benchmark"]
+                descriptions.append(
+                    "Selected model "+chosen["model"]+
+                    " | held-out net return "+_num(test["return_pct"])+
+                    "% | equal-weight held-out "+_num(benchmark["return_pct"])+
+                    "% | held-out drawdown "+_num(test["max_drawdown_pct"])+
+                    "% | estimated fees "+_num(test["fees"])+
+                    " USD. Historical simulation only, NOT broker results."
+                )
+        sections.append(_lines("MULTI-ASSET PORTFOLIO RESEARCH (HYPOTHETICAL)",descriptions))
+    except Exception:
+        sections.append(("MULTI-ASSET PORTFOLIO RESEARCH (HYPOTHETICAL)",
+                         ["Research summary temporarily unavailable."]))
     sections.append(_lines("INTERPRETATION",[
         "Signals are recommendations only, not broker executions.",
         "Performance figures include only manually recorded confirmed fills. Simulated backtests are not actual returns.",
