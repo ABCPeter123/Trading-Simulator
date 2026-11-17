@@ -6,6 +6,7 @@ param(
     [switch]$Once,
     [switch]$SkipSetup,
     [switch]$InstallAtLogon,
+    [switch]$Foreground,
     [int]$IntervalSeconds = 90
 )
 $ErrorActionPreference="Stop"
@@ -33,10 +34,12 @@ if ($Stop) {
         Write-Host "[live] Stopped background strategy monitor." -ForegroundColor Yellow
     } else { Write-Host "[live] No running background strategy monitor." }
     Remove-Item $pidFile -ErrorAction SilentlyContinue
+    $task=Get-ScheduledTask -TaskName "TradingSimulatorLiveMachine" -ErrorAction SilentlyContinue
+    if ($task -and $task.State -eq "Running") { Stop-ScheduledTask -TaskName "TradingSimulatorLiveMachine" }
     exit 0
 }
 if ($InstallAtLogon) {
-    $launchArgs="-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File " + ('"' + (Join-Path $root "start-live-machine.ps1") + '"') + " -SkipSetup -IntervalSeconds $IntervalSeconds"
+    $launchArgs="-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File " + ('"' + (Join-Path $root "start-live-machine.ps1") + '"') + " -SkipSetup -Foreground -IntervalSeconds $IntervalSeconds"
     $action=New-ScheduledTaskAction -Execute "powershell.exe" -Argument $launchArgs -WorkingDirectory $root
     $trigger=New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
     $settings=New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 2)
@@ -71,6 +74,11 @@ $env:TRADING_SIM_PUBLIC_DEMO="0"
 if ($Once) {
     Write-Host "[live] Running one monitoring and notification cycle..." -ForegroundColor Cyan
     & $python -m backend.live_worker --once --interval $IntervalSeconds
+    exit $LASTEXITCODE
+}
+if ($Foreground) {
+    Write-Host "[live] Persistent worker started; Windows Task Scheduler can monitor and restart this process." -ForegroundColor Green
+    & $python -m backend.live_worker --interval $IntervalSeconds
     exit $LASTEXITCODE
 }
 $old=Existing-Worker
