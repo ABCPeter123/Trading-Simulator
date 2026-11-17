@@ -16,7 +16,10 @@ export default async function handler(req,res){
     });
     if(!data.ok)return res.status(503).json({online:false,error:"Connection directory unavailable."});
     const item=await data.json();
-    const url=typeof item?.url==="string"?item.url:"";
+    // Vercel Global Config item APIs can return either the direct value or
+    // an item envelope with a nested `value` field.
+    const record=item?.value && typeof item.value==="object" ? item.value : item;
+    const url=typeof record?.url==="string" ? record.url : "";
     const parsed=new URL(url);
     if(parsed.protocol!=="https:"||parsed.username||parsed.password||parsed.search||parsed.hash||
       parsed.pathname!=="/"||!parsed.hostname.endsWith(".trycloudflare.com"))
