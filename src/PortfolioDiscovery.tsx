@@ -155,7 +155,7 @@ export default function PortfolioDiscovery(){
             </div>
             <p className="disc-muted">{selected.first_session} to {selected.last_session} · {selected.train_sessions} training / {selected.validation_sessions} validation / {selected.test_sessions} held out</p>
             <div className="pd-groups">{Object.entries(selected.groups).map(([g,assets])=>
-              <span key={g}><b>{g}</b> {assets.map(x=>x.toUpperCase()).join(", ")}</span>)}</div>
+              <span key={g}><b>{t(g.replaceAll("_"," "))}</b> {assets.map(x=>x.toUpperCase()).join(", ")}</span>)}</div>
             <p className="disc-muted">{selected.qualification_note}</p>
           </section>
           <section className="disc-card">
