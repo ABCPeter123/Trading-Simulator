@@ -142,8 +142,9 @@ def test_invalid_baskets_and_symbol_validation():
         pa.create_season(["spy"])
     with pytest.raises(HTTPException):
         pa.create_season(["spy", "spy"])
-    with pytest.raises(HTTPException):
-        pa.create_season(["spy", "vfv"])
+    cad_game=pa.create_season(["spy", "vfv"])
+    assert cad_game["asset_ids"]==["spy","vfv"]
+    assert "USD-equivalent" in cad_game["sources"]["vfv"]
     with pytest.raises(HTTPException):
         pa.create_season(["spy", "es"])
     with pytest.raises(HTTPException):
@@ -194,3 +195,39 @@ def test_single_asset_arcade_save_survives_multi_asset_mode(monkeypatch):
     assert arcade.get_run(single["id"])["id"] == single["id"]
     assert pa.get_season(multi["id"])["id"] == multi["id"]
     assert arcade.list_runs()[0]["id"] == single["id"]
+
+
+def test_cad_portfolio_simulation_uses_only_previous_fx_close(monkeypatch):
+    data={symbol:fixture_bars(symbol) for symbol in ("spy","vfv","usdcad")}
+    # The USD/CAD synthetic reference uses CAD per 1 USD.
+    for candle in data["usdcad"]:
+        candle["open"]=1.25
+        candle["high"]=1.27
+        candle["low"]=1.23
+        candle["close"]=1.26
+    def loader(asset,period):
+        return {"asset_id":asset,"range":period,"source":"synthetic",
+                "bars":data[asset]}
+    monkeypatch.setattr(pa,"history",loader)
+    first=pa.create_season(["spy","vfv"],"5Y",.35)
+    assert "USD-equivalent" in first["sources"]["vfv"]
+    with pa.connection() as db:
+        _row,snap,_state=pa._load(db,first["id"])
+    # Use a day whose observations exist in both the security and FX feed.
+    day=sorted(snap["daily"]["vfv"])[20]
+    baseline=snap["daily"]["vfv"][day]["close"]
+    own_cad=next(bar for bar in data["vfv"]
+        if datetime.fromtimestamp(bar["time"],timezone.utc).date().isoformat()==day)
+    assert baseline==pytest.approx(own_cad["close"]/1.26)
+    for bar in data["usdcad"]:
+        if datetime.fromtimestamp(bar["time"],timezone.utc).date().isoformat()==day:
+            bar["close"]=4.26
+            break
+    second=pa.create_season(["spy","vfv"],"5Y",.35)
+    with pa.connection() as db:
+        _row,next_snapshot,_state=pa._load(db,second["id"])
+    assert next_snapshot["daily"]["vfv"][day]["close"]==pytest.approx(baseline)
+    pa.order(first["id"],"vfv","buy","market","10","units")
+    traded=pa.advance(first["id"],1)
+    assert any(fill["asset_id"]=="vfv" for fill in traded["fills"])
+    assert traded["metrics"]["cash"]<100000
