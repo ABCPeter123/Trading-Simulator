@@ -1,7 +1,7 @@
 import type { Asset, AssetClass } from "../types";
 
 export const INITIAL_CASH = 100_000;
-export const ASSET_CLASSES: AssetClass[] = ["Stocks", "ETFs", "Options", "Futures", "Forex", "Crypto"];
+export const ASSET_CLASSES: AssetClass[] = ["Stocks", "ETFs", "Options", "Futures", "Forex", "Crypto", "Indices", "Funds"];
 
 export const ASSETS: Asset[] = [
   { id: "aapl", symbol: "AAPL", name: "Apple Inc.", exchange: "NASDAQ", assetClass: "Stocks", decimals: 2, spreadBps: 6, accent: "#a3b4cd" },
