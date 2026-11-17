@@ -82,7 +82,14 @@ async def protect_private_bridge(request: Request, call_next):
         # CORS preflight carries no authorization header. The CORS middleware
         # validates its requested origin and method before the actual API call.
         if request.method != "OPTIONS" and not hmac.compare_digest(request.headers.get("authorization", ""), expected):
-            return JSONResponse({"detail": "Private engine authorization required."}, status_code=401)
+            denied = JSONResponse({"detail": "Private engine authorization required."}, status_code=401)
+            denied.headers["Cache-Control"] = "no-store"
+            if origin in BRIDGE_ORIGINS:
+                # Let an authorized browser show a useful 401 message when a
+                # token is mistyped, rather than an opaque CORS network error.
+                denied.headers["Access-Control-Allow-Origin"] = origin
+                denied.headers["Vary"] = "Origin"
+            return denied
     response = await call_next(request)
     if PRIVATE_BRIDGE:
         response.headers["Cache-Control"] = "no-store"
