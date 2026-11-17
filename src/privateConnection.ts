@@ -4,10 +4,17 @@
 export const cloudFrontend = import.meta.env.VITE_CLOUD_FRONTEND === "1";
 let connection: {origin:string;token:string}|null = null;
 let locationRefresh: ReturnType<typeof setInterval>|null = null;
+const LOCATOR_REFRESH_MS = 5 * 60 * 1000;
+const ACTIVE_TAB_REFRESH_MIN_MS = 60 * 1000;
+let lastLocatorCheck = 0;
+let locatorRefreshPromise: Promise<void>|null = null;
 
 export function hasPrivateConnection() { return !!connection; }
 export function disconnectPrivateEngine() {
   if(locationRefresh!==null){clearInterval(locationRefresh);locationRefresh=null;}
+  document.removeEventListener("visibilitychange",onTabVisibilityChanged);
+  locatorRefreshPromise=null;
+  lastLocatorCheck=0;
   const current=connection;
   connection=null;
   if(current)void fetch(current.origin+"/api/auth/logout",{
@@ -46,17 +53,40 @@ async function locatePrivateEngine():Promise<string>{
   return url.origin;
 }
 
+function refreshCurrentPrivateOrigin():Promise<void>{
+  if(!connection)return Promise.resolve();
+  if(locatorRefreshPromise)return locatorRefreshPromise;
+  lastLocatorCheck=Date.now();
+  const pending=locatePrivateEngine().then(origin=>{
+    if(connection && connection.origin!==origin)connection={...connection,origin};
+  }).catch(()=>{
+    // The active authenticated session remains intact when the locator is
+    // temporarily unavailable. The next scheduled/visibility check retries.
+  });
+  locatorRefreshPromise=pending.finally(()=>{locatorRefreshPromise=null;});
+  return locatorRefreshPromise;
+}
+
+function onTabVisibilityChanged(){
+  // A dormant browser can wake with an old Quick Tunnel hostname; refresh
+  // immediately when returning, without polling continuously in background.
+  if(document.visibilityState==="visible" && connection &&
+     Date.now()-lastLocatorCheck>=ACTIVE_TAB_REFRESH_MIN_MS){
+    void refreshCurrentPrivateOrigin();
+  }
+}
+
 function watchPrivateEngineLocation(){
   if(locationRefresh!==null)clearInterval(locationRefresh);
-  // The owner's Quick Tunnel may reconnect with a new hostname. Existing
-  // sessions belong to the same local backend and can follow that address.
-  // Failure to poll never logs the user out or exposes credentials to Vercel.
+  document.removeEventListener("visibilitychange",onTabVisibilityChanged);
+  document.addEventListener("visibilitychange",onTabVisibilityChanged);
+  // The hostname can rotate when cloudflared reconnects. Five-minute
+  // active-only checks avoid burning the shared Hobby Edge Config quota;
+  // Vercel's browser receives only the public hostname, never credentials.
   locationRefresh=setInterval(()=>{
-    if(!connection)return;
-    void locatePrivateEngine().then(origin=>{
-      if(connection && connection.origin!==origin)connection={...connection,origin};
-    }).catch(()=>{});
-  },30000);
+    if(!connection || document.visibilityState==="hidden")return;
+    void refreshCurrentPrivateOrigin();
+  },LOCATOR_REFRESH_MS);
 }
 
 export async function connectPrivateEngine(password:string): Promise<void> {
@@ -82,5 +112,6 @@ export async function connectPrivateEngine(password:string): Promise<void> {
   });
   if(!health.ok)throw new Error("Your secure login session could not be verified.");
   connection={origin,token:result.token};
+  lastLocatorCheck=Date.now();
   watchPrivateEngineLocation();
 }
