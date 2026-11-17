@@ -344,3 +344,91 @@ def test_warmup_uses_local_generate_endpoint_nonblocking(monkeypatch):
     assert requests[0][1]["keep_alive"] == "30m"
     assert client.post("/api/ai/warmup").json()["started"] is False
     ai._WARM_STATE.update(model=None, phase="idle", started=0.0)
+
+
+def test_llama_cpp_router_model_choices_and_per_request_override(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL", "TwIL-8B-Q4_K_M-balanced.gguf")
+    monkeypatch.setenv("TRADING_SIM_AI_MODELS",
+                       "TwIL-8B-Q4_K_M-balanced.gguf,Qwen3.5-9B-Q4_K_M.gguf")
+    observed = {}
+    class FakeResponse:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": [
+                {"id": "TwIL-8B-Q4_K_M-balanced.gguf",
+                 "status": {"value": "loaded"}},
+                {"id": "Qwen3.5-9B-Q4_K_M.gguf",
+                 "status": {"value": "unloaded"}},
+                {"id": "private-unapproved-model.gguf",
+                 "status": {"value": "loaded"}}]}
+    class FakeClient:
+        def __init__(self, **kwargs):
+            assert kwargs["trust_env"] is False
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def get(self, url):
+            observed["url"] = url
+            return FakeResponse()
+    monkeypatch.setattr(ai.httpx, "Client", FakeClient)
+    result = client.get("/api/ai/status?model=Qwen3.5-9B-Q4_K_M.gguf")
+    assert result.status_code == 200
+    assert result.json()["ready"] is True
+    assert result.json()["loaded"] is False
+    assert result.json()["model"] == "Qwen3.5-9B-Q4_K_M.gguf"
+    assert result.json()["available_models"] == [
+        "TwIL-8B-Q4_K_M-balanced.gguf", "Qwen3.5-9B-Q4_K_M.gguf"]
+    assert observed["url"] == "http://127.0.0.1:8081/v1/models"
+    assert client.get("/api/ai/status?model=unapproved.gguf").status_code == 422
+    assert client.get("/api/ai/status?model=../models/private.gguf").status_code == 422
+
+
+def test_llama_cpp_selected_qwen_is_not_promoted_to_execution(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL", "TwIL-8B-Q4_K_M-balanced.gguf")
+    observed = {}
+    def fake_call(system, user, model=None):
+        observed["selected"] = model
+        return '{"answer":"A simulated research summary.","strategy":null}'
+    monkeypatch.setattr(ai, "call_model", fake_call)
+    response = client.post("/api/ai/ask", json={
+        "mode": "single", "run_id": "synthetic-id",
+        "question": "Explain the observed sample.",
+        "model": "Qwen3.5-9B-Q4_K_M.gguf",
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["model"] == "Qwen3.5-9B-Q4_K_M.gguf"
+    assert response.json()["applied"] is False
+    assert response.json()["proposed_strategy"] is None
+    assert observed["selected"] == "Qwen3.5-9B-Q4_K_M.gguf"
+    with pytest.raises(HTTPException):
+        ai.advise("single", "synthetic-id", "hi", model="other.gguf")
+
+
+def test_llama_cpp_request_stays_on_loopback(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL", "TwIL-8B-Q4_K_M-balanced.gguf")
+    observed = {}
+    class FakeResponse:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"choices": [{"message": {"content":
+                '{"answer":"No trading action is authorized.","strategy":null}'}}]}
+    class FakeClient:
+        def __init__(self, **kwargs): assert kwargs["trust_env"] is False
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def post(self, url, json):
+            observed["url"] = url
+            observed["model"] = json["model"]
+            observed["max_tokens"] = json["max_tokens"]
+            return FakeResponse()
+    monkeypatch.setattr(ai.httpx, "Client", FakeClient)
+    answer = ai.advise("single", "synthetic-id", "Analyze.",
+                       model="Qwen3.5-9B-Q4_K_M.gguf")
+    assert answer["applied"] is False
+    assert observed["url"] == "http://127.0.0.1:8081/v1/chat/completions"
+    assert observed["model"] == "Qwen3.5-9B-Q4_K_M.gguf"
+    assert 1024 <= observed["max_tokens"] <= 16384
+    monkeypatch.setenv("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "invalid")
+    assert ai.local_output_token_limit() == 8192
