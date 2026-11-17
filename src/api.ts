@@ -1,3 +1,4 @@
+import { apiUrl, cloudFrontend, privateRequestHeaders } from "./privateConnection";
 import type { ReplayResolution, ReplayWindow } from "./replayIntervals";
 import type { AssetClass, TimeRange, TradeSide } from "./types";
 
@@ -35,13 +36,14 @@ export interface BacktestResponse {
 }
 
 export async function request<T>(route: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${route}`, {
+  const response = await fetch(apiUrl(`/api${route}`), {
     ...options,
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: privateRequestHeaders({ "Content-Type": "application/json", ...options?.headers }),
+    cache: cloudFrontend ? "no-store" : options?.cache,
   });
   let payload: unknown;
   try { payload = await response.json(); }
-  catch { throw new Error("Local API is unreachable. Start the Python backend on port 8000."); }
+  catch { throw new Error(cloudFrontend ? "Private engine connection failed. Check your tunnel and access token." : "Local API is unreachable. Start the Python backend on port 8000."); }
   if (!response.ok) {
     const detail = typeof payload === "object" && payload !== null && "detail" in payload ? payload.detail : null;
     throw new Error(typeof detail === "string" ? detail : `Request failed (${response.status})`);
