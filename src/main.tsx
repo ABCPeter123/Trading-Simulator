@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import TradingArcade from "./TradingArcade";
 import PortfolioArcade from "./PortfolioArcade";
+import CloudGateway from "./CloudGateway";
+import {cloudFrontend, disconnectPrivateEngine, hasPrivateConnection} from "./privateConnection";
 import { I18nProvider, LanguageSwitcher, useI18n } from "./i18n";
 import "./styles.css";
 import "./simulatorNavigation.css";
@@ -11,7 +13,7 @@ import "./polish.css";
 function Simulator() {
   const { t } = useI18n();
   useEffect(()=>{
-    if (import.meta.env.VITE_PUBLIC_DEMO === "1") return;
+    if (import.meta.env.VITE_PUBLIC_DEMO === "1" || cloudFrontend) return;
     // Local-only and non-blocking. Retry startup races when the Python API
     // launches after Vite, without polling or contacting a cloud service.
     let cancelled=false;
@@ -29,7 +31,15 @@ function Simulator() {
     return ()=>{cancelled=true;if(retry)clearTimeout(retry);};
   },[]);
   const [mode, setMode] = useState<"single" | "portfolio">("single");
+  const [privateConnected,setPrivateConnected] = useState(hasPrivateConnection());
+  if(cloudFrontend && !privateConnected) return <><CloudGateway onConnected={()=>setPrivateConnected(true)}/><LanguageSwitcher/></>;
   return <>
+    {cloudFrontend && <div className="cloud-engine-bar" role="status">
+      <span>{t("Private engine connected. Trading data remains on your PC.")}</span>
+      <button type="button" onClick={()=>{disconnectPrivateEngine();setPrivateConnected(false);}}>
+        {t("Disconnect private engine")}
+      </button>
+    </div>}
     {import.meta.env.VITE_PUBLIC_DEMO === "1" &&
       <div className="public-demo-banner" role="status">
         {t("PUBLIC DEMO · Shared sandbox. Never enter your private strategy, credentials, or actual financial data. Visitors may see each other's demo sessions.")}
