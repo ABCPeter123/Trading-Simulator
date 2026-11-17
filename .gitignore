@@ -19,3 +19,77 @@ __pycache__/
 
 # Local setup fingerprints (per machine)
 .local-state/
+
+# PRIVATE BY DEFAULT. The public repository is engine SOURCE CODE only.
+# All user-authored, AI-generated, optimized, or deployed strategy versions,
+# research results, actual broker records, signals and model weights stay local.
+# Ignored paths never make their contents private if they are force-added.
+/private/
+/.private/
+/secrets/
+/.secrets/
+/exports/
+/backups/
+/snapshots/
+/outputs/
+/generated/
+/runs/
+/trading-records/
+/trade-records/
+/saved-strategies/
+/strategy-exports/
+/strategy-results/
+/optimization-results/
+/research/private/
+/research/generated/
+/models/private/
+/models/checkpoints/
+
+# Generated market datasets, trade journals, databases and trained artifacts.
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.duckdb
+*.duckdb.*
+*.parquet
+*.arrow
+*.feather
+*.csv
+*.tsv
+*.jsonl
+*.ndjson
+*.pkl
+*.pickle
+*.joblib
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.hdf5
+*.npz
+*.npy
+*.strategy
+*.strategy.json
+*.strategy.yaml
+*.strategy.yml
+*.tradebook
+*.ipynb
+*.bak
+*.backup
+
+# Private configuration and credentials, including hidden nested files.
+**/.env
+**/.env.*
+!/.env.example
+**/*credentials*.json
+**/*secrets*.json
+**/*private-key*
+**/*.pem
+**/*.p12
+**/*.pfx
+
+# Local privacy-hook installation and generated snapshots are never committed.
+.git/hooks/
