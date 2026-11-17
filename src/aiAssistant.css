@@ -44,3 +44,46 @@
 .ai-model-picker{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#b0c2d0;flex-wrap:wrap}
 .ai-model-picker select{appearance:auto;background:#182839;color:#eef4fa;border:1px solid #51677b;border-radius:6px;padding:7px 9px;max-width:230px;min-height:36px}
 .ai-model-picker select:disabled{opacity:.6}
+
+
+/* Research AI is a detachable corner tool, not an inline workspace section.
+   Portal rendering avoids clipping under trading charts and scroll panels. */
+.ai-floating{position:fixed;right:22px;bottom:22px;z-index:10050;display:flex;
+  flex-direction:column-reverse;align-items:flex-end;gap:12px;pointer-events:none}
+.ai-floating>*{pointer-events:auto}
+.ai-float-trigger{display:flex;align-items:center;gap:9px;background:#322c54;
+  color:#f8f4ff;border:1px solid #8d80c4;border-radius:999px;padding:13px 17px;
+  box-shadow:0 12px 35px rgba(0,0,0,.38);font-weight:800;font-size:13px;cursor:pointer}
+.ai-float-trigger:hover,.ai-float-trigger:focus-visible{background:#433766;border-color:#c8b5ff}
+.ai-float-state{width:9px;height:9px;border-radius:50%;background:#9c8c91;flex-shrink:0}
+.ai-float-state.ready{background:#64daae}
+.ai-popup{width:min(440px,calc(100vw - 24px));height:min(680px,calc(100dvh - 110px));
+  max-height:calc(100dvh - 110px);display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 18px 70px rgba(0,0,0,.56);margin:0}
+.ai-popup .ai-head{flex-shrink:0;padding:12px 14px;gap:9px}
+.ai-popup .ai-head p{font-size:10px}
+.ai-popup .ai-chip{font-size:9px;padding:4px 7px}
+.ai-close{background:transparent;border:1px solid #655b7e;border-radius:8px;
+  color:#e5d8fd;padding:7px;display:grid;place-items:center;cursor:pointer}
+.ai-close:hover{background:#4c4167}
+.ai-popup .ai-status{flex-shrink:0;padding:9px 12px;max-height:150px;overflow-y:auto}
+.ai-popup .ai-model-picker select{max-width:210px}
+.ai-popup .ai-suggestions{flex-shrink:0;max-height:155px;overflow-y:auto;padding:10px 12px;gap:6px}
+.ai-popup .ai-suggestions button{padding:9px;font-size:10px}
+.ai-popup .ai-conversation{flex:1;min-height:80px;max-height:none;overflow-y:auto;padding:12px}
+.ai-popup:has(.ai-conversation) .ai-suggestions{display:none}
+.ai-popup .ai-form{flex-shrink:0;margin-top:auto;padding:9px 12px 7px}
+.ai-popup .ai-form textarea{background:#18273a;border:1px solid #57647e;border-radius:8px;color:#f4f6fa}
+.ai-popup .ai-footnote{flex-shrink:0;padding:3px 12px 10px}
+.ai-popup .ai-error,.ai-popup .ai-setup,.ai-popup .ai-processing{flex-shrink:0;max-height:115px;overflow-y:auto}
+@media(max-width:650px){
+  .ai-floating{right:12px;bottom:max(12px,env(safe-area-inset-bottom))}
+  .ai-popup{width:calc(100vw - 24px);height:min(650px,calc(100dvh - 95px));
+    max-height:calc(100dvh - 95px)}
+  .ai-float-trigger{padding:12px 15px}
+  .ai-popup .ai-head{gap:8px}
+  .ai-popup .ai-suggestions{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ai-popup .ai-form{flex-direction:row;align-items:stretch}
+  .ai-popup .ai-form button{align-self:stretch;min-width:78px}
+}
+@media(max-height:550px){.ai-popup .ai-suggestions{display:none}}
