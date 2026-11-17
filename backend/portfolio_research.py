@@ -11,6 +11,7 @@ import math
 import os
 import sqlite3
 from datetime import datetime, timezone
+from bisect import bisect_left
 from pathlib import Path
 from statistics import mean, stdev
 from threading import RLock
@@ -76,8 +77,8 @@ def _validate_basket(symbols: list[str]):
         if key in basket:
             raise HTTPException(422, detail="Portfolio symbols must be unique.")
         instrument = get_instrument(key)
-        if instrument.currency != "USD" or instrument.kind not in ("Stocks", "ETFs", "Crypto"):
-            raise HTTPException(422, detail="Current portfolio research requires USD stocks, ETFs or crypto.")
+        if instrument.currency not in ("USD","CAD") or instrument.kind not in ("Stocks", "ETFs", "Crypto"):
+            raise HTTPException(422, detail="Portfolio research supports USD/CAD stocks and ETFs or USD crypto.")
         basket.append(key)
     return basket
 
@@ -114,8 +115,42 @@ def _prepare(symbols, histories):
         item = get_instrument(symbol)
         metadata[symbol] = {"group": _group(symbol, item.kind),
                             "spread_bps": float(item.spread_bps),
-                            "kind": item.kind}
+                            "kind": item.kind,"currency":item.currency}
         sources[symbol] = str(raw.get("source") or "unknown provider")[:120]
+    cad_symbols=[s for s in symbols if metadata[s]["currency"]=="CAD"]
+    if cad_symbols:
+        fx_data=histories.get("usdcad")
+        if not isinstance(fx_data,dict) or fx_data.get("is_demo"):
+            raise HTTPException(422,detail="USD/CAD FX historical data is required for mixed-currency research.")
+        fx_bars=fx_data.get("bars")
+        if not isinstance(fx_bars,list) or len(fx_bars)<2:
+            raise HTTPException(422,detail="USD/CAD historical exchange rates are unavailable.")
+        fx_map={}
+        for bar in fx_bars:
+            day=datetime.fromtimestamp(int(bar["time"]),timezone.utc).date().isoformat()
+            rate=float(bar["close"])
+            if not math.isfinite(rate) or rate<=0:
+                raise HTTPException(422,detail="Invalid USD/CAD historical rate.")
+            fx_map[day]=rate
+        fx_dates=sorted(fx_map)
+        # Use only the PREVIOUS completed FX session's close. This prevents
+        # today's FX close from leaking into an instrument's next-day open.
+        # Skip days without an FX observation in the last five calendar days.
+        conversions={}
+        for day in sorted(set.union(*(set(maps[s]) for s in cad_symbols))):
+            pos=bisect_left(fx_dates,day)-1
+            if pos<0:continue
+            fx_day=fx_dates[pos]
+            from datetime import date
+            age=(date.fromisoformat(day)-date.fromisoformat(fx_day)).days
+            if age>5:continue
+            conversions[day]=fx_map[fx_day]
+        for sym in cad_symbols:
+            maps[sym]={day:{**bar,
+                            "open":bar["open"]/conversions[day],
+                            "close":bar["close"]/conversions[day]}
+                       for day,bar in maps[sym].items() if day in conversions}
+            sources[sym]+="; CAD/USD via prior completed USD/CAD FX daily close"
     shared = sorted(set.intersection(*(set(maps[s]) for s in symbols)))
     if len(shared) < 450:
         raise HTTPException(422, detail="Portfolio requires at least 450 actual overlapping trading sessions.")
@@ -323,9 +358,15 @@ def compare(symbols:list[str], max_drawdown_pct:float=25.,
         for ix,symbol in enumerate(symbols):
             step(3+int(38*ix/len(symbols)),"Loading historical market data "+str(ix+1)+"/"+str(len(symbols)))
             histories[symbol]=history(symbol,"5Y")
+        if any(get_instrument(sym).currency=="CAD" for sym in symbols):
+            step(40,"Loading historical USD/CAD FX reference")
+            histories["usdcad"]=history("usdcad","5Y")
     else:
-        if not isinstance(data,dict) or set(data)!=set(symbols):
-            raise HTTPException(422,detail="Must provide data for every instrument.")
+        needed=set(symbols)
+        if any(get_instrument(sym).currency=="CAD" for sym in symbols):
+            needed.add("usdcad")
+        if not isinstance(data,dict) or set(data)!=needed:
+            raise HTTPException(422,detail="Must provide all basket histories and historical USD/CAD FX data when CAD assets are included.")
         histories = data
     step(42,"Aligning historical sessions")
     days,market,metadata,sources=_prepare(symbols,histories)
