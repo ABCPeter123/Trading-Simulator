@@ -12,6 +12,7 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Canadian asset prices and simulated fills are converted to USD using the previous completed USD/CAD FX close. Results use a shared USD cash account and are indicative.": "加拿大资产价格及模拟成交价采用上一已完成交易日的 USD/CAD 收盘汇率折算成美元。结果以共同的美元现金账户计算，仅供参考。",
   "Latest provider quote": "最新数据提供方报价",
   "No quote timestamp": "暂无报价时间戳",
   "source age": "数据滞后",
