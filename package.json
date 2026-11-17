@@ -9,7 +9,9 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:local": "npm run build"
+    "verify:local": "npm run build",
+    "baseline:status": "node scripts/check-vercel-baseline.mjs",
+    "baseline:preview": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-vercel-baseline.ps1"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
