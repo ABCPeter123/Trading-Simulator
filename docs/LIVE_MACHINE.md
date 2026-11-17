@@ -161,7 +161,38 @@ powershell -ExecutionPolicy Bypass -File .\\start-live-machine.ps1 -SendEmailRep
 The manual command asks permission before sending a real email, and does not
 change the regular weekday schedule. It uses all addresses in
 `TRADING_SIM_EMAIL_TO`. A separate email service account may be used as
-sender. There is an optional iMessage adapter described in
+sender.
+
+**If an email fails or reports `SMTPServerDisconnected`:** update your
+Windows checkout with `git pull` and run the safe diagnostic below:
+
+```powershell
+cd E:\\Trading-Simulator
+powershell -ExecutionPolicy Bypass -File .\\start-live-machine.ps1 -DiagnoseEmail
+```
+
+The diagnostic tests both encrypted Gmail SMTP options, **465/SSL** and
+**587/STARTTLS**, and authenticates without sending any email. It only prints
+the port, safe failure stage, and exception type. It never prints your
+username, app password, recipient addresses or report content. For Gmail,
+use your own 16-character app password, not the regular Google password.
+The program accepts a password displayed with spaces in groups of four and
+normalizes it locally. The sender automatically falls back from Gmail SSL
+465 to STARTTLS 587 if the connection fails **before login**. Failures
+during message submission are not retried on another port because an SMTP
+server could have accepted the message before dropping the reply. In that
+case, check both recipients before manually resending.
+
+You can additionally check outbound TCP reachability from PowerShell:
+
+```powershell
+Test-NetConnection smtp.gmail.com -Port 465
+Test-NetConnection smtp.gmail.com -Port 587
+```
+
+A successful TCP check does not prove SMTP TLS or login works. If both
+ports cannot connect, review your VPN, firewall, router, and ISP egress
+rules. The safe diagnostic gives the more useful authenticated result. There is an optional iMessage adapter described in
 [IMESSAGE_NOTIFICATIONS.md](IMESSAGE_NOTIFICATIONS.md), but it stays inactive
 when `TRADING_SIM_NOTIFICATION_CHANNELS=email`.
 
