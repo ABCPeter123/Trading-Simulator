@@ -366,10 +366,11 @@ class AIQuestion(BaseModel):
     question: str = Field(min_length=1, max_length=1200)
     history: list[AITurn] = Field(default_factory=list, max_length=6)
     language: Literal["en", "zh-CN"] = "en"
+    model: str | None = Field(default=None, min_length=1, max_length=100)
 
 @app.get("/api/ai/status")
-def ai_status():
-    return ai_provider_status()
+def ai_status(model: str | None = Query(default=None, min_length=1, max_length=100)):
+    return ai_provider_status(model)
 
 @app.post("/api/ai/warmup")
 def ai_warmup():
@@ -378,7 +379,8 @@ def ai_warmup():
 @app.post("/api/ai/ask")
 def ai_ask(request: AIQuestion):
     return ai_advise(request.mode, request.run_id, request.question,
-                     [turn.model_dump() for turn in request.history], request.language)
+                     [turn.model_dump() for turn in request.history], request.language,
+                     request.model)
 
 # Stochastic research is computed exclusively from already-revealed bars.
 class ScenarioRequest(BaseModel):
