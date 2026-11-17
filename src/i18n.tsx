@@ -762,7 +762,7 @@ const zh: Record<string, string> = {
   "Fit all data": "显示全部历史数据",
   "Latest candles": "最近K线",
   "All 256 modeled paths shown; percentile curves reflect the full distribution.": "全部256条模拟路径均已显示；分位数曲线反映完整的模拟分布。",
-  "PUBLIC DEMO · Shared sandbox. Visitors can see each other's demo sessions and changes. No real brokerage trades or private local saves.": "公开演示 · 共享沙盒。访客可能看到彼此的模拟会话及修改。不会执行真实证券交易，也不会访问私人的本地存档。",
+  "PUBLIC DEMO · Shared sandbox. Never enter your private strategy, credentials, or actual financial data. Visitors may see each other's demo sessions.": "公开演示 · 共享沙盒。切勿输入您的私人交易策略、账号凭据或真实财务数据。其他访客可能查看彼此的演示会话。",
 };
 
 const LocaleContext = createContext<{
