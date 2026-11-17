@@ -76,6 +76,12 @@ def _smtp_connect_and_auth(host: str, port: int, user: str, password: str):
             smtp.starttls(context=context)
         else:
             raise ValueError("SMTP requires TLS on port 465 or 587")
+        # Separate SMTP greeting/capability negotiation from authentication:
+        # previously, a dropped EHLO was incorrectly reported as login failure.
+        stage = "ehlo"
+        code, _ = smtp.ehlo()
+        if code != 250:
+            raise SMTPDeliveryFailure("ehlo", port, "UnexpectedReply")
         if user:
             stage = "authenticate"
             smtp.login(user, password)
@@ -110,9 +116,10 @@ def _send_email(title: str, body: str, html_body: str | None = None):
         if not user or not password:
             raise ValueError("Gmail requires an authenticated SMTP sender and app password")
         # Google sometimes visually groups its 16-character app password.
-        compact = password.replace(" ", "")
-        if len(compact) == 16 and len(password) != 16:
-            password = compact
+        compact = "".join(password.split())
+        if len(compact) != 16:
+            raise ValueError("Gmail app password must contain 16 characters")
+        password = compact
 
     try_ports = [port]
     # Port 587 with STARTTLS is an encrypted fallback if Gmail's implicit TLS
