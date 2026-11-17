@@ -141,6 +141,11 @@ full strategy code or account details into notifications.
   back off to avoid excessive provider polling.
 - A deployment's maximum single-recommendation allocation is 25%
   of reference capital, with an adjustable daily signal cap.
+  A configurable **realized-loss fuse (default 5% of reference capital)**
+  pauses further recommendations and creates a critical alert when your
+  confirmed USD realized losses exceed that threshold. Existing real broker
+  positions are NOT closed. The fuse uses manually entered confirmed records
+  and does not see unrecorded transactions or unrealized losses.
   These are **recommendation constraints**, not enforced brokerage
   limits. You must review liquidity, account cash, portfolio
   risk, borrow availability and execution costs before real trades.
