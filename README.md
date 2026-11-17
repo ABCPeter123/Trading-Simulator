@@ -31,12 +31,17 @@ The project now supports a private end-to-end workflow:
 - **Operational dashboard:** six top-level workspaces organize monitoring,
   research, strategy discovery, live signals, actual trades, and incidents.
 
-**Optional iMessage alerts (beta):** The private live worker can send
-trade-review and critical-incident notifications through an owner-controlled
-Mac running BlueBubbles. Windows cannot send native iMessages directly.
-This feature is disabled unless configured in the private `.env` file,
-and generic messages are the privacy-preserving default. See
-[iMessage notifications and secure relay setup](docs/IMESSAGE_NOTIFICATIONS.md).
+**Email-first live monitoring:** The private Windows worker sends immediate
+signal and risk notifications to your configured email recipients. It also
+generates a detailed weekday 5:15 PM Toronto-time HTML and text briefing with
+pending actions, portfolio positions, confirmed P/L, recent fills, risk,
+strategy evaluations, research progress and operational status. You can send
+a report at any time with `start-live-machine.ps1 -SendEmailReport`.
+See [email setup and reporting](docs/LIVE_MACHINE.md#notification-setup).
+No public server stores recipients or strategy reports.
+
+An optional Mac-based iMessage adapter remains available but is not required.
+Set `TRADING_SIM_NOTIFICATION_CHANNELS=email` to use only email.
 
 Start the independent worker on Windows after updating:
 
