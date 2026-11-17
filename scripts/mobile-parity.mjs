@@ -298,6 +298,7 @@ try {
     for(const [name,target] of [
       ["Dashboard",".ops-shell"],
       ["Live Strategy Machine",".ops-shell"],
+      ["Strategy Discovery",".disc-shell"],
       ["Trade Journal",".ops-shell"],
       ["Alerts & Health",".ops-shell"],
       ["Strategy Lab & Backtesting",".arc-layout"],
