@@ -35,6 +35,10 @@ git pull
 
 Use **http://127.0.0.1:5173** for ongoing npm/Vite development.
 
+**Local login:** No password or Cloudflare connection is needed on this localhost URL.
+The deployed Vercel website still requires the private access password.
+
+
 For one-step setup on Windows, run `.\start-local.ps1 -CompareVercel`
 (or `npm run dev:compare`). This launches both local frontends plus your
 laptop research worker without touching the live website.
