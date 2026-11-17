@@ -165,7 +165,7 @@ try {
         Where-Object { $_.CommandLine -match 'backend[.]market_ingest_worker' })
     if ($ingestWorkers.Count -eq 0) {
         $marketScript = Join-Path $root "scripts\run-market-ingest-worker.ps1"
-        Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList "-NoExit -ExecutionPolicy Bypass -File " + ('"' + $marketScript + '"')
+        Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList ("-NoExit -ExecutionPolicy Bypass -File " + ('"' + $marketScript + '"'))
         Write-Host "[market] Local incremental data collector started." -ForegroundColor Green
     } else {
         Write-Host "[market] Reusing existing incremental data collector." -ForegroundColor Green
