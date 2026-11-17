@@ -313,7 +313,7 @@ def call_model(system: str, user: str) -> str:
 def parse_answer(raw):
     # TwIL reasoning-enabled chat templates emit a <think> preamble. Never
     # display internal reasoning or parse it as executable strategy syntax.
-    candidate = re.sub(r"^\\s*<think>.*?</think>\\s*", "", raw, flags=re.S).strip()
+    candidate = re.sub(r"^\s*<think>.*?</think>\s*", "", raw, flags=re.S).strip()
     if candidate.startswith("<think>"):
         raise HTTPException(502,detail="Local model produced incomplete reasoning; no recommendation returned.")
     fence = chr(96) * 3
