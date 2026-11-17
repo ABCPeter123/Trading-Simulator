@@ -73,6 +73,8 @@ app = FastAPI(title="Trading Simulator Local API", version="1.1.0")
 # owner-only, durable private service, not a browser-based trading bot.
 from .live_routes import router as private_live_router
 app.include_router(private_live_router)
+from .market_data_routes import router as market_data_router
+app.include_router(market_data_router)
 if PRIVATE_BRIDGE:
     app.add_middleware(
         CORSMiddleware, allow_origins=BRIDGE_ORIGINS,
