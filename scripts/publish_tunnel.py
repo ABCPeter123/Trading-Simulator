@@ -64,7 +64,7 @@ def _save_status(message:str):
     try:
         path=Path(os.environ.get("TRADING_SIM_PUBLISH_STATUS_PATH") or STATUS_FILE)
         path.parent.mkdir(parents=True,exist_ok=True)
-        path.write_text(message+"\\n",encoding="utf-8")
+        path.write_text(message+"\n",encoding="utf-8")
     except OSError:
         # Status recording must never expose confidential paths or credentials.
         pass
