@@ -1,7 +1,11 @@
 /** Cloud browser secrets are tab-memory-only. No strategy or session is
  * persisted to Vercel, cookies, localStorage or the JavaScript bundle.
  */
-export const cloudFrontend = import.meta.env.VITE_CLOUD_FRONTEND === "1";
+// The Vercel password gateway is strictly a production-build feature.
+// Vite development must always use the local API, even if a previous
+// terminal or .env file left VITE_CLOUD_FRONTEND=1 behind. This does not
+// disable server-side authentication for the private Cloudflare bridge.
+export const cloudFrontend = import.meta.env.PROD && import.meta.env.VITE_CLOUD_FRONTEND === "1";
 let connection: {origin:string;token:string}|null = null;
 let locationRefresh: ReturnType<typeof setInterval>|null = null;
 const LOCATOR_REFRESH_MS = 5 * 60 * 1000;
