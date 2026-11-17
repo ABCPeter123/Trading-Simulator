@@ -1,5 +1,13 @@
 # Trading Simulator
 
+> **Milestone-only production releases:** Automatic Vercel deployments
+> have been disabled. GitHub commits no longer imply website updates.
+> Develop through `npm run dev` or `.\start-local.ps1`
+> (including the laptop research worker), then release one tested milestone
+> only after explicit owner approval. See
+> [local-first development and release freeze](docs/LOCAL_FIRST_RELEASE_POLICY.md).
+
+
 > **Long-term product direction:** A professional, always-on quantitative trading
 > research, live signal, risk-monitoring, and human-confirmed trade management
 > platform. The historical simulator is one stage of the product, not the final
