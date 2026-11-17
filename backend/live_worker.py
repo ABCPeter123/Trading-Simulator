@@ -33,7 +33,7 @@ def main():
     if hasattr(signal,"SIGTERM"):signal.signal(signal.SIGTERM,request_stop)
     while not should_stop:
         try:
-            live_machine.run_once()
+            live_machine.run_once(worker_heartbeat=True)
             live_notifications.deliver_pending()
         except Exception as exc:
             # Worker errors must not leak credentials or saved strategy programs.
