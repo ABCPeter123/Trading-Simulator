@@ -95,7 +95,7 @@ def test_running_cancellation_cooperatively_stops_before_model_write(workspace,m
     monkeypatch.setattr(portfolio_research,"history",abort_on_first_market)
     outcome=research_queue.process_one()
     assert outcome["status"]=="cancelled"
-    assert not portfolio_research.DB_PATH.exists()
+    assert portfolio_research.list_runs()==[]
 
 
 def test_completed_result_is_linked_after_worker_restart(workspace,monkeypatch):
