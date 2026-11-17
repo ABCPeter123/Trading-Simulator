@@ -133,6 +133,15 @@ this legacy mode is not the normal website sign-in experience.
   launchers called the removed Vercel `/v1/edge-config` endpoint;
   current releases use `/v1/global-config`. Do not recreate your
   shared web password or reinstall Cloudflare.
+- **Manual fallback without a Vercel API token:** If the directory publisher
+  cannot authenticate, start the password-protected backend and Cloudflare
+  tunnel with `powershell -ExecutionPolicy Bypass -File .\\start-private-bridge.ps1 -ManualDirectory`.
+  The launcher will keep the tunnel running and print ONLY its public
+  `https://...trycloudflare.com` address. The owner can then publish that
+  URL manually through a trusted authenticated Vercel client. No browser
+  password, API token or strategy source should be shared. Unlike automatic
+  mode, this manual registry update must be repeated each time the Quick
+  Tunnel URL changes.
 - **HTTP 401:** The locally saved Vercel access token is invalid or expired.
   Create a new token at https://vercel.com/account/tokens and run
   `powershell -ExecutionPolicy Bypass -File .\\start-private-bridge.ps1 -ResetVercelToken`.
