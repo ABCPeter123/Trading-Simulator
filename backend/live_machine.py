@@ -50,6 +50,7 @@ def db():
           mode TEXT NOT NULL, code TEXT NOT NULL, symbols TEXT NOT NULL,
           state TEXT NOT NULL CHECK(state IN ('paper','live-monitor','paused','retired')),
           capital REAL NOT NULL, max_allocation_pct REAL NOT NULL,
+          max_realized_loss_pct REAL NOT NULL DEFAULT 5,
           max_daily_signals INTEGER NOT NULL, created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL, last_evaluated_at TEXT, last_error TEXT
         );
@@ -97,6 +98,9 @@ def db():
         CREATE INDEX IF NOT EXISTS fill_timestamp ON fills(executed_at);
         CREATE INDEX IF NOT EXISTS alert_status ON alerts(status,severity);
         """)
+        columns={row["name"] for row in conn.execute("PRAGMA table_info(deployments)")}
+        if "max_realized_loss_pct" not in columns:
+            conn.execute("ALTER TABLE deployments ADD COLUMN max_realized_loss_pct REAL NOT NULL DEFAULT 5")
         yield conn
     finally:
         conn.close()
@@ -121,7 +125,8 @@ def _public_signal(s):
     return dict(s) if s else None
 
 def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
-           max_allocation_pct: float = 10., max_daily_signals: int = 4):
+           max_allocation_pct: float = 10., max_daily_signals: int = 4,
+           max_realized_loss_pct: float = 5.):
     if state not in ("paper","live-monitor"):
         raise HTTPException(422, detail="Start in paper or live-monitor mode only.")
     if not (math.isfinite(capital) and 100 <= capital <= 1e10):
@@ -130,6 +135,8 @@ def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
         raise HTTPException(422, detail="Allocation cap must be between 0 and 25%.")
     if not 1 <= max_daily_signals <= 20:
         raise HTTPException(422, detail="Daily signal cap must be 1-20.")
+    if not math.isfinite(max_realized_loss_pct) or not 0.5<=max_realized_loss_pct<=25:
+        raise HTTPException(422,detail="Realized-loss stop must be between 0.5% and 25%.")
     item = get_saved_strategy(strategy_id)
     if item["mode"] == "single":
         rules = compile_rules(item["code"])
@@ -141,10 +148,10 @@ def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
     with LOCK, db() as conn:
         conn.execute("BEGIN IMMEDIATE")
         conn.execute(
-            "INSERT INTO deployments VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO deployments VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (identifier, strategy_id, item["name"], item["mode"], item["code"],
              _json(item["symbols"]), state, capital, max_allocation_pct,
-             max_daily_signals, now, now, None, None),
+             max_realized_loss_pct, max_daily_signals, now, now, None, None),
         )
         conn.commit()
         return _public_deploy(_one(conn, "SELECT * FROM deployments WHERE id=?", (identifier,)))
@@ -480,6 +487,28 @@ def run_once(now: datetime | None=None, source=None):
                 " expires within one hour. Review the signal and market before placing any trade.")
         else:
             resolve_alert(alert_key)
+    # Conservative portfolio-level realized-loss fuse. Actual journal data is
+    # entered by the user; unrealized positions and external broker balances are
+    # not verified here. Pausing recommendations never sends broker orders.
+    try:
+        recorded=journal()
+        usd_loss=recorded["realized_by_currency"].get("USD",0.)
+        candidates=[]
+        for dep in dep_rows:
+            if usd_loss<=-dep["capital"]*dep["max_realized_loss_pct"]/100:
+                change_state(dep["id"],"paused")
+                record_alert("risk:loss:"+dep["id"],"critical",
+                    "Realized-loss safety stop activated",
+                    "Confirmed USD realized loss exceeded the configured threshold. "
+                    "Strategy monitoring is paused; inspect the broker account and risk exposure.")
+            else:
+                candidates.append(dep)
+        dep_rows=candidates
+    except Exception as exc:
+        record_alert("risk:journal","critical","Trade journal risk assessment failed",
+                     "No new live recommendations until confirmed trade records can be assessed.")
+        logger.warning("Risk fuse unavailable: %s",type(exc).__name__)
+        dep_rows=[]
     # Run at a well-defined daily decision window, not continuously generating
     # new suggestions from unfinished intraday bars.
     local=now.astimezone(NY)
