@@ -1,136 +1,141 @@
-# Vercel frontend + private local trading engine
+# Vercel website with one shared password and private desktop data
 
-**Architecture:** The public Vercel deployment serves only the compiled React
-application. It does not host a Python API, a database, historical market
-archives, research outputs, your proprietary trading strategies, Ollama,
-actual trading records or secrets.
+Your permanent website is **https://trading-simulator-pp-48b0.vercel.app**.
 
-The frontend starts with a clearly labeled synthetic chart and an
-**explicit private-engine connection screen**. It does not attempt to fetch
-any personal data until you connect a local/private backend.
+Visitors need only the **one fixed password you choose**. They do not
+need to install Cloudflare, enter a tunnel URL or handle a long API token.
 
-## 1. Public website
+## Architecture and privacy
 
-The project is configured for Vercel with `vercel.json`:
+- **Vercel:** React frontend and a very small `/api/bridge-location`
+  discovery function. It stores NO research, strategy source code, models,
+  actual fills, portfolio data, access passwords or login sessions.
+- **Vercel Global Config:** One non-secret record with the latest temporary
+  Cloudflare tunnel URL. This enables automatic lookup when a Quick Tunnel
+  changes after restarting the desktop.
+- **Your desktop:** FastAPI, Ollama, saved strategies, SQLite databases, the
+  trading machine, and the salted password verifier. Login requests and
+  subsequent authorized API calls go directly to the desktop through
+  Cloudflare HTTPS. Vercel does not proxy the trading data.
+- **Browser:** Holds a short-lived private API session in tab memory.
+  Password and session token are not persisted in browser storage or cookies.
 
-- Framework: Vite
-- Install: `npm install`
-- Build: `npm run build`
-- Output directory: `dist`
-- Production / Preview / Development build environment:
-  `VITE_CLOUD_FRONTEND=1`
+This can run within Vercel Hobby's included Global Config quota when the
+tunnel is not restarted excessively. The desktop and Internet connection
+must stay on. Global Config stores only connection metadata, not financial
+data.
 
-GitHub integration deploys main to the permanent production URL:
+## Owner: first-time setup
 
-**https://trading-simulator-pp-48b0.vercel.app**
+1. Install cloudflared if needed: `winget install -e --id Cloudflare.cloudflared`.
+2. On your PC, update the project:
+   ```powershell
+   cd E:\Trading-Simulator
+   git pull
+   powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1
+   ```
+3. The script prompts for your **shared web access password** twice.
+   Choose a unique, strong password of at least 12 characters. Only a
+   salted password verifier is written to the private, Git-ignored
+   `.local-state/private-bridge/password-hash.txt`.
+4. The script will ask once for your **Vercel access token**. Create a
+   token at https://vercel.com/account/tokens with permission to update
+   the Trading Simulator team's Global Config. Paste it into the hidden
+   local PowerShell prompt. It is stored in Git-ignored
+   `.local-state/private-bridge/vercel-token.txt` on your PC, not in
+   Vercel's public frontend or GitHub. Treat it as a sensitive credential.
+5. The script starts your local API, creates a temporary Cloudflare Quick
+   Tunnel, finds the tunnel URL from the process logs and updates the
+   connection directory automatically.
+6. Share only the **Vercel website URL and your chosen access password**
+   with trusted visitors. Do not share your desktop logs, Vercel access
+   token, or raw strategy backups.
 
-This URL hosts the frontend only. This static deployment has no database
-or Python runtime costs, subject to the account's Vercel usage and plan rules.
+**Subsequent runs use the saved password verifier and owner Vercel token
+automatically.** If Cloudflare picks a different temporary URL, the
+launcher updates Vercel Global Config again. Visitors don't change their
+login flow. Your password stays the same until you rotate it.
 
-**Do not add any `VITE_*` secrets.** Vite embeds those variables in
-public JavaScript. The flag above is non-sensitive; it selects a safe
-connection gate instead of silently loading private API requests.
-
-## 2. Start the private engine on your own Windows PC
-
-The first time, install cloudflared. If already installed by winget, the
-launcher also searches common Windows installation locations automatically.
-
-From your local `Trading-Simulator` checkout, run:
+To reset the shared password:
 
 ```powershell
-git pull
-powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -AllowedOrigin "https://trading-simulator-pp-48b0.vercel.app"
+powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -SetPassword
 ```
 
-Replace that example with the **exact origin shown in your browser**,
-without a path. The connection page also displays a command with the
-current origin to copy. If installed cloudflared cannot be found, pass
-`-CloudflaredPath "C:\path\to\cloudflared.exe"`.
+Stop the previous bridge first. Changing the password or restarting the
+backend revokes existing in-memory sessions. Password sessions expire
+after eight hours. The password is never sent to Vercel.
 
-This launcher checks dependencies, starts the private FastAPI process on
-`127.0.0.1:8002`, and opens a temporary Cloudflare tunnel to it.
-Unlike `start-public.ps1`, this process uses your EXISTING private
-`data/` databases and should not be given to untrusted users.
+## Visitor: every login
 
-A private bridge requires:
-- `TRADING_SIM_PRIVATE_BRIDGE=1`
-- `TRADING_SIM_PRIVATE_API_TOKEN` containing at least 48 random characters
-- `TRADING_SIM_ALLOWED_ORIGINS` listing exact HTTPS UI origins.
+1. Open https://trading-simulator-pp-48b0.vercel.app.
+2. Enter the **shared access password**.
+3. Select **Open trading workspace**.
 
-The launcher handles these automatically. The access token is randomly
-generated and stored in gitignored `.local-state/private-bridge/api-token.txt`
-on your PC. The local file is not encrypted, so keep your computer/account
-secure. You can rotate it on restart by adding `-RotateToken`.
+The frontend fetches the current tunnel location automatically via
+`/api/bridge-location`. It posts the password directly to the desktop
+over HTTPS. The desktop checks a salted PBKDF2 password verifier, enforces
+a failed-login limit and returns a random temporary session token.
+Subsequent direct browser-to-desktop API requests carry that session.
 
-## 3. Connect in the website
+If the PC is off, the tunnel is down, the owner token is not configured,
+or Vercel Global Config is unavailable, the login screen clearly reports
+that the desktop cannot be reached. No synthetic responses are passed off
+as live data.
 
-1. Keep the local PowerShell private-bridge terminal running.
-2. Find the `https://...trycloudflare.com` URL printed by cloudflared.
-3. Enter that URL in the Vercel site's **Engine URL** field.
-4. Copy the access token printed in your private-bridge terminal into
-   **Private access token**. Never share it with public visitors.
-5. Select **Open trading workspace**.
+## Access control and limitations
 
-The browser first checks `/api/health`, requires valid authentication,
-and verifies that it is connecting to a backend in `private-bridge`
-mode. Only then does it load your trading workspace. Every subsequent
-API request is sent directly from your browser to your own backend using
-a bearer token in an authorization header.
+**All visitors using the shared password access the same private data and
+currently have the same application permissions.** That includes the
+ability to edit strategies or trade records through the website. Share
+this password only with people you fully trust. For view-only access,
+we will need a separate permission system before inviting viewers.
+This password does not control your Windows desktop; the tunnel serves
+only the local FastAPI API, not Remote Desktop or arbitrary PC files.
 
-**The browser does not send the token to Vercel, and it is kept in
-memory only**, not localStorage/sessionStorage/cookies. Refreshing the
-page requires reconnecting. The browser receives requested private
-strategy and portfolio data for display; Vercel does not persist those
-API responses, but they transit Cloudflare. Use browser security
-hygiene and never expose access tokens in shared screenshots.
+- The owner may still use `start-local.ps1` to work entirely offline.
+- The independent `start-live-machine.ps1` worker remains separate.
+- No broker order execution is enabled by this website access.
+- The Cloudflare tunnel endpoint is publicly reachable, but
+  sensitive API requests require a valid expiring session.
+- Server-side login is rate-limited per client and globally, although
+  a shared password does not supply per-user audit identity or MFA.
+- HTTPS protects connection traffic, which still traverses Cloudflare.
+- CORS permits only the explicitly approved Vercel origin.
+- Do not commit your `.local-state`, `.env`, private strategies,
+  passwords or Vercel access tokens. Existing Git privacy checks apply.
+- On Vercel Hobby, connection discovery is small and should typically
+  fit included quotas. Your own power, Internet and domain (if used)
+  are separate costs.
+- This is personal access, not a production-grade multi-user trading
+  service. For stronger protection add individual accounts, MFA,
+  Cloudflare Access, explicit roles and security logging.
 
-### Availability and costs
+## Older manual token mode
 
-- Vercel can host the static UI continuously.
-- Your private API works only when your PC and cloudflared are running.
-- A Quick Tunnel URL changes on restart, even though the Vercel URL stays
-  stable. Reconnect with the new tunnel URL.
-- No managed database, hosted Python/AI worker, or paid model API is required.
-- Historical market-data provider limits and network bandwidth still apply.
-- The optional private bridge is a **personal access tool**, not an
-  authenticated multi-user production service.
+For troubleshooting only, the previous manual URL and long token bridge
+can still be started using:
 
-The default local setup `start-local.ps1` remains unchanged. It serves
-the website and API together on local ports 5173/8000 for ordinary use.
-The separate public demonstration launcher `start-public.ps1` still uses
-its isolated 4173/8001 sandbox, with no access to real strategy records.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -LegacyToken
+```
 
-## Security boundaries
+The public website is designed for the new password-only workflow, so
+this legacy mode is not the normal website sign-in experience.
 
-- Vercel: static public frontend only. No private database, secret,
-  strategy, prediction output or trading record is included in the bundle.
-- FastAPI private bridge: defaults off, fails to start without a strong
-  token and exact HTTPS origin allowlist.
-- Cross-origin preflights: only allowlisted frontend origins.
-- Every private `/api/*` call requires the bearer token, including
-  health checks; unauthenticated calls return HTTP 401.
-- Unknown browser origins are rejected. Data responses add
-  `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
-- The API listens on localhost, not `0.0.0.0`.
-- Never connect a private engine to the anonymous public demo tunnel.
-- Do not put the private API token in a Vercel environment variable,
-  repository, GitHub Actions log, bug report or issue.
-- If the token is leaked, stop the tunnel and restart with
-  `-RotateToken`. Rotate other affected credentials as necessary.
+## Failure modes
 
-**Important:** CORS does not replace authentication. The access token
-protects requests, and a cloudflared Quick Tunnel is still a publicly
-reachable endpoint. For long-term confidential production access, add
-Cloudflare Access, user authentication, hardened rate limiting,
-device access control, backups, monitoring and a persistent named tunnel
-before considering real financial use.
+- **Missing token:** Owner creates a Vercel access token with access to
+  Global Config and enters it once on the desktop launcher.
+- **Vercel locator is offline:** Confirm that `start-private-bridge.ps1`
+  remains running, and review
+  `.local-state/private-bridge/cloudflared.stderr.log`.
+- **Incorrect password:** Retry carefully, or ask owner to rotate it
+  with `-SetPassword`. Repeated attempts are temporarily throttled.
+- **Network interruption:** Restart the desktop launcher. It publishes
+  the new Quick Tunnel address. The frontend URL remains unchanged.
+- **No backend while desktop is off:** Vercel serves only the website.
+  The trading worker and research databases stay on your computer.
 
-## Future 24/7 live strategy machine
-
-A statically hosted website is NOT a 24/7 strategy engine. Keeping the
-browser open or scheduling requests from it is not reliable enough for
-actual trading decisions. The next system component should be a
-persistent, local engine service with a durable event/signal queue,
-health monitoring, notifications and independent scheduler.
-Do not advertise live auto-trading as implemented by this deployment.
+See [LIVE_MACHINE.md](LIVE_MACHINE.md) and
+[STRATEGY_PRIVACY.md](STRATEGY_PRIVACY.md) for operational boundaries.
