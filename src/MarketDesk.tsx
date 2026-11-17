@@ -7,9 +7,9 @@ import {
   Play, RefreshCw, RotateCcw, Search, ShieldCheck, Wallet, X,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
-import { ASSET_CLASSES, catalog as FALLBACK_ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
+import { ASSET_CLASSES, ASSETS as FALLBACK_ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
-import type { CatalogInstrument, DiscoveredInstrument } from "./arcadeApi";
+import type { DiscoveredInstrument } from "./arcadeApi";
 import { getAccount, getBacktest, getHistory, getQuote, resetAccount, sendOrder, supportsCashTrading,
   getMarketCoverage,getMarketSubscriptions,subscribeMarket,unsubscribeMarket } from "./api";
 import type { AccountResponse, BacktestResponse, HistoryResponse, QuoteResponse, MarketCoverage, MarketSubscription } from "./api";
