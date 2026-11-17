@@ -10,6 +10,28 @@
 
 A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Vercel cloud frontend, private local data
+
+The **Vercel deployment hosts only the static React website**. Your actual
+strategy versions, trained models, private market archives, broker
+records, Python backend and local AI stay on your PC. The Vercel page
+shows an illustrative synthetic chart until you explicitly connect your
+private engine using a temporary authenticated Cloudflare tunnel.
+
+The full local app still works with `start-local.ps1`. To use the Vercel
+site for your private workspace, run:
+
+```powershell
+git pull
+powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -AllowedOrigin "https://YOUR-VERCEL-URL.vercel.app"
+```
+
+Paste the tunnel HTTPS URL and the locally generated access token into
+the Vercel connection screen. No database is uploaded to Vercel.
+The browser keeps its token in memory only, and private API responses
+are never stored on Vercel. See [hybrid Vercel setup](docs/VERCEL_HYBRID.md)
+for security constraints, setup and troubleshooting.
+
 ## Keep your generated trading strategies private
 
 The engine source is public. **Real strategies generated or optimized by
