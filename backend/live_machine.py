@@ -260,8 +260,30 @@ def journal():
     with LOCK,db() as conn:
         rows=_rows(conn,"SELECT * FROM fills ORDER BY executed_at ASC, created_at ASC")
         positions,realized,by_currency=_positions(rows)
+        linked=_rows(conn,"SELECT id,asset_id,side,price_reference,suggested_notional,"
+                          "created_at,expires_at,status FROM signals WHERE id IN "
+                          "(SELECT DISTINCT signal_id FROM fills WHERE signal_id IS NOT NULL)")
+    by_id={s["id"]:s for s in linked}
+    reviews=[]
+    for f in rows:
+        source=by_id.get(f["signal_id"])
+        if not source:continue
+        executed=datetime.fromisoformat(f["executed_at"])
+        reviews.append({
+            "fill_id":f["id"],"signal_id":source["id"],"asset_id":f["asset_id"],
+            "side":f["side"],"reference_price":source["price_reference"],
+            "actual_price":f["price"],"price_deviation_pct":
+                (f["price"]/source["price_reference"]-1)*100,
+            "execution_delay_hours":
+                (executed-datetime.fromisoformat(source["created_at"])).total_seconds()/3600,
+            "after_signal_expiry":executed>datetime.fromisoformat(source["expires_at"]),
+            "different_asset_or_side":f["asset_id"]!=source["asset_id"] or f["side"]!=source["side"],
+            "suggested_notional":source["suggested_notional"],
+            "actual_notional":f["quantity"]*f["price"],
+        })
     return {"fills":list(reversed(rows)),"positions":positions,
             "realized_pnl":realized,"realized_by_currency":by_currency,
+            "execution_reviews":list(reversed(reviews)),
             "note":"Confirmed manual executions only; separate currencies, no price marks or broker reconciliation."}
 
 def record_fill(data):
