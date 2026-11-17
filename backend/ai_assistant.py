@@ -24,6 +24,12 @@ def ollama_timeout_seconds():
         return max(60, min(600, int(os.environ.get("TRADING_SIM_AI_TIMEOUT_SECONDS", "240"))))
     except ValueError:
         return 240
+def local_output_token_limit():
+    try:
+        return max(1024, min(16384, int(os.environ.get("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "8192"))))
+    except ValueError:
+        return 8192
+
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 LLAMA_CPP_MODELS_URL = "http://127.0.0.1:8081/v1/models"
 LLAMA_CPP_CHAT_URL = "http://127.0.0.1:8081/v1/chat/completions"
@@ -264,8 +270,7 @@ def call_model(system: str, user: str) -> str:
             with httpx.Client(timeout=timeout,trust_env=False) as client:
                 reply=client.post(LLAMA_CPP_CHAT_URL,json={
                     "model":config["model"],"stream":False,"temperature":0.2,
-                    "max_tokens":max(1024,min(16384,int(os.environ.get(
-                        "TRADING_SIM_AI_MAX_OUTPUT_TOKENS","8192")))),
+                    "max_tokens":local_output_token_limit(),
                     "messages":[{"role":"system","content":system},
                                 {"role":"user","content":user}],
                 })
