@@ -25,6 +25,8 @@ def ollama_timeout_seconds():
     except ValueError:
         return 240
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+LLAMA_CPP_MODELS_URL = "http://127.0.0.1:8081/v1/models"
+LLAMA_CPP_CHAT_URL = "http://127.0.0.1:8081/v1/chat/completions"
 OLLAMA_LOAD_URL = "http://127.0.0.1:11434/api/generate"
 OLLAMA_KEEP_ALIVE = "30m"
 _WARM_LOCK = Lock()
@@ -71,18 +73,21 @@ PROB_UP(h) is a historical GBM modeled probability (0-100%), not advance knowled
 
 def configuration():
     provider = os.environ.get("TRADING_SIM_AI_PROVIDER", "ollama").strip().lower()
-    if provider not in ("ollama", "openai", "off"):
+    if provider not in ("ollama", "llama_cpp", "openai", "off"):
         provider = "off"
     model = (os.environ.get("TRADING_SIM_AI_MODEL", "") or
-             ("gpt-6-luna" if provider == "openai" else "llama3.2")).strip()[:100]
+             ("gpt-6-luna" if provider == "openai" else
+              "TwIL-8B-Q4_K_M-balanced.gguf" if provider == "llama_cpp" else "llama3.2")).strip()[:100]
     has_key = bool(os.environ.get("OPENAI_API_KEY", "").strip())
-    configured = provider == "ollama" or (provider == "openai" and has_key)
+    configured = provider in ("ollama", "llama_cpp") or (provider == "openai" and has_key)
     return {
         "provider": provider, "model": model if provider != "off" else "",
         "configured": configured, "remote": provider == "openai",
         "description": (
             "Local Ollama selected. Install Ollama and pull the selected model."
             if provider == "ollama" else
+            "Local llama.cpp server selected on port 8081. Model stays on your laptop."
+            if provider == "llama_cpp" else
             "OpenAI key configured. Asking sends summarized saved-game data to OpenAI."
             if configured and provider == "openai" else
             "OPENAI_API_KEY is missing from your backend environment."
@@ -95,6 +100,18 @@ def configuration():
 def provider_status():
     """Show whether the selected local model is actually available."""
     config = configuration()
+    if config["provider"] == "llama_cpp":
+        try:
+            with httpx.Client(timeout=2,trust_env=False) as client:
+                reply=client.get(LLAMA_CPP_MODELS_URL)
+                reply.raise_for_status()
+                available=reply.json().get("data",[])
+                ready=isinstance(available,list) and bool(available)
+        except (httpx.HTTPError,ValueError,TypeError,KeyError):
+            ready=False
+        return {**config,"ready":ready,"loaded":ready,"warming":False,
+                "description":config["description"] if ready else
+                "Local llama.cpp server unavailable on 127.0.0.1:8081. Start it with the selected GGUF model."}
     if config["provider"] != "ollama":
         return {**config, "ready": config["configured"]}
     ready = False
@@ -240,6 +257,19 @@ def call_model(system: str, user: str) -> str:
                 })
                 reply.raise_for_status()
                 return str(reply.json()["message"]["content"])
+        if config["provider"] == "llama_cpp":
+            # Fixed loopback-only endpoint, no outbound AI traffic. Model
+            # weights must be installed and licensed separately by the user.
+            timeout=httpx.Timeout(connect=5.0,read=ollama_timeout_seconds(),write=15.0,pool=5.0)
+            with httpx.Client(timeout=timeout,trust_env=False) as client:
+                reply=client.post(LLAMA_CPP_CHAT_URL,json={
+                    "model":config["model"],"stream":False,"temperature":0.2,
+                    "max_tokens":1600,
+                    "messages":[{"role":"system","content":system},
+                                {"role":"user","content":user}],
+                })
+                reply.raise_for_status()
+                return str(reply.json()["choices"][0]["message"]["content"])
         with httpx.Client(timeout=45) as client:
             reply = client.post(OPENAI_URL, headers={
                 "Authorization": "Bearer " + os.environ["OPENAI_API_KEY"].strip(),
@@ -281,7 +311,11 @@ def call_model(system: str, user: str) -> str:
 
 
 def parse_answer(raw):
-    candidate = raw.strip()
+    # TwIL reasoning-enabled chat templates emit a <think> preamble. Never
+    # display internal reasoning or parse it as executable strategy syntax.
+    candidate = re.sub(r"^\\s*<think>.*?</think>\\s*", "", raw, flags=re.S).strip()
+    if candidate.startswith("<think>"):
+        raise HTTPException(502,detail="Local model produced incomplete reasoning; no recommendation returned.")
     fence = chr(96) * 3
     if candidate.startswith(fence):
         candidate = re.sub(r"^" + fence + r"[a-z]*\s*|\s*" + fence + r"$",
@@ -290,7 +324,7 @@ def parse_answer(raw):
         payload = json.loads(candidate)
     except (ValueError, TypeError):
         # Never extract executable rules from unstructured model output.
-        return raw.strip()[:MAX_ANSWER], None
+        return candidate[:MAX_ANSWER], None
     if not isinstance(payload, dict):
         raise HTTPException(502, detail="AI output is not an answer object.")
     answer = str(payload.get("answer") or "").strip()[:MAX_ANSWER]
