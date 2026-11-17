@@ -61,7 +61,7 @@ if (-not (Test-Path $python)) { throw "Python environment missing. Run start-loc
 # Only parse allowlisted environment variables, never run arbitrary .env code.
 # The worker does not require a cloud service or a broker API key.
 $envFile=Join-Path $root ".env"
-$allowed='^(TRADING_SIM_DISCORD_WEBHOOK|TRADING_SIM_SMTP_HOST|TRADING_SIM_SMTP_PORT|TRADING_SIM_SMTP_USER|TRADING_SIM_SMTP_PASSWORD|TRADING_SIM_EMAIL_TO|TRADING_SIM_EMAIL_FROM)\s*=\s*(.*)$'
+$allowed='^(TRADING_SIM_DISCORD_WEBHOOK|TRADING_SIM_SMTP_HOST|TRADING_SIM_SMTP_PORT|TRADING_SIM_SMTP_USER|TRADING_SIM_SMTP_PASSWORD|TRADING_SIM_EMAIL_TO|TRADING_SIM_EMAIL_FROM|TRADING_SIM_IMESSAGE_SERVER_URL|TRADING_SIM_IMESSAGE_PASSWORD|TRADING_SIM_IMESSAGE_CHAT_GUID|TRADING_SIM_IMESSAGE_INCLUDE_DETAILS)\s*=\s*(.*)$'
 if (Test-Path $envFile) {
     foreach ($line in Get-Content $envFile -Encoding UTF8) {
         if ($line -match $allowed) {
