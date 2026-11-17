@@ -49,3 +49,18 @@ jobs:
             sleep 1
           done
           node scripts/vercel-frontend-smoke.mjs
+
+      - name: Verify localhost development never requests the cloud password
+        env:
+          VITE_CLOUD_FRONTEND: '1'
+          VITE_PUBLIC_DEMO: '0'
+        run: |
+          # Even with the cloud flag inherited, DEV builds must use localhost.
+          node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5173 --strictPort > /tmp/local-vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill $VITE_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/local-no-auth-smoke.mjs
