@@ -18,4 +18,10 @@ if (Test-Path $envPath) {
         }
     }
 }
+# Only this loopback-bound development process bypasses remote authentication.
+# The private Cloudflare bridge starts a separate process with independent
+# authorization settings and must continue requiring login.
+$env:TRADING_SIM_PRIVATE_BRIDGE = "0"
+$env:TRADING_SIM_PUBLIC_DEMO = "0"
+Write-Host "[local] FastAPI bound to 127.0.0.1:8000. No local login required." -ForegroundColor Cyan
 & $python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
