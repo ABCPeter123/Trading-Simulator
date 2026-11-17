@@ -120,3 +120,100 @@ def test_invalid_targets_rejected(workspace,monkeypatch,bad):
     monkeypatch.setenv("TRADING_SIM_EMAIL_TO",bad)
     with pytest.raises(ValueError):
         notices._email_targets()
+
+
+def test_gmail_falls_back_from_disconnected_ssl_to_starttls_before_login(workspace,monkeypatch):
+    calls=[]
+    class FailedSSL:
+        def __init__(self,*args,**kwargs):
+            calls.append(("ssl_connect",args[1]))
+            raise __import__("smtplib").SMTPServerDisconnected("fake server drop")
+    class FakeSTARTTLS:
+        def __init__(self,*args,**kwargs):
+            calls.append(("starttls_connect",args[1]))
+        def starttls(self,context):
+            calls.append(("tls",True))
+        def login(self,username,password):
+            calls.append(("login",password))
+        def send_message(self,msg,to_addrs):
+            calls.append(("send",tuple(to_addrs)))
+            return {}
+        def close(self):
+            calls.append(("close",True))
+    monkeypatch.setattr(notices.smtplib,"SMTP_SSL",FailedSSL)
+    monkeypatch.setattr(notices.smtplib,"SMTP",FakeSTARTTLS)
+    notices._send_email("Synthetic","Data")
+    assert calls[0]==("ssl_connect",465)
+    assert ("starttls_connect",587) in calls
+    assert ("tls",True) in calls
+    assert ("send",("first@example.invalid","second@example.invalid")) in calls
+
+
+def test_smtp_authentication_failure_does_not_try_other_port(workspace,monkeypatch):
+    calls=[]
+    class Rejected:
+        def __init__(self,*args,**kwargs):
+            calls.append("connect")
+        def login(self,username,password):
+            calls.append("login")
+            raise __import__("smtplib").SMTPAuthenticationError(535,b"mocked-secret-never-log")
+        def close(self):
+            calls.append("close")
+    monkeypatch.setattr(notices.smtplib,"SMTP_SSL",Rejected)
+    monkeypatch.setattr(notices.smtplib,"SMTP",lambda *args,**kwargs:
+                        pytest.fail("Must not retry authentication failure"))
+    with pytest.raises(notices.SMTPDeliveryFailure) as error:
+        notices._send_email("Synthetic","Data")
+    assert error.value.stage=="authenticate"
+    assert error.value.port==465
+    assert "mocked-secret" not in str(error.value)
+    assert calls==["connect","login","close"]
+
+
+def test_no_resend_or_false_failure_after_successful_send(workspace,monkeypatch):
+    sends=[]
+    class SuccessThenQuitWouldFail:
+        def __init__(self,*args,**kwargs):pass
+        def login(self,username,password):pass
+        def send_message(self,msg,to_addrs):
+            sends.append(True)
+            return {}
+        def close(self):
+            raise __import__("smtplib").SMTPServerDisconnected("fake QUIT failure")
+    monkeypatch.setattr(notices.smtplib,"SMTP_SSL",SuccessThenQuitWouldFail)
+    monkeypatch.setattr(notices.smtplib,"SMTP",lambda *a,**k:
+                        pytest.fail("Must not send again"))
+    notices._send_email("Synthetic","Data")
+    assert len(sends)==1
+
+
+def test_no_fallback_after_delivery_stage_disconnection(workspace,monkeypatch):
+    sends=[]
+    class LostDeliveryReply:
+        def __init__(self,*args,**kwargs):pass
+        def login(self,username,password):pass
+        def send_message(self,msg,to_addrs):
+            sends.append(True)
+            raise __import__("smtplib").SMTPServerDisconnected("could have been accepted")
+        def close(self):pass
+    monkeypatch.setattr(notices.smtplib,"SMTP_SSL",LostDeliveryReply)
+    monkeypatch.setattr(notices.smtplib,"SMTP",lambda *a,**k:
+                        pytest.fail("Never retry after DATA could be accepted"))
+    with pytest.raises(notices.SMTPDeliveryFailure) as error:
+        notices._send_email("Synthetic","Data")
+    assert error.value.stage=="deliver"
+    assert sends==[True]
+
+
+def test_gmail_app_password_with_visual_spaces_is_normalized_only_for_sixteen_characters(workspace,monkeypatch):
+    captured=[]
+    class Fake:
+        def __init__(self,*args,**kwargs):pass
+        def login(self,user,password):
+            captured.append(password)
+        def send_message(self,msg,to_addrs):return {}
+        def close(self):pass
+    monkeypatch.setattr(notices.smtplib,"SMTP_SSL",Fake)
+    monkeypatch.setenv("TRADING_SIM_SMTP_PASSWORD","abcd efgh ijkl mnop")
+    notices._send_email("Synthetic","Data")
+    assert captured==["abcdefghijklmnop"]
