@@ -29,6 +29,7 @@ class DeployBody(BaseModel):
     max_allocation_pct:float=Field(default=10,gt=0,le=25)
     max_realized_loss_pct:float=Field(default=5,ge=0.5,le=25)
     max_daily_signals:int=Field(default=4,ge=1,le=20)
+    resolution:Literal["1d","1h","15m"]="1d"
 
 class StateBody(BaseModel):
     state:Literal["paper","live-monitor","paused","retired"]
