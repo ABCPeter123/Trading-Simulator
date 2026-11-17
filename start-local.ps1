@@ -127,8 +127,7 @@ function Test-LocalPort([int]$Port) {
     }
 }
 
-# Start long-running services without opening four separate console windows.
-# Child output stays in ignored .local-state/logs for diagnosis.
+# Launch local services quietly and write diagnostics only to Git-ignored local logs.
 $logsDir = Join-Path $stateDir "logs"
 if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir | Out-Null }
 $servicesPath = Join-Path $stateDir "local-services.json"
@@ -144,12 +143,10 @@ if (Test-Path $servicesPath) {
     }
 }
 function Start-LocalBackground([string]$Name,[string]$Script,[string]$ExtraArgs = "") {
-    $args = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$Script`""
+    $args = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + ('"' + $Script + '"')
     if ($ExtraArgs) { $args += " $ExtraArgs" }
     $stdout = Join-Path $logsDir "$Name.out.log"
     $stderr = Join-Path $logsDir "$Name.err.log"
-    # Clear old logs before launching, because Start-Process cannot redirect
-    # to a file still opened by a previously running process.
     $started = Start-Process -FilePath "powershell.exe" -WorkingDirectory $root `
         -ArgumentList $args -WindowStyle Hidden `
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
@@ -162,13 +159,18 @@ function Start-LocalBackground([string]$Name,[string]$Script,[string]$ExtraArgs 
     Write-Host "[$Name] Started in background (PID $($started.Id)). Logs: .local-state/logs/$Name.*.log" -ForegroundColor Green
 }
 
-# Only the intended AI provider is allowed to auto-start local inference.
-# Keep the router bound to loopback; never expose an unauthenticated model on LAN.
+# Detect selected local AI provider without executing any private config.
 $aiProvider = "llama_cpp"
 $envPath = Join-Path $root ".env"
 if (Test-Path $envPath) {
     foreach ($line in Get-Content -LiteralPath $envPath -Encoding UTF8) {
-        if ($line -match '^\s*TRADING_SIM_AI_PROVIDER\s*=\s*(.+?)\s*
+        if ($line -match '^\s*TRADING_SIM_AI_PROVIDER\s*=\s*(.+?)\s*$') {
+            $aiProvider = $Matches[1].Trim().Trim('"').Trim("'").ToLowerInvariant()
+        }
+    }
+}
+
+if (Test-LocalPort 8000) {
     # Never silently proxy the password-free local frontend into a protected
     # private-bridge API or an unrelated application occupying this port.
     try {
@@ -201,23 +203,27 @@ if (Test-LocalPort 5173) {
     }
 } else {
     $script = Join-Path $root "scripts\run-frontend.ps1"
-    Start-LocalBackground "frontend" $script $(if ($Mobile) { "-Lan" } else { "" })
+    if ($Mobile) {
+        Start-LocalBackground "frontend" $script "-Lan"
+    } else {
+        Start-LocalBackground "frontend" $script
+    }
 }
-# Optionally launch the local GGUF router, if it is not already running.
-# A missing llama-server executable never prevents the rest of the app starting.
+# Reuse a manually started router, or launch it silently if GGUFs are installed.
+# This server is always loopback-only. It must never be exposed publicly.
 if ($aiProvider -eq "llama_cpp") {
     if (Test-LocalPort 8081) {
-        Write-Host "[ai] Reusing existing llama.cpp router on 127.0.0.1:8081." -ForegroundColor Green
+        Write-Host "[ai] Reusing llama.cpp router on 127.0.0.1:8081." -ForegroundColor Green
     } elseif ((Get-Command llama-server -ErrorAction SilentlyContinue) -and
-              (Test-Path (Join-Path $root "models\\private"))) {
-        $modelFiles = @(Get-ChildItem -LiteralPath (Join-Path $root "models\\private") -Filter *.gguf -File -ErrorAction SilentlyContinue)
+              (Test-Path (Join-Path $root "models\private"))) {
+        $modelFiles = @(Get-ChildItem -LiteralPath (Join-Path $root "models\private") -Filter *.gguf -File -ErrorAction SilentlyContinue)
         if ($modelFiles.Count -gt 0) {
-            Start-LocalBackground "ai" (Join-Path $root "scripts\\run-local-ai.ps1")
+            Start-LocalBackground "ai" (Join-Path $root "scripts\run-local-ai.ps1")
         } else {
-            Write-Host "[ai] No local GGUF models found. Download TwIL and Qwen into models/private." -ForegroundColor Yellow
+            Write-Host "[ai] No GGUF models in models/private. Install TwIL and Qwen to enable AI." -ForegroundColor Yellow
         }
     } else {
-        Write-Host "[ai] Install llama.cpp and place GGUF models in models/private to start AI automatically." -ForegroundColor Yellow
+        Write-Host "[ai] llama.cpp or local GGUF models are missing. Set up your models before using AI." -ForegroundColor Yellow
     }
 }
 
@@ -265,113 +271,6 @@ if ($CompareVercel) {
     } else {
         $baselineScript = Join-Path $root "scripts\start-vercel-baseline.ps1"
         Start-LocalBackground "baseline" $baselineScript
-    }
-    Write-Host "[baseline] Published source: http://127.0.0.1:5174" -ForegroundColor Cyan
-}
-
-Write-Host "[ready] PC browser: http://127.0.0.1:5173" -ForegroundColor Cyan
-if ($mobileFrontendReady) {
-    # Suggest private IPv4 addresses; the user picks their Wi-Fi adapter.
-    $privateIps = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.IPAddress -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' } |
-        Select-Object -ExpandProperty IPAddress -Unique)
-    foreach ($ip in $privateIps) {
-        Write-Host "[mobile] On the same Wi-Fi, open http://$($ip):5173" -ForegroundColor Cyan
-    }
-    if ($privateIps.Count -eq 0) {
-        Write-Host "[mobile] Find your PC's IPv4 address with ipconfig, then open http://<PC-IP>:5173." -ForegroundColor Yellow
-    }
-    Write-Host "[mobile] Trusted private network only. The development server has no user authentication." -ForegroundColor Yellow
-    Write-Host "[mobile] If your phone cannot connect, allow Node.js through Windows Firewall on Private networks." -ForegroundColor Yellow
-}
-if (-not $NoBrowser) {
-    Start-Process "http://127.0.0.1:5173"
-}
-) {
-            $aiProvider = $Matches[1].Trim().Trim('"').Trim("'").ToLowerInvariant()
-        }
-    }
-}
-
-if (Test-LocalPort 8000) {
-    # Never silently proxy the password-free local frontend into a protected
-    # private-bridge API or an unrelated application occupying this port.
-    try {
-        $health = Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 3 -ErrorAction Stop
-    } catch {
-        throw "Port 8000 is occupied but a password-free local API could not be verified. Stop the other process and restart start-local.ps1."
-    }
-    if ($health.mode -ne "local") {
-        throw "Port 8000 is serving '$($health.mode)' instead of local mode. Stop the private bridge or conflicting process before starting password-free local development."
-    }
-    Write-Host "[run] Reusing verified password-free local API on port 8000." -ForegroundColor Green
-} else {
-    $script = Join-Path $root "scripts\run-backend.ps1"
-    Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList "-NoExit -ExecutionPolicy Bypass -File `"$script`""
-    Write-Host "[run] Started backend in another PowerShell window." -ForegroundColor Green
-}
-$mobileFrontendReady = $Mobile
-if (Test-LocalPort 5173) {
-    Write-Host "[run] Port 5173 is already in use. Not starting a duplicate frontend." -ForegroundColor Yellow
-    if ($Mobile) {
-        $mobileFrontendReady = $false
-        Write-Host "[mobile] Stop the existing frontend process and rerun with -Mobile to enable LAN access." -ForegroundColor Yellow
-    }
-} else {
-    $script = Join-Path $root "scripts\run-frontend.ps1"
-    $frontendArgs = "-NoExit -ExecutionPolicy Bypass -File `"$script`""
-    if ($Mobile) { $frontendArgs += " -Lan" }
-    Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList $frontendArgs
-    Write-Host "[run] Started frontend in another PowerShell window." -ForegroundColor Green
-}
-# Incremental market data collector runs locally. A second start-local.ps1
-# invocation must not duplicate the existing polling process.
-try {
-    $ingestWorkers = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' or Name='pythonw.exe'" -ErrorAction Stop |
-        Where-Object { $_.CommandLine -match 'backend[.]market_ingest_worker' })
-    if ($ingestWorkers.Count -eq 0) {
-        $marketScript = Join-Path $root "scripts\run-market-ingest-worker.ps1"
-        Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList ("-NoExit -ExecutionPolicy Bypass -File " + ('"' + $marketScript + '"'))
-        Write-Host "[market] Local incremental data collector started." -ForegroundColor Green
-    } else {
-        Write-Host "[market] Reusing existing incremental data collector." -ForegroundColor Green
-    }
-} catch {
-    Write-Host "[market] Could not inspect collector processes; start scripts\run-market-ingest-worker.ps1 manually." -ForegroundColor Yellow
-}
-
-# Portfolio research is a durable laptop process, not a browser action.
-# Start a single consumer for local development, reusing a worker already
-# started by the private bridge when present.
-if (-not $NoResearchWorker) {
-    $foundWorker = $false
-    try {
-        $existingWorkers = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' or Name='pythonw.exe'" -ErrorAction Stop |
-            Where-Object { $_.CommandLine -match 'backend[.]research_worker' })
-        $foundWorker = $existingWorkers.Count -gt 0
-    } catch {
-        Write-Host "[research] Unable to inspect existing worker processes; start manually if queue remains idle." -ForegroundColor Yellow
-        $foundWorker = $true
-    }
-    if ($foundWorker) {
-        Write-Host "[research] Existing laptop portfolio worker reused." -ForegroundColor Green
-    } else {
-        $researchScript = Join-Path $root "scripts\run-research-worker.ps1"
-        Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList "-NoExit -ExecutionPolicy Bypass -File `"$researchScript`""
-        Write-Host "[research] Started background research queue worker in another PowerShell window." -ForegroundColor Green
-    }
-}
-
-if ($CompareVercel) {
-    # Keep the real deployed source on a separate loopback port while the
-    # evolving main branch stays on 5173. Never reset or deploy anything.
-    if (Test-LocalPort 5174) {
-        Write-Host "[baseline] Port 5174 is in use. Reusing the existing listener; verify it is your baseline preview." -ForegroundColor Yellow
-    } else {
-        $baselineScript = Join-Path $root "scripts\start-vercel-baseline.ps1"
-        $baselineArgs = "-NoExit -NoProfile -ExecutionPolicy Bypass -File " + ('"' + $baselineScript + '"')
-        Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList $baselineArgs
-        Write-Host "[baseline] Starting the exact deployed Vercel source in a separate PowerShell terminal." -ForegroundColor Green
     }
     Write-Host "[baseline] Published source: http://127.0.0.1:5174" -ForegroundColor Cyan
 }
