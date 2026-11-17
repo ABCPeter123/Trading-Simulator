@@ -3,6 +3,7 @@ import {Activity,BarChart3,BookOpen,CheckCircle2,RefreshCw,ShieldCheck} from "lu
 import {useI18n} from "./i18n";
 import {request} from "./api";
 import "./strategyDiscovery.css";
+import PortfolioDiscovery from "./PortfolioDiscovery";
 
 interface CurvePoint {time:number;value:number}
 interface Metric {
@@ -66,7 +67,7 @@ function Stats({title,values}:{title:string;values:Metric}){
   </section>;
 }
 
-export default function StrategyDiscovery(){
+function SingleAssetDiscovery(){
   const {t}=useI18n();
   const [asset,setAsset]=useState("spy");
   const [drawdown,setDrawdown]=useState("15");
@@ -188,4 +189,18 @@ export default function StrategyDiscovery(){
       </div>
     </div>
   </main>;
+}
+
+export default function StrategyDiscovery(){
+  const {t}=useI18n();
+  const [mode,setMode]=useState<"portfolio"|"legacy">("portfolio");
+  return <section className="disc-workspace">
+    <nav className="pd-switch" aria-label={t("Research scope")}>
+      <button type="button" aria-current={mode==="portfolio"?"page":undefined}
+        onClick={()=>setMode("portfolio")}>{t("Portfolio research, multi-asset")}</button>
+      <button type="button" aria-current={mode==="legacy"?"page":undefined}
+        onClick={()=>setMode("legacy")}>{t("Single-asset SMA, legacy")}</button>
+    </nav>
+    {mode==="portfolio"?<main className="disc-shell"><PortfolioDiscovery/></main>:<SingleAssetDiscovery/>}
+  </section>;
 }
