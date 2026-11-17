@@ -23,7 +23,10 @@ function Summary({label,value,detail}:{label:string;value:string|number;detail?:
   return <article className="ops-summary"><span>{label}</span><strong>{value}</strong>{detail&&<small>{detail}</small>}</article>;
 }
 
-export default function LiveOperations({section}:{section:OperationsSection}){
+export default function LiveOperations({section,initialSignal,onRecordSignal,onConsumed}:{
+  section:OperationsSection;initialSignal?:Signal|null;
+  onRecordSignal?:(signal:Signal)=>void;onConsumed?:()=>void;
+}){
   const {t}=useI18n();
   const [status,setStatus]=useState<MachineStatus|null>(null);
   const [deployments,setDeployments]=useState<Deployment[]>([]);
@@ -80,6 +83,7 @@ export default function LiveOperations({section}:{section:OperationsSection}){
   }
   const pending=signals.filter(s=>s.status==="pending"||s.status==="acknowledged");
   function prefill(signal:Signal){
+    if(section!=="journal"&&onRecordSignal){onRecordSignal(signal);return;}
     if(new Date(signal.expires_at).getTime()<Date.now()){setError(t("Signal expired. Revalidate before execution."));return;}
     const notional=signal.suggested_notional??0;
     setEditing(null);
@@ -88,6 +92,12 @@ export default function LiveOperations({section}:{section:OperationsSection}){
       price:signal.price_reference,fee:0,currency:"USD",executed_at:nowISO(),broker_ref:"",notes:""});
     setMessage(t("Review all broker execution fields before saving."));
   }
+  useEffect(()=>{
+    if(section==="journal"&&initialSignal){
+      prefill(initialSignal);
+      onConsumed?.();
+    }
+  },[section,initialSignal?.id]);
   function edit(item:ConfirmedFill){
     setEditing(item.id);
     setDraft({signal_id:item.signal_id,asset_id:item.asset_id,side:item.side,quantity:item.quantity,
@@ -126,7 +136,7 @@ export default function LiveOperations({section}:{section:OperationsSection}){
       <Summary label={t("Active strategies")} value={status?.active_deployments??"–"}/>
       <Summary label={t("Pending signals")} value={status?.pending_signals??"–"}/>
       <Summary label={t("Critical alerts")} value={status?.critical_alerts??"–"}/>
-      <Summary label={t("Confirmed realized P&L")} value={journal?fmt(journal.realized_pnl):"–"} detail={t("Excludes unrealized positions and FX")}/>
+      <Summary label={t("Confirmed realized P&L")} value={journal?(journal.realized_pnl===null?t("Multiple currencies"):fmt(journal.realized_pnl)):"–"} detail={t("Excludes unrealized positions and FX")}/>
     </div>}
     {section==="dashboard"&&<div className="ops-grid">
       <section className="ops-card">
@@ -150,7 +160,7 @@ export default function LiveOperations({section}:{section:OperationsSection}){
         <h2><Wallet size={18}/>{t("Confirmed positions")}</h2>
         <p className="ops-muted">{t("Actual manually recorded fills only. Prices are not marked to market here.")}</p>
         <div className="ops-table-wrap"><table><thead><tr><th>{t("Asset")}</th><th>{t("Quantity")}</th><th>{t("Average cost")}</th><th>{t("Realized P&L")}</th></tr></thead>
-          <tbody>{(journal?.positions??[]).map(p=><tr key={p.asset_id}><td>{p.asset_id.toUpperCase()}</td><td>{fmt(p.quantity)}</td><td>{fmt(p.average_cost)}</td><td>{fmt(p.realized_pnl)}</td></tr>)}</tbody></table></div>
+          <tbody>{(journal?.positions??[]).map(p=><tr key={p.asset_id}><td>{p.asset_id.toUpperCase()} ({p.currency})</td><td>{fmt(p.quantity)}</td><td>{fmt(p.average_cost)}</td><td>{fmt(p.realized_pnl)}</td></tr>)}</tbody></table></div>
       </section>
     </div>}
     {section==="machine"&&<div className="ops-grid">
@@ -248,9 +258,10 @@ export default function LiveOperations({section}:{section:OperationsSection}){
       <section className="ops-card">
         <h2><Wallet size={18}/>{t("Confirmed portfolio summary")}</h2>
         <div className="ops-line"><span>{t("Confirmed fills")}</span><strong>{journal?.fills.length??0}</strong></div>
-        <div className="ops-line"><span>{t("Realized P&L")}</span><strong>{fmt(journal?.realized_pnl??0)}</strong></div>
+        <div className="ops-line"><span>{t("Realized P&L")}</span><strong>{journal?.realized_pnl===null?t("Multiple currencies"):fmt(journal?.realized_pnl??0)}</strong></div>
         <p className="ops-muted">{t("No brokerage connection. Cost basis is weighted-average, long-only, without FX conversion or unrealized market marks. Keep currencies separate.")}</p>
-        {(journal?.positions??[]).filter(p=>p.quantity>0).map(p=><div key={p.asset_id} className="ops-line"><span>{p.asset_id.toUpperCase()}</span><strong>{fmt(p.quantity)} @ {fmt(p.average_cost)}</strong></div>)}
+        {Object.entries(journal?.realized_by_currency??{}).map(([currency,value])=><div className="ops-line" key={currency}><span>{currency} {t("Realized P&L")}</span><strong>{fmt(value)}</strong></div>)}
+        {(journal?.positions??[]).filter(p=>p.quantity>0).map(p=><div key={p.asset_id} className="ops-line"><span>{p.asset_id.toUpperCase()} ({p.currency})</span><strong>{fmt(p.quantity)} @ {fmt(p.average_cost)}</strong></div>)}
       </section>
       <section className="ops-card ops-wide">
         <h2>{t("Permanent execution journal")}</h2>
