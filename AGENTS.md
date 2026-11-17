@@ -14,6 +14,23 @@ local storage and independently synthetic examples only. Inspect every
 staged change before committing, and never copy private trading logic into
 a public fixture or documentation.
 
+## Mandatory portfolio-first research direction
+
+**The product's trading strategy is a diversified portfolio of instruments,
+not an isolated single-symbol strategy.** New research, model selection,
+backtesting, risk and notification workflows must analyze cross-asset
+allocations, shared cash, correlations, concentration, FX and asset-class
+exposures. A single-asset study is a diagnostic or a backwards-compatible
+subworkflow, not the system's default objective. Preserve historical data,
+saved rules, filled orders, and the private/user-generated strategy boundary.
+
+The initial USD portfolio model comparison is implemented in
+`backend/portfolio_research.py`, shown in Strategy Discovery with separate
+Performance, Allocation and Executions tabs. Future extensions need robust
+CAD/USD conversion, fund look-through, explicit broker execution assumptions,
+rolling walk-forward evaluation and cross-asset live deployment approval.
+See [portfolio research](docs/PORTFOLIO_RESEARCH.md).
+
 ## Mission
 
 Develop a personal, professional quantitative trading platform that:
