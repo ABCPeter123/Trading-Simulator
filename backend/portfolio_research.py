@@ -293,7 +293,8 @@ def _correlations(symbols, market, end):
 
 
 def compare(symbols:list[str], max_drawdown_pct:float=25.,
-            max_position_pct:float=35., data=None):
+            max_position_pct:float=35., data=None, run_id=None,
+            progress=None, cancelled=None):
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
         raise HTTPException(403,detail="Owner portfolio research is unavailable in public demo.")
     if not 1<=max_drawdown_pct<=50 or not math.isfinite(max_drawdown_pct):
@@ -301,16 +302,37 @@ def compare(symbols:list[str], max_drawdown_pct:float=25.,
     if not 5<=max_position_pct<=50 or not math.isfinite(max_position_pct):
         raise HTTPException(422,detail="Maximum single-position weight must be 5-50%.")
     symbols=_validate_basket(symbols)
+    if run_id is not None:
+        # A queue job ID doubles as the saved run ID, making a crash after
+        # persistence but before acknowledgement safely recoverable.
+        if not isinstance(run_id,str) or len(run_id)>80:
+            raise HTTPException(422,detail="Invalid private research run identifier.")
+        try:
+            return load_run(run_id)
+        except HTTPException as exc:
+            if exc.status_code!=404:raise
+    def step(pct,stage):
+        if cancelled is not None and cancelled():
+            from .research_queue import JobCancelled
+            raise JobCancelled()
+        if progress is not None:
+            progress(pct,stage)
+    step(2,"Loading market data")
     if data is None:
-        histories = {s:history(s,"5Y") for s in symbols}
+        histories={}
+        for ix,symbol in enumerate(symbols):
+            step(3+int(38*ix/len(symbols)),"Loading historical market data "+str(ix+1)+"/"+str(len(symbols)))
+            histories[symbol]=history(symbol,"5Y")
     else:
         if not isinstance(data,dict) or set(data)!=set(symbols):
             raise HTTPException(422,detail="Must provide data for every instrument.")
         histories = data
+    step(42,"Aligning historical sessions")
     days,market,metadata,sources=_prepare(symbols,histories)
     n=len(days);train_end=int(n*.6);test_start=int(n*.8)
     candidates=[]
-    for model in MODELS:
+    for ix,model in enumerate(MODELS):
+        step(45+ix*7,"Evaluating portfolio model "+str(ix+1)+"/"+str(len(MODELS)))
         train=_segment(model,symbols,market,metadata,WARMUP,train_end,max_position_pct/100)
         valid=_segment(model,symbols,market,metadata,train_end,test_start,max_position_pct/100)
         allowed=(abs(valid["max_drawdown_pct"])<=max_drawdown_pct
@@ -327,6 +349,7 @@ def compare(symbols:list[str], max_drawdown_pct:float=25.,
     # A single held-out evaluation is permitted once selection is frozen.
     selected=None
     if winner:
+        step(85,"Testing selected portfolio on held-out history")
         heldout=_segment(winner,symbols,market,metadata,test_start,n,max_position_pct/100)
         equal=_segment("equal_weight",symbols,market,metadata,test_start,n,max_position_pct/100)
         chosen=next(c for c in candidates if c["model"]==winner)
@@ -362,12 +385,13 @@ def compare(symbols:list[str], max_drawdown_pct:float=25.,
         "qualification_note":("One validation-qualified portfolio model selected using validation only."
                                if winner else "No portfolio model met validation drawdown and activity limits."),
     }
-    identity=str(uuid4());stamp=datetime.now(timezone.utc).isoformat()
+    step(96,"Persisting private portfolio results")
+    identity=run_id or str(uuid4());stamp=datetime.now(timezone.utc).isoformat()
     with LOCK:
         conn=_db()
         try:
             with conn:
-                conn.execute("INSERT INTO portfolio_research_runs VALUES(?,?,?,?)",
+                conn.execute("INSERT OR IGNORE INTO portfolio_research_runs VALUES(?,?,?,?)",
                              (identity,stamp,json.dumps(symbols),
                               json.dumps(record,allow_nan=False)))
         finally:
