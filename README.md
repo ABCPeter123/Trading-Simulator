@@ -19,6 +19,36 @@ A **local-first historical trading simulator with integrated paper market resear
 See [history depth](docs/HISTORY_DEPTH.md) and
 [local AI setup](docs/AI_ASSISTANT.md). No new app dependencies.
 
+## Share a live public website
+
+A temporary Cloudflare Quick Tunnel lets **anyone with the generated HTTPS
+URL** visit the running Trading Simulator from anywhere, without being on
+the same Wi-Fi or needing a Cloudflare account.
+
+On the Windows host, install the Cloudflare tunnel agent once:
+
+```powershell
+winget install -e --id Cloudflare.cloudflared
+```
+
+Open a new PowerShell terminal in the project, then run:
+
+```powershell
+git pull
+powershell -ExecutionPolicy Bypass -File .\start-public.ps1
+```
+
+Share the `https://...trycloudflare.com` URL printed by cloudflared.
+Keep the PC and tunnel window running; Ctrl+C stops the demo. The public
+copy uses **separate demo databases** and a compiled preview, leaving
+the private localhost paper account and saved strategies untouched.
+Visitors share a disposable sandbox. Ollama and paid AI are disabled for
+public visitors.
+
+See [Public tunnel setup and privacy](docs/PUBLIC_TUNNEL.md) for details
+and limitations. Quick Tunnel URLs change each time; this is not
+an always-on hosted deployment.
+
 ## Mobile and tablet support
 
 The same Trading Simulator interface adapts to phones and tablets. On small screens, use the workspace section selector to navigate replay, orders, strategy editing, analytics and trade history. Financial tables scroll inside their panels and charts resize to fit the viewport.
