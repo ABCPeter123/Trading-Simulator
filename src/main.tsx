@@ -6,6 +6,7 @@ import CloudGateway from "./CloudGateway";
 import LiveOperations from "./LiveOperations";
 import StrategyDiscovery from "./StrategyDiscovery";
 import type {OperationsSection} from "./LiveOperations";
+import type {Signal} from "./liveMachineApi";
 import {cloudFrontend, disconnectPrivateEngine, hasPrivateConnection} from "./privateConnection";
 import { I18nProvider, LanguageSwitcher, useI18n } from "./i18n";
 import "./styles.css";
@@ -36,6 +37,7 @@ function Simulator() {
   const [mode, setMode] = useState<"single" | "portfolio">("single");
   const [section,setSection]=useState<"research"|"discovery"|OperationsSection>(import.meta.env.VITE_PUBLIC_DEMO==="1"?"research":"dashboard");
   const [privateConnected,setPrivateConnected] = useState(hasPrivateConnection());
+  const [preparedSignal,setPreparedSignal] = useState<Signal|null>(null);
   if(cloudFrontend && !privateConnected) return <><CloudGateway onConnected={()=>setPrivateConnected(true)}/><LanguageSwitcher/></>;
   return <>
     {cloudFrontend && <div className="cloud-engine-bar" role="status">
