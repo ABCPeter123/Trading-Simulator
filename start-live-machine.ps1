@@ -4,6 +4,7 @@
 param(
     [switch]$Stop,
     [switch]$Once,
+    [switch]$TestIMessage,
     [switch]$SkipSetup,
     [switch]$InstallAtLogon,
     [switch]$Foreground,
@@ -71,6 +72,16 @@ if (Test-Path $envFile) {
     }
 }
 $env:TRADING_SIM_PUBLIC_DEMO="0"
+if ($TestIMessage) {
+    Write-Host "[live] Send one generic test message through your own Mac iMessage relay?" -ForegroundColor Cyan
+    $approval=Read-Host "This sends a real iMessage to your configured chat. Continue? [y/N]"
+    if ($approval -notmatch '^(y|yes)$') {
+        Write-Host "[live] iMessage test canceled. Nothing was sent." -ForegroundColor Yellow
+        exit 0
+    }
+    & $python -m backend.imessage_probe
+    exit $LASTEXITCODE
+}
 if ($Once) {
     Write-Host "[live] Running one monitoring and notification cycle..." -ForegroundColor Cyan
     & $python -m backend.live_worker --once --interval $IntervalSeconds
