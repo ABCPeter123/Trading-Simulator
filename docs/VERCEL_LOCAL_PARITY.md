@@ -63,6 +63,19 @@ The script fetches the production Git commit if necessary, then creates a
 serves on loopback only, and never changes or resets your main worktree.
 It does not deploy to Vercel.
 
+**Authentication split:** In local Vite development (`npm run dev`,
+`start-local.ps1`, or `start-local.ps1 -CompareVercel`), the Trading
+Simulator application opens directly. There is **no local password
+prompt**. The local Python backend is bound to 127.0.0.1 and explicitly
+disables private-bridge mode. Even a stale `VITE_CLOUD_FRONTEND=1`
+variable cannot show the Vercel gateway in development mode.
+
+The Vercel production build is different: it retains its
+password-protected Cloudflare private engine connection, token validation
+and server-side authorization. No hosted authentication was removed.
+The local Vite LAN option is not password protected; only use it on a
+trusted private network.
+
 Both local frontends use the existing private Python API on 127.0.0.1:8000
 for data. These **local application screens are source-parity previews**, not
 byte-for-byte copies of Vercel's minified bundle. Live Vercel requires the
