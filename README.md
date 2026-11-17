@@ -18,6 +18,40 @@
 
 A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Compare local development with the Vercel website
+
+The *actual* latest published Vercel source commit is pinned in
+[config/production-baseline.json](config/production-baseline.json). GitHub
+main includes newer unreleased work; **do not reset main to match the old
+production deployment**.
+
+Run the development application with its private backend and research worker:
+
+```powershell
+cd E:\Trading-Simulator
+git pull
+.\start-local.ps1
+```
+
+Use **http://127.0.0.1:5173** for ongoing npm/Vite development.
+
+To see the exact source of the deployed Vercel version beside it, open
+another PowerShell window and run:
+
+```powershell
+.\scripts\start-vercel-baseline.ps1
+```
+
+Use **http://127.0.0.1:5174** for the frozen Vercel-source preview.
+The preview creates a separate detached Git worktree and does not
+modify, reset, or deploy the current development application.
+Both screens use the laptop API; remote password login is intentionally
+replaced with localhost access in the local preview.
+
+Inspect the unreleased frontend changes with `npm run baseline:status`.
+See [exact baseline parity and release procedure](docs/VERCEL_LOCAL_PARITY.md).
+A new Vercel deployment requires a major milestone and explicit approval.
+
 ## Multi-asset portfolio strategy research (beta)
 
 **Portfolio-first is the default Strategy Discovery workflow.** Compare
