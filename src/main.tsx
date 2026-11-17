@@ -32,7 +32,7 @@ function Simulator() {
   return <>
     {import.meta.env.VITE_PUBLIC_DEMO === "1" &&
       <div className="public-demo-banner" role="status">
-        {t("PUBLIC DEMO · Shared sandbox. Visitors can see each other's demo sessions and changes. No real brokerage trades or private local saves.")}
+        {t("PUBLIC DEMO · Shared sandbox. Never enter your private strategy, credentials, or actual financial data. Visitors may see each other's demo sessions.")}
       </div>}
     <nav className="sim-mode-tabs" aria-label={t("Simulation mode")}>
       <span className="sim-mode-title">{t("Trading Simulator")}</span>
