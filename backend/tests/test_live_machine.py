@@ -68,6 +68,8 @@ def test_deploy_run_once_idempotence_and_risk_cap(private_workspace):
     assert s[0]["allocation_pct"]==10
     assert s[0]["suggested_notional"]==10000
     assert "WHEN " not in s[0]["rationale"]
+    assert m.status()["worker_online"] is False
+    m.run_once(now=morning(),source=source,worker_heartbeat=True)
     assert m.status()["worker_online"] is True
     m.run_once(now=morning(),source=source)
     assert len(m.signals())==1
