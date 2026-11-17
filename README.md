@@ -31,6 +31,13 @@ The project now supports a private end-to-end workflow:
 - **Operational dashboard:** six top-level workspaces organize monitoring,
   research, strategy discovery, live signals, actual trades, and incidents.
 
+**Optional iMessage alerts (beta):** The private live worker can send
+trade-review and critical-incident notifications through an owner-controlled
+Mac running BlueBubbles. Windows cannot send native iMessages directly.
+This feature is disabled unless configured in the private `.env` file,
+and generic messages are the privacy-preserving default. See
+[iMessage notifications and secure relay setup](docs/IMESSAGE_NOTIFICATIONS.md).
+
 Start the independent worker on Windows after updating:
 
 ```powershell
