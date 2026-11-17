@@ -56,7 +56,16 @@ def workspace(tmp_path,monkeypatch):
     return tmp_path
 
 
-def test_queue_survives_browser_lifecycle_and_worker_completes(workspace):
+def test_queue_survives_browser_lifecycle_and_worker_completes(workspace,monkeypatch):
+    original_compare=portfolio_research.compare
+    failure=[]
+    def capture_failure(*args,**kwargs):
+        try:
+            return original_compare(*args,**kwargs)
+        except Exception as exc:
+            failure.append(exc)
+            raise
+    monkeypatch.setattr(portfolio_research,"compare",capture_failure)
     response=CLIENT.post("/api/live/research/portfolio/jobs",
                          json={"symbols":ASSETS,"max_drawdown_pct":50})
     assert response.status_code==202,response.text
@@ -67,6 +76,8 @@ def test_queue_survives_browser_lifecycle_and_worker_completes(workspace):
     assert research_queue.DB_PATH.exists()
     # No page or API callback is needed to run the research after it queues.
     outcome=research_queue.process_one()
+    if failure:
+        raise failure[0]
     assert outcome["status"]=="completed",outcome["error_code"]
     assert outcome["progress"]==100
     assert outcome["result_run_id"]==job["id"]
