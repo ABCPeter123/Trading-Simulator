@@ -4,6 +4,7 @@ import TradingArcade from "./TradingArcade";
 import PortfolioArcade from "./PortfolioArcade";
 import CloudGateway from "./CloudGateway";
 import LiveOperations from "./LiveOperations";
+import StrategyDiscovery from "./StrategyDiscovery";
 import type {OperationsSection} from "./LiveOperations";
 import {cloudFrontend, disconnectPrivateEngine, hasPrivateConnection} from "./privateConnection";
 import { I18nProvider, LanguageSwitcher, useI18n } from "./i18n";
@@ -33,7 +34,7 @@ function Simulator() {
     return ()=>{cancelled=true;if(retry)clearTimeout(retry);};
   },[]);
   const [mode, setMode] = useState<"single" | "portfolio">("single");
-  const [section,setSection]=useState<"research"|OperationsSection>(import.meta.env.VITE_PUBLIC_DEMO==="1"?"research":"dashboard");
+  const [section,setSection]=useState<"research"|"discovery"|OperationsSection>(import.meta.env.VITE_PUBLIC_DEMO==="1"?"research":"dashboard");
   const [privateConnected,setPrivateConnected] = useState(hasPrivateConnection());
   if(cloudFrontend && !privateConnected) return <><CloudGateway onConnected={()=>setPrivateConnected(true)}/><LanguageSwitcher/></>;
   return <>
@@ -49,7 +50,7 @@ function Simulator() {
       </div>}
     {import.meta.env.VITE_PUBLIC_DEMO !== "1" && <nav className="ops-main-tabs" aria-label={t("Application sections")}>
       <span className="ops-tab-brand">{t("Trading Simulator")}</span>
-      {([["dashboard","Dashboard"],["research","Strategy Lab & Backtesting"],
+      {([["dashboard","Dashboard"],["research","Strategy Lab & Backtesting"],["discovery","Strategy Discovery"],
         ["machine","Live Strategy Machine"],["journal","Trade Journal"],["alerts","Alerts & Health"]] as const)
         .map(([id,label])=><button type="button" key={id} className={section===id?"active":""}
           aria-current={section===id?"page":undefined} onClick={()=>setSection(id)}>{t(label)}</button>)}
@@ -67,7 +68,7 @@ function Simulator() {
       {mode === "portfolio"
         ? <PortfolioArcade onExit={() => setMode("single")} />
         : <TradingArcade onOpenPortfolio={() => setMode("portfolio")} />}
-    </> : <LiveOperations section={section}/>}
+    </> : section==="discovery"?<StrategyDiscovery/>:<LiveOperations section={section}/>}
 
     <LanguageSwitcher/>
   </>;
