@@ -48,3 +48,31 @@ def health():
             "last_updates":[{"asset_id":x["asset_id"],"resolution":x["resolution"],
                              "last_bar":x["last_bar"],"last_success":x["last_success"],
                              "failure_code":x["failure_code"]} for x in entries]}
+
+
+@router.get("/archived/{asset_id}")
+def archived(asset_id:str,window:str=Query("1Y"),resolution:str=Query("1d")):
+    """Read recorded OHLCV bars only. Never claim they are current quotes."""
+    from datetime import datetime,timezone
+    import polars as pl
+    from .archive import archive_path
+    _private()
+    item=get_instrument(asset_id)
+    if resolution not in market_quality.SECONDS:
+        raise HTTPException(422,detail="Unknown chart interval.")
+    key=window if resolution=="1d" else f"{window}_{resolution}"
+    path=archive_path(asset_id,key)
+    if not path.exists():
+        raise HTTPException(404,detail="The selected history has not been archived yet.")
+    try:
+        rows=pl.read_parquet(path).sort("time").to_dicts()
+    except Exception as exc:
+        raise HTTPException(503,detail="Archived market history cannot be read.") from exc
+    if not rows:
+        raise HTTPException(404,detail="No recorded candles for this instrument.")
+    return {"asset_id":asset_id,"range":key,"currency":item.currency,
+            "bars":rows,"as_of":datetime.fromtimestamp(
+                int(rows[-1]["time"]),timezone.utc).isoformat(),
+            "source":"Local recorded provider OHLCV, potentially delayed",
+            "is_demo":False,"delayed_or_indicative":True,
+            "offline_cache":True,"execution_eligible":False}
