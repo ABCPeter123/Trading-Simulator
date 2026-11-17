@@ -6,6 +6,7 @@ param(
     [switch]$Once,
     [switch]$TestIMessage,
     [switch]$SendEmailReport,
+    [switch]$DiagnoseEmail,
     [switch]$SkipSetup,
     [switch]$InstallAtLogon,
     [switch]$Foreground,
@@ -73,6 +74,11 @@ if (Test-Path $envFile) {
     }
 }
 $env:TRADING_SIM_PUBLIC_DEMO="0"
+if ($DiagnoseEmail) {
+    Write-Host "[live] Test secure SMTP connection and authentication without sending an email." -ForegroundColor Cyan
+    & $python -m backend.email_report_probe --diagnose
+    exit $LASTEXITCODE
+}
 if ($SendEmailReport) {
     Write-Host "[live] Email complete private portfolio and risk report to configured .env recipients." -ForegroundColor Cyan
     $approval=Read-Host "This sends private trading information by email. Continue? [y/N]"
