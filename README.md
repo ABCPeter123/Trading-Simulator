@@ -10,6 +10,24 @@
 
 A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Keep your generated trading strategies private
+
+The engine source is public. **Real strategies generated or optimized by
+your research, deployed rules, selected parameters, signals, brokerage
+executions and private portfolio records are NOT public source code.**
+The program already saves strategy versions locally in Git-ignored
+`data/` SQLite files.
+
+New privacy checks cover generated files, databases, model weights,
+secret files and common exported strategy formats. Normal local setup
+installs a Git pre-commit privacy guard, and GitHub Actions rejects
+detected leaks in commits and pull requests.
+
+Read the mandatory [Strategy Privacy Policy](docs/STRATEGY_PRIVACY.md)
+before committing, exporting a strategy or sharing the public demo.
+Code review is still essential because automated scans cannot identify
+every possible proprietary algorithm embedded in source or prose.
+
 ## Research UI, longer history, and local AI improvements
 
 - Cleaner layouts on mobile and desktop, improved chart sizing, chart-canvas
