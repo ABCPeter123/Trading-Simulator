@@ -24,11 +24,15 @@ TUNNEL=re.compile(r"^https://[a-z0-9-]+\.trycloudflare\.com$")
 def publish(url:str):
     if not TUNNEL.fullmatch(url):
         raise ValueError("Expected a Cloudflare Quick Tunnel HTTPS origin.")
-    token=os.environ.get("TRADING_SIM_VERCEL_TOKEN","").strip()
-    if token:
-        print("[publisher] Using existing TRADING_SIM_VERCEL_TOKEN environment credential (overrides local token file).")
-    if not token and TOKEN_FILE.exists():
+    # The launcher saves an explicit, user-approved publishing token locally.
+    # Prefer it over an unrelated inherited TRADING_SIM_VERCEL_TOKEN value.
+    if TOKEN_FILE.exists():
         token=TOKEN_FILE.read_text(encoding="utf-8").strip()
+        print("[publisher] Using locally saved Vercel publishing credential.")
+    else:
+        token=os.environ.get("TRADING_SIM_VERCEL_TOKEN","").strip()
+        if token:
+            print("[publisher] Using Vercel publishing credential from environment.")
     if not token or any(c.isspace() for c in token):
         raise ValueError("Vercel access token missing from local private-bridge setup.")
     payload=json.dumps({"items":[{
