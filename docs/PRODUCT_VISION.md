@@ -265,17 +265,29 @@ isolated UI decorations or proliferation of unrelated features.
 
 ## 7. Existing features versus intended future features
 
-**Some capabilities already exist in this repository:** historical single-asset
+**Implemented research capabilities:** historical single-asset
 and multi-asset replay, simulated orders, chart indicators and strategy rules,
-saved strategy versions, performance analytics, research scenarios, bilingual
-responsive workspace, a separate paper ledger, and a local AI assistant.
+saved private strategy versions, performance analytics, stochastic scenarios,
+bilingual desktop/mobile workspace, a separate paper ledger, and local AI.
+Private Strategy Discovery now runs chronological training/validation/held-out
+tests across a small parameter grid. Candidate selection results stay in
+local Git-ignored SQLite.
 
-**The future vision must not be misrepresented as live production functionality:**
-an unattended 24/7 deployed strategy engine, durable live signal queue,
-live trade alerts, critical alert escalation, authenticated private production
-dashboard, user-confirmed real brokerage trade journal/reconciliation,
-and fully modeled leverage/shorting/hedging are requirements to build and
-validate, not existing guarantees.
+**Implemented private operations beta:** a browser-independent, persistent
+local Python worker for previous-day live market checks, versioned paper or
+human-execution monitoring deployments, idempotent recommendation records,
+risk-based allocation and realized-loss stops, critical Discord/email alert
+delivery, manual trade confirmations, audited corrections, currency-separated
+realized results and actual-versus-suggested fill deviation reports.
+The worker is only available while the owner's computer runs.
+
+**Still not production-ready:** guaranteed unattended 24/7 availability,
+validated market calendars and reliable professional live feeds, full
+multi-account reconciliation, automated brokerage execution, maintained
+short/margin/leverage and hedge accounting, advanced multi-asset risk
+constraints, full walk-forward/drift evaluation and automated incident
+recovery when the host itself is offline. These are enduring requirements,
+not claims of current functionality. See [LIVE_MACHINE.md](LIVE_MACHINE.md).
 
 ## 8. How future chats and contributors should use this file
 
