@@ -25,12 +25,15 @@ def fixture_bars(asset_id):
         price = (100 + idx * .05) if asset_id != "qqq" else (200 + idx * .12)
         if asset_id == "btcusd":
             price = 30000 + idx * 60
+        if asset_id == "usdcad":
+            price = 1.26
         # Create a cross for SPY at index 140 to trigger a bot.
         if asset_id == "spy":
             price = 100.0 if idx < 140 else (115.0 + (idx-140) * .05)
         result.append({
             "time": int(day.timestamp()), "open": price,
-            "high": price + 2, "low": price - 2,
+            "high": price + (.01 if asset_id=="usdcad" else 2),
+            "low": price - (.01 if asset_id=="usdcad" else 2),
             "close": price, "volume": 10000,
         })
     return result
