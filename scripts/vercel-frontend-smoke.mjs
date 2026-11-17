@@ -3,7 +3,7 @@ import { chromium } from "playwright";
 
 const browser=await chromium.launch({headless:true,args:["--no-sandbox"]});
 const site="http://127.0.0.1:4173";
-const remote="https://private.example.test";
+const remote="https://synthetic-fixture.trycloudflare.com";
 const token="x".repeat(64);
 const password="synthetic-private-password";
 const failures=[];
