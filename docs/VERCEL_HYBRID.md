@@ -125,11 +125,14 @@ this legacy mode is not the normal website sign-in experience.
 
 ## Failure modes
 
-- **Tunnel directory update failed:** Earlier launchers called the removed
-  Vercel `/v1/edge-config` endpoint. This has been fixed to
-  `/v1/global-config`. First run `git pull`, then restart the bridge.
-  The publisher now reports its actual HTTP status without exposing any
-  credentials. Do not recreate your password or reinstall Cloudflare.
+- **Tunnel directory update failed:** First run `git pull` and restart
+  `start-private-bridge.ps1`. The launcher now prints the exact safe
+  publishing failure reason in its final error message, even if the
+  Python subprocess error stream is hidden by PowerShell. No secrets
+  or private strategy data are included in the diagnostic. Earlier
+  launchers called the removed Vercel `/v1/edge-config` endpoint;
+  current releases use `/v1/global-config`. Do not recreate your
+  shared web password or reinstall Cloudflare.
 - **HTTP 401:** The locally saved Vercel access token is invalid or expired.
   Create a new token at https://vercel.com/account/tokens and run
   `powershell -ExecutionPolicy Bypass -File .\\start-private-bridge.ps1 -ResetVercelToken`.
