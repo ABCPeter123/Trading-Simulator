@@ -61,3 +61,21 @@ future requirements in every change summary.
 Implement changes incrementally without deleting saved simulator or strategy
 features. Refer back to the detailed requirements and phases in PRODUCT_VISION.md
 before architectural redesigns.
+
+## Current implementation checkpoint
+
+See [docs/LIVE_MACHINE.md](docs/LIVE_MACHINE.md) for the private daily
+strategy worker, historical candidate optimizer, signal queue, notifications,
+manually confirmed fills, execution attribution and explicit limitations.
+`backend/live_machine.py`, `backend/research_optimizer.py`,
+`backend/live_notifications.py` and `backend/live_routes.py` are the
+local beta workflow, not a brokerage automation system. The Windows
+`start-live-machine.ps1` worker runs independently of the website.
+
+Continue toward the full vision, including full walk-forward/regime testing,
+risk controls for leverage, short sales and hedging, broker statement
+reconciliation and audited live model drift. Do not label beta components
+production-safe or claim that stable profits can be guaranteed. Every new
+implementation must preserve the public-source/private-generated-strategy
+boundary and add tests using independently synthetic fixtures.
+
