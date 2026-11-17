@@ -37,6 +37,10 @@ their external/manual deployment sources were not modified.
 Source-control commits, PRs, unit tests, linting, UI changes and
 mock/synthetic research can proceed without a production release.
 
+The [production source parity baseline](VERCEL_LOCAL_PARITY.md) preserves the
+actual deployed Vercel revision in a separate detached worktree so local
+npm development can be compared without resetting newer changes.
+
 ## Recommended development workflow: Trading Simulator
 
 Windows PC:
