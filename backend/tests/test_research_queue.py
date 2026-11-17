@@ -67,7 +67,7 @@ def test_queue_survives_browser_lifecycle_and_worker_completes(workspace):
     assert research_queue.DB_PATH.exists()
     # No page or API callback is needed to run the research after it queues.
     outcome=research_queue.process_one()
-    assert outcome["status"]=="completed",outcome
+    assert outcome["status"]=="completed",outcome["error_code"]
     assert outcome["progress"]==100
     assert outcome["result_run_id"]==job["id"]
     detail=CLIENT.get("/api/live/research/portfolio/jobs/"+job["id"]).json()
