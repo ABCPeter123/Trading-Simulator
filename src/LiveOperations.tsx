@@ -39,6 +39,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
   const [capital,setCapital]=useState("100000");
   const [allocation,setAllocation]=useState("10");
   const [dailyLimit,setDailyLimit]=useState("4");
+  const [lossLimit,setLossLimit]=useState("5");
   const [running,setRunning]=useState(false);
   const [message,setMessage]=useState("");
   const [error,setError]=useState("");
@@ -176,10 +177,11 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
           <label>{t("Reference capital")}<input inputMode="decimal" type="number" min="100" value={capital} onChange={e=>setCapital(e.target.value)}/></label>
           <label>{t("Max allocation per signal (%)")}<input type="number" min="0.01" max="25" step=".5" value={allocation} onChange={e=>setAllocation(e.target.value)}/></label>
           <label>{t("Daily signal limit")}<input type="number" min="1" max="20" value={dailyLimit} onChange={e=>setDailyLimit(e.target.value)}/></label>
+          <label>{t("Realized-loss stop (%)")}<input type="number" min="0.5" max="25" step=".5" value={lossLimit} onChange={e=>setLossLimit(e.target.value)}/></label>
         </div>
         <button className="ops-primary" disabled={running||!selectedStrategy} onClick={()=>void mutate(
           ()=>newDeployment({strategy_id:selectedStrategy,state:"paper",capital:Number(capital),
-          max_allocation_pct:Number(allocation),max_daily_signals:Number(dailyLimit)}),
+          max_allocation_pct:Number(allocation),max_daily_signals:Number(dailyLimit),max_realized_loss_pct:Number(lossLimit)}),
           "Strategy deployed to paper signal monitoring.")}>
           {t("Deploy to paper monitoring")}</button>
         <p className="ops-muted">{t("Short selling, leverage and broker automation remain disabled until their risk models are validated.")}</p>
@@ -201,7 +203,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
         <h2>{t("Deployed strategies")}</h2>
         {!deployments.length&&<p className="ops-muted">{t("No deployed strategies yet.")}</p>}
         {deployments.map(d=><div className="ops-deployment" key={d.id}>
-          <div><strong>{d.name}</strong><small>{d.symbols.join(", ").toUpperCase()} · {t(d.state)} · {t("Last evaluation")}: {when(d.last_evaluated_at)}</small>
+          <div><strong>{d.name}</strong><small>{d.symbols.join(", ").toUpperCase()} · {t(d.state)} · {t("Last evaluation")}: {when(d.last_evaluated_at)} · {t("Loss stop")}: {d.max_realized_loss_pct}%</small>
             {d.last_error&&<small className="ops-danger">{t("Data check failed. No recommendation generated.")}</small>}</div>
           <div className="ops-action-buttons">
             {d.state!=="retired"&&<button disabled={running} onClick={()=>void mutate(
@@ -281,6 +283,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
         <h2><ShieldCheck size={18}/>{t("Safety controls")}</h2>
         <div className="ops-line"><span>{t("Automated broker orders")}</span><strong>{t("Disabled")}</strong></div>
         <div className="ops-line"><span>{t("Signal allocation limit")}</span><strong>25% {t("hard ceiling")}</strong></div>
+        <div className="ops-line"><span>{t("Realized-loss stop")}</span><strong>{t("Pause and alert")}</strong></div>
         <div className="ops-line"><span>{t("Incomplete/stale candles")}</span><strong>{t("Fail closed")}</strong></div>
         <div className="ops-line"><span>{t("Strategy changes")}</span><strong>{t("Versioned deployment")}</strong></div>
         <div className="ops-line"><span>{t("Live strategy failure")}</span><strong>{t("Alert and pause recommendation")}</strong></div>
