@@ -12,6 +12,11 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "equity": "股票",
+  "bond": "债券",
+  "commodity": "大宗商品",
+  "real estate": "房地产",
+  "crypto": "加密资产",
   "Research scope": "研究范围",
   "Portfolio research, multi-asset": "多资产组合研究",
   "Single-asset SMA, legacy": "单一资产 SMA（旧版）",
