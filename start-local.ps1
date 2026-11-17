@@ -158,6 +158,22 @@ if (Test-LocalPort 5173) {
     Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList $frontendArgs
     Write-Host "[run] Started frontend in another PowerShell window." -ForegroundColor Green
 }
+# Incremental market data collector runs locally. A second start-local.ps1
+# invocation must not duplicate the existing polling process.
+try {
+    $ingestWorkers = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' or Name='pythonw.exe'" -ErrorAction Stop |
+        Where-Object { $_.CommandLine -match 'backend[.]market_ingest_worker' })
+    if ($ingestWorkers.Count -eq 0) {
+        $marketScript = Join-Path $root "scripts\run-market-ingest-worker.ps1"
+        Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList "-NoExit -ExecutionPolicy Bypass -File " + ('"' + $marketScript + '"')
+        Write-Host "[market] Local incremental data collector started." -ForegroundColor Green
+    } else {
+        Write-Host "[market] Reusing existing incremental data collector." -ForegroundColor Green
+    }
+} catch {
+    Write-Host "[market] Could not inspect collector processes; start scripts\run-market-ingest-worker.ps1 manually." -ForegroundColor Yellow
+}
+
 # Portfolio research is a durable laptop process, not a browser action.
 # Start a single consumer for local development, reusing a worker already
 # started by the private bridge when present.
