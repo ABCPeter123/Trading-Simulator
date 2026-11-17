@@ -20,8 +20,11 @@ The project is configured for Vercel with `vercel.json`:
 - Production / Preview / Development build environment:
   `VITE_CLOUD_FRONTEND=1`
 
-GitHub integration should deploy main to the project's permanent
-`*.vercel.app` production URL. This static deployment has no database
+GitHub integration deploys main to the permanent production URL:
+
+**https://trading-simulator-pp-48b0.vercel.app**
+
+This URL hosts the frontend only. This static deployment has no database
 or Python runtime costs, subject to the account's Vercel usage and plan rules.
 
 **Do not add any `VITE_*` secrets.** Vite embeds those variables in
@@ -37,7 +40,7 @@ From your local `Trading-Simulator` checkout, run:
 
 ```powershell
 git pull
-powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -AllowedOrigin "https://YOUR-VERCEL-URL.vercel.app"
+powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -AllowedOrigin "https://trading-simulator-pp-48b0.vercel.app"
 ```
 
 Replace that example with the **exact origin shown in your browser**,
