@@ -141,6 +141,14 @@ def ingest_once(asset_id:str,resolution:str,now:datetime|None=None):
         response={"asset_id":asset_id,"range":window if resolution=="1d" else f"{window}_{resolution}",
                   "bars":bars,"is_demo":False}
         if bars:record_history(response)
+    # When a long-range daily archive is already present, apply only the
+    # newly observed daily bars to it as well. This keeps MAX/10Y/5Y charts
+    # fresh without downloading their complete history again.
+    if resolution=="1d" and bars:
+        for target_window in ("2Y","5Y","10Y","MAX"):
+            if archive_path(asset_id,target_window).exists():
+                record_history({"asset_id":asset_id,"range":target_window,
+                                "bars":bars,"is_demo":False})
     latest=max((int(b["time"]) for b in bars),default=previous)
     # The number of records returned is not the number of new bars; overlapping
     # observations may update prior data without increasing coverage.
