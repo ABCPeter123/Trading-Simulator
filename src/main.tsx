@@ -11,6 +11,7 @@ import "./polish.css";
 function Simulator() {
   const { t } = useI18n();
   useEffect(()=>{
+    if (import.meta.env.VITE_PUBLIC_DEMO === "1") return;
     // Local-only and non-blocking. Retry startup races when the Python API
     // launches after Vite, without polling or contacting a cloud service.
     let cancelled=false;
@@ -29,6 +30,10 @@ function Simulator() {
   },[]);
   const [mode, setMode] = useState<"single" | "portfolio">("single");
   return <>
+    {import.meta.env.VITE_PUBLIC_DEMO === "1" &&
+      <div className="public-demo-banner" role="status">
+        {t("PUBLIC DEMO · Shared sandbox. Visitors can see each other's demo sessions and changes. No real brokerage trades or private local saves.")}
+      </div>}
     <nav className="sim-mode-tabs" aria-label={t("Simulation mode")}>
       <span className="sim-mode-title">{t("Trading Simulator")}</span>
       <button type="button" className={mode === "single" ? "selected" : ""}
