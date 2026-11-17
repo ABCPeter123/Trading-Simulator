@@ -266,6 +266,20 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
         {(journal?.positions??[]).filter(p=>p.quantity>0).map(p=><div key={p.asset_id} className="ops-line"><span>{p.asset_id.toUpperCase()} ({p.currency})</span><strong>{fmt(p.quantity)} @ {fmt(p.average_cost)}</strong></div>)}
       </section>
       <section className="ops-card ops-wide">
+        <h2>{t("Execution versus recommendation")}</h2>
+        <p className="ops-muted">{t("Review execution delays and price deviations from the signal reference. These differences can explain why actual results diverge from backtests.")}</p>
+        {!(journal?.execution_reviews??[]).length&&<p className="ops-muted">{t("No confirmed trades linked to recommendations yet.")}</p>}
+        <div className="ops-table-wrap"><table><thead><tr>
+          <th>{t("Asset")}</th><th>{t("Suggested price")}</th><th>{t("Actual fill price")}</th>
+          <th>{t("Price difference")}</th><th>{t("Delay (hours)")}</th><th>{t("Exceptions")}</th>
+        </tr></thead><tbody>{(journal?.execution_reviews??[]).map(x=><tr key={x.fill_id}>
+          <td>{x.asset_id.toUpperCase()} · {x.side.toUpperCase()}</td><td>{fmt(x.reference_price)}</td>
+          <td>{fmt(x.actual_price)}</td><td>{fmt(x.price_deviation_pct)}%</td>
+          <td>{fmt(x.execution_delay_hours)}</td>
+          <td>{[x.after_signal_expiry?t("Late fill"):"",x.different_asset_or_side?t("Changed action"):""].filter(Boolean).join(", ")||t("Within window")}</td>
+        </tr>)}</tbody></table></div>
+      </section>
+      <section className="ops-card ops-wide">
         <h2>{t("Permanent execution journal")}</h2>
         <div className="ops-table-wrap"><table><thead><tr><th>{t("Execution time")}</th><th>{t("Asset")}</th><th>{t("Side")}</th><th>{t("Quantity")}</th><th>{t("Price")}</th><th>{t("Fee")}</th><th>{t("Actions")}</th></tr></thead>
           <tbody>{(journal?.fills??[]).map(f=><tr key={f.id}><td>{when(f.executed_at)}</td><td>{f.asset_id.toUpperCase()}</td><td>{t(f.side)}</td><td>{fmt(f.quantity)}</td><td>{fmt(f.price)} {f.currency}</td><td>{fmt(f.fee)}</td><td><button onClick={()=>edit(f)}>{t("Edit / audit")}</button></td></tr>)}</tbody></table></div>
