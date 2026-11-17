@@ -47,8 +47,10 @@ jobs:
       - name: Fail closed on an invalid private bridge origin
         shell: powershell
         run: |
-          & powershell -NoProfile -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -AllowedOrigin 'http://unsafe.example' 2>&1 | Out-Null
-          if ($LASTEXITCODE -eq 0) { throw 'Private bridge accepted non-HTTPS allowed origin' }
+          $stderrFile = Join-Path $env:TEMP 'invalid-bridge-origin.stderr.log'
+          $stdoutFile = Join-Path $env:TEMP 'invalid-bridge-origin.stdout.log'
+          $result = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','.\start-private-bridge.ps1','-AllowedOrigin','http://unsafe.example') -Wait -PassThru -RedirectStandardError $stderrFile -RedirectStandardOutput $stdoutFile
+          if ($result.ExitCode -eq 0) { throw 'Private bridge accepted non-HTTPS allowed origin' }
           Write-Host 'Private bridge invalid-origin protection passed.'
 
 
