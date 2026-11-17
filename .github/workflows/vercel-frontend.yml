@@ -5,12 +5,16 @@ on:
     branches: [main]
     paths:
       - "src/**"
+      - "api/bridge-location.js"
+      - "scripts/test-bridge-directory.mjs"
       - "vercel.json"
       - "scripts/vercel-frontend-smoke.mjs"
       - ".github/workflows/vercel-frontend.yml"
   pull_request:
     paths:
       - "src/**"
+      - "api/bridge-location.js"
+      - "scripts/test-bridge-directory.mjs"
       - "vercel.json"
       - "scripts/vercel-frontend-smoke.mjs"
       - ".github/workflows/vercel-frontend.yml"
@@ -29,6 +33,8 @@ jobs:
           npm install --no-audit --no-fund
           npm install --no-save --no-audit --no-fund playwright
           npx playwright install --with-deps chromium
+      - name: Validate privacy of tunnel address directory
+        run: node scripts/test-bridge-directory.mjs
       - name: Build exact Vercel frontend mode
         env:
           VITE_CLOUD_FRONTEND: '1'
