@@ -397,10 +397,10 @@ def test_llama_cpp_selected_qwen_is_not_promoted_to_execution(monkeypatch):
         "model": "Qwen3.5-9B-Q4_K_M.gguf",
     })
     assert response.status_code == 200, response.text
-    assert response.json()["model"] == "Qwen3.5-9B-Q4_K_M.gguf"
+    assert response.json()["model"] == "Qwen3.5-9B-Q4_K_M"
     assert response.json()["applied"] is False
     assert response.json()["proposed_strategy"] is None
-    assert observed["selected"] == "Qwen3.5-9B-Q4_K_M.gguf"
+    assert observed["selected"] == "Qwen3.5-9B-Q4_K_M"
     with pytest.raises(HTTPException):
         ai.advise("single", "synthetic-id", "hi", model="other.gguf")
 
