@@ -234,3 +234,27 @@ def test_incremental_daily_updates_max_archive_without_refetch(local_data,monkey
 def test_fresh_incremental_archive_is_not_a_quote_source(local_data):
     assert TestClient(app).get("/api/market-data/archived/spy?window=1Y").status_code==404
     assert quality.analyze("spy","1Y")["status"]=="missing"
+
+
+def test_health_reports_active_errors_and_observed_age(local_data):
+    client = TestClient(app)
+    assert client.post("/api/market-data/subscriptions", json={
+        "asset_id": "spy", "resolution": "5m"}).status_code == 201
+    initial = client.get("/api/market-data/health").json()
+    assert initial["active"] == 1
+    row = initial["last_updates"][0]
+    assert row["sync_state"] == "not_started"
+    assert row["age_seconds"] is None
+    assert row["interval_seconds"] == 300
+    with ingest._db() as conn:
+        conn.execute("UPDATE subscriptions SET failure_code=?,last_bar=? WHERE asset_id=?",
+                     ("ProviderTimeout", 1600000000, "spy"))
+        conn.commit()
+    failed = client.get("/api/market-data/health").json()
+    assert failed["errors"] == 1
+    assert failed["last_updates"][0]["sync_state"] == "error"
+    assert failed["last_updates"][0]["age_seconds"] > 0
+    assert client.delete("/api/market-data/subscriptions/spy/5m").status_code == 200
+    stopped = client.get("/api/market-data/health").json()
+    assert stopped["active"] == 0 and stopped["errors"] == 0
+    assert stopped["last_updates"][0]["sync_state"] == "disabled"
