@@ -7,6 +7,7 @@ on:
       - "backend/main.py"
       - "backend/tests/test_public_demo.py"
       - "start-public.ps1"
+      - "start-private-bridge.ps1"
       - "scripts/find-cloudflared.ps1"
       - "scripts/test-cloudflared-resolution.ps1"
       - "vite.config.ts"
@@ -17,6 +18,7 @@ on:
       - "backend/main.py"
       - "backend/tests/test_public_demo.py"
       - "start-public.ps1"
+      - "start-private-bridge.ps1"
       - "scripts/find-cloudflared.ps1"
       - "scripts/test-cloudflared-resolution.ps1"
       - "vite.config.ts"
@@ -33,7 +35,7 @@ jobs:
         run: |
           $tokens = $null
           $parseErrors = $null
-          foreach ($file in @('start-public.ps1', 'scripts/find-cloudflared.ps1', 'scripts/test-cloudflared-resolution.ps1')) {
+          foreach ($file in @('start-public.ps1', 'start-private-bridge.ps1', 'scripts/find-cloudflared.ps1', 'scripts/test-cloudflared-resolution.ps1')) {
             $parseErrors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Get-Location) $file), [ref]$tokens, [ref]$parseErrors) | Out-Null
             if ($parseErrors.Count -ne 0) { $parseErrors | Format-List; exit 1 }
@@ -42,6 +44,13 @@ jobs:
       - name: Test installed cloudflared path resolution
         shell: powershell
         run: .\\scripts\\test-cloudflared-resolution.ps1
+      - name: Fail closed on an invalid private bridge origin
+        shell: powershell
+        run: |
+          & powershell -NoProfile -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -AllowedOrigin 'http://unsafe.example' 2>&1 | Out-Null
+          if ($LASTEXITCODE -eq 0) { throw 'Private bridge accepted non-HTTPS allowed origin' }
+          Write-Host 'Private bridge invalid-origin protection passed.'
+
 
   public-demo:
     runs-on: ubuntu-latest
