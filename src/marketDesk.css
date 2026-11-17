@@ -23,3 +23,23 @@
   .market-desk .terminal-workspace-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:10px;overflow:visible}
   .market-desk .terminal-workspace-tabs button{display:flex;justify-content:center;align-items:center;text-align:center;white-space:normal;line-height:1.35;min-width:0;min-height:54px;padding:8px 6px;font-size:11px}
 }
+
+/* Local research data quality and incremental provider operations. */
+.market-data-health{display:flex;flex-direction:column;gap:8px;padding:10px 12px;
+  background:rgba(12,27,42,.72);border:1px solid rgba(130,163,181,.22);
+  border-radius:9px;margin:9px 0;font-size:12px}
+.market-data-health-line{display:flex;flex-wrap:wrap;gap:8px 15px;align-items:center}
+.market-data-health-line strong{color:#d6e8f1;font-size:12px}
+.market-data-health-line span{color:#a8c3d3}
+.market-data-health-line button,.market-catalog-actions button{border:1px solid #487788;
+  background:#143246;color:#d5eaf5;padding:7px 11px;border-radius:7px;
+  cursor:pointer;font-size:12px}
+.market-data-health-line button:hover,.market-catalog-actions button:hover{background:#1c4b5a}
+.market-data-health-line button:disabled,.market-catalog-actions button:disabled{opacity:.5;cursor:default}
+.market-catalog-actions{display:flex;flex-direction:column;gap:7px;padding:5px 8px}
+.market-catalog-actions>button{align-self:flex-start}
+.market-catalog-actions small,.market-data-health small[role=alert]{color:#f3b6a9}
+.market-catalog-matches{display:flex;flex-direction:column;gap:4px;max-height:230px;overflow-y:auto}
+.market-catalog-matches button{display:flex;justify-content:space-between;
+  text-align:left;align-items:center;gap:8px;width:100%;white-space:normal}
+@media(max-width:700px){.market-data-health-line{align-items:flex-start;flex-direction:column;gap:5px}}
