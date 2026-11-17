@@ -1,7 +1,9 @@
 """Local-only API. Start via: python -m uvicorn backend.main:app --reload"""
 from __future__ import annotations
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
+import os
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -13,6 +15,25 @@ from .strategy import sma_backtest
 from .archive import archive_stats
 from .arcade import start_run, get_run, list_runs, submit_order as submit_arcade_order, cancel_order, set_strategy, advance_run, set_risk
 from .arcade_dsl import compile_rules, EXAMPLES
+
+# A public demo must never accidentally boot against the owner's private
+# databases or paid/local AI provider. Fail closed before exposing any routes.
+PUBLIC_DEMO = os.environ.get("TRADING_SIM_PUBLIC_DEMO") == "1"
+if PUBLIC_DEMO:
+    required = (
+        "TRADING_SIM_ARCADE_DB", "TRADING_SIM_DB",
+        "TRADING_SIM_STRATEGY_DB", "TRADING_SIM_CUSTOM_INSTRUMENTS",
+        "TRADING_SIM_MARKET_DIR",
+    )
+    private_root = Path(__file__).resolve().parent.parent / "data"
+    for variable in required:
+        value = os.environ.get(variable)
+        if not value:
+            raise RuntimeError("Public demo requires isolated path: " + variable)
+        if not Path(value).is_absolute() or Path(value).resolve().is_relative_to(private_root.resolve()):
+            raise RuntimeError("Public demo path must be absolute and outside private data/: " + variable)
+    if os.environ.get("TRADING_SIM_AI_PROVIDER") != "off":
+        raise RuntimeError("Public demo cannot expose a local or paid AI provider.")
 
 app = FastAPI(title="Trading Simulator Local API", version="1.1.0")
 
@@ -27,7 +48,7 @@ def instruments(search: str = Query("", max_length=80), category: str = Query(""
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "mode": "local", "version": "1.1.0"}
+    return {"status": "ok", "mode": "public-demo" if PUBLIC_DEMO else "local", "version": "1.1.0"}
 
 @app.get("/api/market/{asset_id}")
 def market_history(asset_id: str, range: str = Query("1M"), resolution: str | None = Query(None)):
