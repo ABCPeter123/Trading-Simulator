@@ -52,3 +52,18 @@ font-size:13px;width:100%;box-sizing:border-box;resize:vertical;padding:10px;min
  background:#102332;color:#9db7c8;border:1px solid #385067;font-weight:650}
 .pd-switch button[aria-current=page]{color:#082920;background:#77d9b5;border-color:#77d9b5}
 @media(max-width:650px){.pd-switch button{flex:1 1 180px}}
+
+.pd-jobs{display:flex;flex-direction:column;gap:9px;max-height:460px;overflow:auto}
+.pd-job{background:#0c202e;border:1px solid #354f63;border-radius:9px;padding:11px}
+.pd-job-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pd-job-top strong{font-size:11px;color:#dff6ef;overflow-wrap:anywhere}
+.pd-job-status{font-size:10px;text-transform:capitalize;border-radius:8px;border:1px solid #446174;padding:3px 6px;color:#cad9e6;flex-shrink:0}
+.pd-job-status.pd-completed{color:#9ce9cc;border-color:#367d64}
+.pd-job-status.pd-failed{color:#ffb2b2;border-color:#8e4c4c}
+.pd-job-status.pd-running{color:#abdcfd;border-color:#47718d}
+.pd-job-stage{font-size:10px;color:#94acbd;margin:8px 0;overflow-wrap:anywhere}
+.pd-job-meter{height:6px;border-radius:20px;background:#254155;overflow:hidden;margin:8px 0}
+.pd-job-meter i{display:block;height:100%;border-radius:20px;background:#6bdbb9;transition:width .3s ease}
+.pd-job-actions{display:flex;justify-content:flex-end;gap:8px}
+.pd-job-actions button{padding:6px 9px!important;font-size:11px!important;min-height:30px}
+.pd-job-actions small{color:#e6b4a8;font-size:11px}
