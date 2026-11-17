@@ -448,6 +448,13 @@ export default function MarketDesk() {
               </div>
               <div className="market-data-health">
                 <div className="market-data-health-line">
+                  <strong>{t("Latest provider quote")}</strong>
+                  <span>{quote?.source??t("Not available")}</span>
+                  <span>{quote?.timestamp?dt(quote.timestamp):t("No quote timestamp")}</span>
+                  <span>{quote?.as_of_age_seconds!=null?`${Math.round(quote.as_of_age_seconds)}s ${t("source age")}`:t("Unknown source age")}</span>
+                  <span>{quote?.fresh?t("Within freshness threshold"):t("Stale or unavailable quote")}</span>
+                </div>
+                <div className="market-data-health-line">
                   <strong>{t("Local data coverage")}</strong>
                   <span>{coverage?.bars??0} {t("recorded bars")}</span>
                   <span>{coverage?.coverage_pct==null?t("Coverage varies by session"):`${coverage.coverage_pct}% ${t("weekday coverage estimate")}`}</span>
