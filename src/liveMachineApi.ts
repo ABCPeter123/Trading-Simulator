@@ -32,6 +32,10 @@ export interface MachineStatus {
 export interface Journal {
   fills:ConfirmedFill[];positions:{asset_id:string;currency:string;quantity:number;average_cost:number;realized_pnl:number}[];
   realized_pnl:number|null;realized_by_currency:Record<string,number>;note:string;
+  execution_reviews:{fill_id:string;signal_id:string;asset_id:string;side:string;
+    reference_price:number;actual_price:number;price_deviation_pct:number;
+    execution_delay_hours:number;after_signal_expiry:boolean;different_asset_or_side:boolean;
+    suggested_notional:number|null;actual_notional:number}[];
 }
 export interface NotificationStatus {
   channels:string[];
