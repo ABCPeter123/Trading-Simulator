@@ -92,6 +92,12 @@ def test_fail_closed_on_stale_feed_and_offline_cache(private_workspace):
     assert m.signals()==[]
     assert any(a["severity"]=="critical" for a in m.alerts())
     assert m.deployments()[0]["last_error"] is not None
+    # The feed error backoff deliberately avoids hammering the provider.
+    # Advance its stored retry timestamp before checking recovered data.
+    with m.db() as conn:
+        conn.execute("UPDATE alerts SET last_seen_at=? WHERE key=?",
+                     ((morning()-timedelta(minutes=11)).isoformat(),
+                      "feed:"+dep["id"]+":spy"))
     m.run_once(now=morning(),source=source)
     assert len(m.signals())==1
     assert not any(a["status"]=="open" for a in m.alerts())
