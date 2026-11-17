@@ -31,15 +31,29 @@ def publish(url:str):
     payload=json.dumps({"items":[{
         "operation":"upsert","key":"bridge","value":{"url":url}
     }]}).encode("utf-8")
-    endpoint="https://api.vercel.com/v1/edge-config/"+CONFIG_ID+"/items?"+urlencode({"teamId":TEAM_ID})
+    # Vercel renamed /v1/edge-config to /v1/global-config in 2026.
+    # Always target the team that owns the Global Config resource.
+    endpoint="https://api.vercel.com/v1/global-config/"+CONFIG_ID+"/items?"+urlencode({"teamId":TEAM_ID})
     req=Request(endpoint,data=payload,method="PATCH",headers={
         "Authorization":"Bearer "+token,"Content-Type":"application/json"})
     try:
         with urlopen(req,timeout=15) as resp:
-            if resp.status not in (200,201,204):raise RuntimeError("Directory update rejected.")
-    except (HTTPError,URLError) as exc:
-        # Never echo authentication headers or tokens.
-        raise RuntimeError("Could not update tunnel directory. Check Vercel token scope and connectivity.") from None
+            if resp.status not in (200,201,204):
+                raise RuntimeError("Vercel directory returned unexpected success status.")
+    except HTTPError as exc:
+        # Status codes are safe to report. Never display request headers,
+        # token values, full HTTP exception objects, or provider response body.
+        diagnostic={
+            400:"Vercel rejected the directory update request.",
+            401:"Vercel rejected the local access token. Check expiration or reset it with -ResetVercelToken.",
+            403:"Vercel token cannot write this team's Global Config. Use a token scoped to the owning team, with Global Config write access.",
+            404:"Vercel Global Config not found under this team. Confirm the directory and API endpoint are current.",
+            409:"Vercel Global Config update conflicted; retry the launcher.",
+            429:"Vercel rate limited the directory update; retry later.",
+        }.get(exc.code,"Vercel Global Config request failed.")
+        raise RuntimeError(f"{diagnostic} (HTTP {exc.code})") from None
+    except URLError:
+        raise RuntimeError("Cannot reach Vercel Global Config API. Check DNS and Internet connectivity.") from None
     print("Private engine address updated. Visitors only need the shared web password.")
 
 if __name__=="__main__":
