@@ -7,6 +7,8 @@ on:
       - "backend/main.py"
       - "backend/tests/test_public_demo.py"
       - "start-public.ps1"
+      - "scripts/find-cloudflared.ps1"
+      - "scripts/test-cloudflared-resolution.ps1"
       - "vite.config.ts"
       - "src/**"
       - ".github/workflows/public-tunnel.yml"
@@ -15,6 +17,8 @@ on:
       - "backend/main.py"
       - "backend/tests/test_public_demo.py"
       - "start-public.ps1"
+      - "scripts/find-cloudflared.ps1"
+      - "scripts/test-cloudflared-resolution.ps1"
       - "vite.config.ts"
       - "src/**"
       - ".github/workflows/public-tunnel.yml"
@@ -29,9 +33,15 @@ jobs:
         run: |
           $tokens = $null
           $parseErrors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Get-Location) 'start-public.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
-          if ($parseErrors.Count -ne 0) { $parseErrors | Format-List; exit 1 }
-          Write-Host 'Public tunnel launcher parses successfully.'
+          foreach ($file in @('start-public.ps1', 'scripts/find-cloudflared.ps1', 'scripts/test-cloudflared-resolution.ps1')) {
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Join-Path (Get-Location) $file), [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -ne 0) { $parseErrors | Format-List; exit 1 }
+          }
+          Write-Host 'Public tunnel PowerShell scripts parse successfully.'
+      - name: Test installed cloudflared path resolution
+        shell: powershell
+        run: .\\scripts\\test-cloudflared-resolution.ps1
 
   public-demo:
     runs-on: ubuntu-latest
