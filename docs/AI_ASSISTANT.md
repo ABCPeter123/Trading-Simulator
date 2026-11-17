@@ -76,6 +76,50 @@ observations, current positions and exposure, rolling results, and the last
 12 executions. It answers in your selected interface language even if your
 question uses the other language. It cannot inspect unrevealed candles.
 
+## Optional TwIL-8B by webAI, local llama.cpp
+
+The repository already supports a fixed loopback-only llama.cpp adapter.
+TwIL-8B is an **8.79 billion parameter English-language reasoning model**
+from [webAI](https://huggingface.co/webAI-Official/TwIL-8B), based on IBM
+Granite 4.2 8B. The default balanced Q4_K_M GGUF is approximately 4.98 GiB.
+The model card lists strong math and coding scores but weaker knowledge
+benchmarks. Its reported results were measured mainly in BF16 with long
+reasoning budgets; quantized, shorter runs may behave differently.
+
+**License:** The weights use the **webAI Non-Commercial License v1.0**, not
+an unrestricted commercial license. Confirm that your intended use is
+permitted before using the model in any commercial service. This model
+is not automatically downloaded, bundled, served by Vercel, or hosted
+by Trading Simulator.
+
+Download and run locally with a recent llama.cpp build, using PowerShell:
+
+```powershell
+llama-server -hf webAI-Official/TwIL-8B --hf-file TwIL-8B-Q4_K_M-balanced.gguf --host 127.0.0.1 --port 8081 -c 16384 -n 8192
+```
+
+Set the following in the **Git-ignored** local `.env`:
+
+```dotenv
+TRADING_SIM_AI_PROVIDER=llama_cpp
+TRADING_SIM_AI_MODEL=TwIL-8B-Q4_K_M-balanced.gguf
+TRADING_SIM_AI_TIMEOUT_SECONDS=600
+TRADING_SIM_AI_MAX_OUTPUT_TOKENS=8192
+```
+
+Restart the local FastAPI backend and select **Recheck AI**.
+The backend probes `http://127.0.0.1:8081/v1/models` and sends chat
+requests to the corresponding loopback chat-completions endpoint. It will
+not start the server automatically. Longer thinking contexts use more RAM,
+take more time, and can time out, especially on CPU. The requested
+output-token budget is only a ceiling and does not guarantee a complete
+response. TwIL produces a reasoning preamble that the API strips before
+display, and suggested strategy rules still undergo server-side validation.
+
+For Simplified Chinese explanations, prefer a multilingual local model
+such as Qwen. TwIL's model card lists **English** as its language.
+No model receives credentials or authority to place trades.
+
 ## First-time setup: local Ollama (default)
 
 This option is free to use locally, with no remote model API required.
