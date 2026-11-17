@@ -151,7 +151,12 @@ def test_demo_mode_rejects_web_research_queue_before_db_access(workspace,monkeyp
         ("get","/api/live/research/portfolio/jobs/notfound"),
         ("post","/api/live/research/portfolio/jobs/notfound/cancel"),
     ):
-        rsp=getattr(CLIENT,method)(path,json={"symbols":ASSETS} if method=="post" else None)
+        if method=="post" and path.endswith("/jobs"):
+            rsp=CLIENT.post(path,json={"symbols":ASSETS})
+        elif method=="post":
+            rsp=CLIENT.post(path)
+        else:
+            rsp=CLIENT.get(path)
         assert rsp.status_code==403
     assert not research_queue.DB_PATH.exists()
 
