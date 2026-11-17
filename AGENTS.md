@@ -14,6 +14,27 @@ local storage and independently synthetic examples only. Inspect every
 staged change before committing, and never copy private trading logic into
 a public fixture or documentation.
 
+## Mandatory local-first / milestone-only release policy
+
+**As of November 17, 2026, routine Vercel/Git deployment is frozen.**
+Read [docs/LOCAL_FIRST_RELEASE_POLICY.md](docs/LOCAL_FIRST_RELEASE_POLICY.md).
+Do not initiate Vercel deployments, promote builds, enable auto-deploy,
+change deployment settings to bypass the freeze, or assume Git commits
+should publish a website. `vercel.json` deliberately contains
+`git.deploymentEnabled=false`. Work on local npm/Vite and loopback Python
+first, validate in CI, and save code changes in GitHub without updating
+any of the team's nine live Vercel sites. Only after a **major feature
+milestone**, passing local regression/privacy checks, and explicit owner
+approval may a single tested production release be published.
+
+For local work: `.\start-local.ps1` launches Vite on 5173, Python on
+8000 and the separate private portfolio research worker.
+`.\start-local.ps1 -Mobile` exposes unauthenticated development UI
+only to the same trusted LAN, never to the internet or a public tunnel.
+`npm run verify:local` checks the production build offline. Preserve
+the published website until an authorized release. This policy applies
+alongside portfolio-first research and strategy confidentiality.
+
 ## Mandatory portfolio-first research direction
 
 **The product's trading strategy is a diversified portfolio of instruments,
