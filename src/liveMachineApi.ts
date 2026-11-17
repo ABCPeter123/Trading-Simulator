@@ -4,6 +4,7 @@ export interface Deployment {
   id:string;strategy_id:string;name:string;mode:"single"|"portfolio";
   symbols:string[];state:"paper"|"live-monitor"|"paused"|"retired";
   capital:number;max_allocation_pct:number;max_realized_loss_pct:number;max_daily_signals:number;
+  resolution:"1d"|"1h"|"15m";
   created_at:string;updated_at:string;last_evaluated_at:string|null;last_error:string|null;
 }
 export interface Signal {
@@ -47,7 +48,7 @@ export type FillDraft = {
 };
 export const getMachineStatus=()=>request<MachineStatus>("/live/status");
 export const listDeployments=()=>request<Deployment[]>("/live/deployments");
-export const newDeployment=(body:{strategy_id:string;state:"paper"|"live-monitor";capital:number;max_allocation_pct:number;max_realized_loss_pct:number;max_daily_signals:number})=>
+export const newDeployment=(body:{strategy_id:string;state:"paper"|"live-monitor";capital:number;max_allocation_pct:number;max_realized_loss_pct:number;max_daily_signals:number;resolution:"1d"|"1h"|"15m"})=>
   request<Deployment>("/live/deployments",{method:"POST",body:JSON.stringify(body)});
 export const setDeploymentState=(id:string,state:Deployment["state"])=>
   request<Deployment>("/live/deployments/"+encodeURIComponent(id),{method:"PUT",body:JSON.stringify({state})});
