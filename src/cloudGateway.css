@@ -1,0 +1,41 @@
+
+.cloud-gateway{min-height:100vh;background:#0b121c;color:#edf4fb;font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+.cloud-gateway-top{display:flex;align-items:center;justify-content:space-between;padding:20px clamp(18px,4vw,64px);border-bottom:1px solid #253143}
+.cloud-gateway-mark{display:flex;align-items:center;gap:12px;font-size:16px;letter-spacing:.01em}
+.cloud-gateway-mark svg{color:#6dd6bb}
+.cloud-gateway-status{display:flex;gap:8px;align-items:center;font-size:12px;color:#9bb2c8}
+.cloud-gateway-content{max-width:1320px;margin:0 auto;padding:clamp(22px,5vw,65px) clamp(16px,4vw,50px)}
+.cloud-gateway-hero{max-width:850px;margin-bottom:38px}
+.cloud-gateway-kicker,.cloud-gateway-preview-head span{font-size:11px;font-weight:750;letter-spacing:.11em;color:#8ee2c4}
+.cloud-gateway-hero h1{font-size:clamp(30px,4.4vw,56px);letter-spacing:-.045em;line-height:1.09;margin:18px 0}
+.cloud-gateway-hero>p{font-size:clamp(14px,1.25vw,17px);line-height:1.75;color:#a5b9cd;max-width:760px}
+.cloud-gateway-principles{display:flex;gap:20px;flex-wrap:wrap;margin-top:26px}
+.cloud-gateway-principles span{display:flex;align-items:center;gap:8px;font-size:12px;color:#cad7e5}
+.cloud-gateway-principles svg{color:#79d7bb}
+.cloud-gateway-grid{display:grid;grid-template-columns:minmax(300px,.8fr) minmax(0,1.2fr);gap:22px;align-items:stretch}
+.cloud-gateway-connect,.cloud-gateway-preview{border:1px solid #344255;border-radius:16px;background:#131f2e;padding:clamp(18px,2.6vw,30px);min-width:0}
+.cloud-gateway-section-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;background:#1e4140;border-radius:10px;color:#91ead5}
+.cloud-gateway-connect h2,.cloud-gateway-preview h2{font-size:20px;letter-spacing:-.02em;margin:13px 0 8px}
+.cloud-gateway-connect>p,.cloud-gateway-preview>p{font-size:13px;line-height:1.65;color:#a7bbcd}
+.cloud-gateway-connect form{display:flex;flex-direction:column;gap:17px;margin:26px 0}
+.cloud-gateway-connect label{display:flex;flex-direction:column;gap:8px;font-size:12px;color:#c7d7e6;font-weight:650}
+.cloud-gateway-connect input{width:100%;box-sizing:border-box;min-height:44px;border:1px solid #485970;background:#0d1725;color:#fff;padding:11px 12px;border-radius:8px;font:inherit;font-size:13px}
+.cloud-gateway-connect input:focus{outline:2px solid #64c8aa;outline-offset:2px}
+.cloud-gateway-connect form button{min-height:46px;border:none;background:#7ce0c0;color:#082a27;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px;border-radius:8px;cursor:pointer}
+.cloud-gateway-connect form button:disabled{opacity:.55;cursor:wait}
+.cloud-gateway-error{color:#ffadad;font-size:12px;line-height:1.5}
+.cloud-gateway-help{display:flex;gap:12px;border:1px solid #344354;background:#101a28;border-radius:10px;padding:16px;color:#8cd8c5}
+.cloud-gateway-help>div{min-width:0;flex:1}
+.cloud-gateway-help strong{font-size:12px;color:#d5e5f0}
+.cloud-gateway-help p{color:#a9b9c8;font-size:12px;line-height:1.6}
+.cloud-gateway-help code{display:block;overflow-wrap:anywhere;font-size:11px;color:#92dcc7;line-height:1.7}
+.cloud-gateway-preview-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.cloud-gateway-preview-head h2{margin:8px 0 16px}
+.cloud-gateway-preview-head .cloud-gateway-demo-label{color:#f1c990;white-space:nowrap;font-size:10px}
+.cloud-gateway-chart{height:360px;min-width:0;overflow:hidden}
+.cloud-gateway-chart>div{height:100%}
+.cloud-gateway-footer{color:#849aaf;font-size:12px;text-align:center;margin-top:30px}
+.cloud-engine-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 15px;background:#163c35;color:#d0ffec;border-bottom:1px solid #3c7568;font-size:12px}
+.cloud-engine-bar button{background:transparent;color:inherit;border:1px solid #79bea9;border-radius:7px;padding:7px 13px;cursor:pointer}
+@media(max-width:900px){.cloud-gateway-grid{grid-template-columns:minmax(0,1fr)}.cloud-gateway-chart{height:300px}}
+@media(max-width:520px){.cloud-gateway-top{padding:14px}.cloud-gateway-status{font-size:10px}.cloud-gateway-chart{height:255px}.cloud-gateway-principles{gap:11px}}
