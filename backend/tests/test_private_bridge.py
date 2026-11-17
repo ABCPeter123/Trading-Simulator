@@ -31,6 +31,8 @@ r=c.get('/api/health')
 assert r.status_code==401, r.text
 r=c.get('/api/health',headers={'Authorization':'Bearer wrong','Origin':origin})
 assert r.status_code==401, r.text
+assert r.headers.get('access-control-allow-origin')==origin
+assert r.headers.get('cache-control')=='no-store'
 r=c.get('/api/health',headers={'Authorization':token,'Origin':'https://attacker.example'})
 assert r.status_code==403, r.text
 r=c.get('/api/health',headers={'Authorization':token,'Origin':origin})
