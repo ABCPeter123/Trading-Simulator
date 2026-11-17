@@ -12,6 +12,11 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Sign in to private workspace": "登录私人交易工作台",
+  "Enter the shared password provided by the owner. The connection to the private desktop is found automatically. No URL or API token is needed.": "输入所有者提供的共享密码。系统会自动找到私人电脑，无需输入网址或 API 令牌。",
+  "Access password": "访问密码",
+  "Enter your access password": "输入访问密码",
+  "The owner starts the private bridge on their desktop. If the desktop is offline, the workspace cannot connect.": "所有者需要在电脑上启动私人连接服务。电脑离线时，工作台无法连接。",
   "Execution versus recommendation": "实际成交与策略建议对比",
   "Review execution delays and price deviations from the signal reference. These differences can explain why actual results diverge from backtests.": "查看实际成交相对建议的时间延迟与价格偏差，以分析实盘与回测结果不一致的原因。",
   "No confirmed trades linked to recommendations yet.": "尚无关联策略建议的已确认交易。",
