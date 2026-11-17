@@ -32,8 +32,8 @@ else
 fi
 """
 
-def install() -> int:
-    root = Path(__file__).resolve().parent.parent
+def install(root: Path | None = None) -> int:
+    root = root or Path(__file__).resolve().parent.parent
     result = subprocess.run(
         ["git", "rev-parse", "--git-path", "hooks"],
         cwd=root, capture_output=True, text=True,
