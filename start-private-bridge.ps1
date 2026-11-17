@@ -103,6 +103,10 @@ try {
     }
     if(-not $ready){throw "Private API did not start. See .local-state/private-bridge/api.stderr.log."}
     Write-Host "[private] Local password-protected trading API is ready." -ForegroundColor Green
+    # Supervise the temporary Cloudflare URL. Each new tunnel requires a fresh
+    # directory publication, but visitors keep using the same Vercel address.
+    $restartCount=0
+    while($true){
     $log=Join-Path $stateDir "cloudflared.stderr.log"
     $out=Join-Path $stateDir "cloudflared.stdout.log"
     if(Test-Path $log){Remove-Item $log -Force}
@@ -119,7 +123,19 @@ try {
         }
         Start-Sleep -Milliseconds 500
     }
-    if(-not $tunnelUrl){throw "Could not obtain Cloudflare Quick Tunnel address. See .local-state/private-bridge/cloudflared.stderr.log."}
+    if(-not $tunnelUrl){
+        if($tunnel.HasExited){
+            $restartCount++
+            $pause=[Math]::Min(60, 5 * $restartCount)
+            Write-Host "[private] Cloudflare exited before publishing an address. Retrying in $pause seconds." -ForegroundColor Yellow
+            $tunnel=$null
+            Start-Sleep -Seconds $pause
+            continue
+        }
+        throw "Could not obtain Cloudflare Quick Tunnel address. See .local-state/private-bridge/cloudflared.stderr.log."
+    }
+    # The tunnel opened successfully; reset the exponential retry delay.
+    $restartCount=0
     if($ManualDirectory -and -not $LegacyToken){
         Write-Host "[private] Directory registration skipped by owner request." -ForegroundColor Yellow
         Write-Host "[private] This password-protected tunnel is running at: $tunnelUrl" -ForegroundColor Cyan
@@ -164,8 +180,38 @@ try {
         Write-Host "[legacy] API token (never share publicly): $secret" -ForegroundColor Yellow
     }
     Write-Host "[private] Keep your computer on and this PowerShell window open. Ctrl+C stops the tunnel." -ForegroundColor Cyan
-    while(-not $tunnel.HasExited){Start-Sleep -Seconds 1}
-    throw "Cloudflare tunnel exited. Restart this script to publish the next tunnel address."
+    # The publisher may fail temporarily during a network interruption.
+    # Retry automatically when the problem was not an invalid/mis-scoped
+    # credential (401/403). Never retry a rejected credential continuously.
+    $retryAt=(Get-Date).AddSeconds(30)
+    while(-not $tunnel.HasExited){
+        Start-Sleep -Seconds 3
+        if(-not $LegacyToken -and -not $ManualDirectory -and -not $published -and (Get-Date) -ge $retryAt){
+            $lastStatus=""
+            if(Test-Path -LiteralPath $statusFile){
+                $lastStatus=(Get-Content -LiteralPath $statusFile -Raw -ErrorAction SilentlyContinue)
+            }
+            if($lastStatus -notmatch 'HTTP 40[13]'){
+                & $python (Join-Path $root "scripts\\publish_tunnel.py") $tunnelUrl
+                $published=($LASTEXITCODE -eq 0)
+                if($published){
+                    Write-Host "[private] Directory connection recovered automatically." -ForegroundColor Green
+                }else{
+                    Write-Host "[private] Directory publish retry failed; will retry if recoverable." -ForegroundColor Yellow
+                }
+            }
+            $retryAt=(Get-Date).AddSeconds(60)
+        }
+    }
+    # A Quick Tunnel URL is ephemeral. Replace it automatically after a
+    # Cloudflare exit rather than asking the owner to copy/paste the new URL.
+    $tunnel=$null
+    $restartCount++
+    $pause=[Math]::Min(60, 5 * $restartCount)
+    Write-Host "[private] Cloudflare disconnected. Reconnecting in $pause seconds..." -ForegroundColor Yellow
+    Start-Sleep -Seconds $pause
+    }
+
 } finally {
     if($null -ne $tunnel -and -not $tunnel.HasExited){Stop-Process -Id $tunnel.Id -Force -ErrorAction SilentlyContinue}
     if($null -ne $backend -and -not $backend.HasExited){Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue}
