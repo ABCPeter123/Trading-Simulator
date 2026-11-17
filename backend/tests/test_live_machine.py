@@ -113,6 +113,10 @@ def test_manual_trade_journal_audit_and_positions(private_workspace):
       "executed_at":morning().isoformat(),"broker_ref":"synthetic-test","notes":"example"})
     assert m.signals()[0]["status"]=="filled"
     assert m.journal()["positions"][0]["quantity"]==5
+    review=m.journal()["execution_reviews"][0]
+    assert review["asset_id"]=="spy"
+    assert abs(review["price_deviation_pct"])>3
+    assert any(a["severity"]=="warning" for a in m.alerts())
     changed=m.edit_fill(new["id"],{"quantity":4.,"price":99.,"notes":"corrected"})
     assert changed["quantity"]==4
     assert len(m.fill_history(new["id"]))==1
