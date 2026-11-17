@@ -134,16 +134,31 @@ try {
         # back the safe structured diagnostic from local, ignored state.
         & $python (Join-Path $root "scripts\publish_tunnel.py") $tunnelUrl
         $publishExit=$LASTEXITCODE
-        if($publishExit -ne 0){
+        $published=($publishExit -eq 0)
+        if(-not $published){
             $detail="Publisher failed before recording a diagnosis; see the local Python environment."
             if(Test-Path -LiteralPath $statusFile){
                 $saved=(Get-Content -LiteralPath $statusFile -Raw -ErrorAction SilentlyContinue).Trim()
                 if(-not [string]::IsNullOrWhiteSpace($saved)){ $detail=$saved }
             }
-            throw "Could not publish private tunnel address: $detail (exit $publishExit)"
+            if($detail -match 'HTTP 40[13]'){
+                # A bad/mis-scoped Vercel token must not kill an otherwise healthy
+                # password-protected API or Cloudflare tunnel.
+                Write-Host "[private] Auto-registration failed: $detail" -ForegroundColor Yellow
+                Write-Host "[private] Recovery mode: the protected bridge stays online." -ForegroundColor Yellow
+                Write-Host "[private] Temporary tunnel URL (owner only): $tunnelUrl" -ForegroundColor Cyan
+                Write-Host "[private] Publish ONLY that URL into the PP team's Global Config bridge item via your connected Vercel account." -ForegroundColor Cyan
+                Write-Host "[private] For automatic registration next time, restart with -ResetVercelToken and a PP-scoped Vercel token." -ForegroundColor Yellow
+            }else{
+                throw "Could not publish private tunnel address: $detail (exit $publishExit)"
+            }
         }
         Write-Host "[private] Website: $AllowedOrigin" -ForegroundColor Green
-        Write-Host "[private] Visitors enter ONLY the shared password. Do not give them the tunnel address." -ForegroundColor Green
+        if($published){
+            Write-Host "[private] Visitors enter ONLY the shared password. Do not give them the tunnel address." -ForegroundColor Green
+        }else{
+            Write-Host "[private] Website discovery is offline until the tunnel URL is registered manually." -ForegroundColor Yellow
+        }
     }else{
         Write-Host "[legacy] Private tunnel: $tunnelUrl" -ForegroundColor Cyan
         Write-Host "[legacy] API token (never share publicly): $secret" -ForegroundColor Yellow
