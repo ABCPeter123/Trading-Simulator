@@ -195,6 +195,7 @@ def test_no_fallback_after_delivery_stage_disconnection(workspace,monkeypatch):
     sends=[]
     class LostDeliveryReply:
         def __init__(self,*args,**kwargs):pass
+        def ehlo(self):return (250,b"fake")
         def login(self,username,password):pass
         def send_message(self,msg,to_addrs):
             sends.append(True)
