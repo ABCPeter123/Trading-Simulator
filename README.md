@@ -18,6 +18,24 @@
 
 A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Local market data and AI upgrades (in development)
+
+The local research workspace now uses a unified provider-backed instrument
+catalog; allows USD/CAD portfolio **research** comparisons with previous-session
+FX conversion; provides a bounded incremental OHLCV archive collector;
+supports opt-in completed 15-minute and hourly strategy monitoring;
+and shows coverage, gaps, freshness and ingestion health. The existing
+USD-only simulation cash ledger and human-only broker execution remain
+unchanged.
+
+An optional local WebAI **TwIL-8B** research assistant is supported through
+`llama.cpp` on loopback port 8081, without replacing Ollama or requiring
+payment. TwIL weights are **not bundled or downloaded automatically** and are
+licensed for non-commercial research/education. AI never executes orders.
+
+Read the [data architecture, limitations and TwIL setup guide](docs/MARKET_DATA_UPGRADE.md).
+**All upgrades remain unpublished on Vercel** until an owner-approved milestone.
+
 ## Compare local development with the Vercel website
 
 The *actual* latest published Vercel source commit is pinned in
