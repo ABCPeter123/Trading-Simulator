@@ -10,8 +10,9 @@ import { PriceChart } from "./components/PriceChart";
 import { ASSET_CLASSES, catalog as FALLBACK_ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
 import type { CatalogInstrument, DiscoveredInstrument } from "./arcadeApi";
-import { getAccount, getBacktest, getHistory, getQuote, resetAccount, sendOrder, supportsCashTrading } from "./api";
-import type { AccountResponse, BacktestResponse, HistoryResponse, QuoteResponse } from "./api";
+import { getAccount, getBacktest, getHistory, getQuote, resetAccount, sendOrder, supportsCashTrading,
+  getMarketCoverage,getMarketSubscriptions,subscribeMarket,unsubscribeMarket } from "./api";
+import type { AccountResponse, BacktestResponse, HistoryResponse, QuoteResponse, MarketCoverage, MarketSubscription } from "./api";
 import { advanceReplay, NEW_REPLAY, replayFillPrice, replayStartIndex } from "./replay";
 import type { ReplayAccount } from "./replay";
 import type { Asset, AssetClass, ChartStyle, TradeSide } from "./types";
@@ -43,6 +44,11 @@ export default function MarketDesk() {
   const [side, setSide] = useState<TradeSide>("buy");
   const [quantity, setQuantity] = useState("1");
   const [history, setHistory] = useState<HistoryResponse | null>(null);
+  const [coverage,setCoverage]=useState<MarketCoverage|null>(null);
+  const [subscriptions,setSubscriptions]=useState<MarketSubscription[]>([]);
+  const [marketOpsBusy,setMarketOpsBusy]=useState(false);
+  const [marketOpsError,setMarketOpsError]=useState("");
+  const tracking=subscriptions.find(x=>x.asset_id===selectedId&&x.resolution===resolution&&x.active);
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [lastQuotes, setLastQuotes] = useState<Record<string, QuoteResponse>>({});
   const [account, setAccount] = useState<AccountResponse | null>(null);
@@ -122,6 +128,34 @@ export default function MarketDesk() {
       ? (side === "buy" ? quote.ask : quote.bid) * (side === "buy" ? 1.0002 : 0.9998)
       : quote.price * (side === "buy" ? 1 + quote.spread_bps / 20000 + 0.0002 : 1 - quote.spread_bps / 20000 - 0.0002));
   const estimate = validQuantity && indicativeFill ? parsedQuantity * indicativeFill : 0;
+
+  useEffect(()=>{
+    let active=true;
+    const load=()=>{
+      void getMarketSubscriptions().then(items=>{if(active)setSubscriptions(items);}).catch(()=>{});
+    };
+    load();const timer=setInterval(load,30000);
+    return()=>{active=false;clearInterval(timer);};
+  },[]);
+  useEffect(()=>{
+    let active=true;
+    // Data quality is measured from recorded bars, without another Yahoo
+    // request. It cannot invent missing candles or claim exchange accuracy.
+    setCoverage(null);
+    void getMarketCoverage(selectedId,range,resolution).then(value=>{
+      if(active)setCoverage(value);
+    }).catch(()=>{});
+    return()=>{active=false;};
+  },[selectedId,range,resolution,history?.as_of]);
+  async function setTracking(){
+    setMarketOpsBusy(true);setMarketOpsError("");
+    try {
+      if(tracking)await unsubscribeMarket(selectedId,resolution);
+      else await subscribeMarket(selectedId,resolution);
+      setSubscriptions(await getMarketSubscriptions());
+    }catch(e){setMarketOpsError(errorMessage(e));}
+    finally{setMarketOpsBusy(false);}
+  }
 
   const loadAccount = useCallback(async () => {
     try { setAccount(await getAccount()); setBackendOnline(true); }
@@ -411,6 +445,24 @@ export default function MarketDesk() {
               <div className="mode-tabs">
                 <button type="button" className={mode==="market"?"mode-selected":""} onClick={()=>changeMode("market")}><Activity size={14}/> {t("Market")}</button>
                 <button type="button" className={mode==="replay"?"mode-selected":""} onClick={()=>changeMode("replay")}><Clock3 size={14}/> {t("Replay")}</button>
+              </div>
+              <div className="market-data-health">
+                <div className="market-data-health-line">
+                  <strong>{t("Local data coverage")}</strong>
+                  <span>{coverage?.bars??0} {t("recorded bars")}</span>
+                  <span>{coverage?.coverage_pct==null?t("Coverage varies by session"):`${coverage.coverage_pct}% ${t("weekday coverage estimate")}`}</span>
+                  <span>{coverage?.gaps?.length??0} {t("possible observed gaps")}</span>
+                  <span>{coverage?.last_bar?t("Latest archived")+" "+dt(coverage.last_bar):t("No archived candles")}</span>
+                </div>
+                <div className="market-data-health-line">
+                  <strong>{t("Incremental ingestion")}</strong>
+                  <span>{tracking?t("Tracking active"):t("Not tracking")}</span>
+                  {tracking?.last_success&&<span>{t("Last successful sync")} {dt(tracking.last_success)}</span>}
+                  {tracking?.failure_code&&<span role="alert">{t("Provider status")} {tracking.failure_code}</span>}
+                  <button type="button" disabled={marketOpsBusy}
+                    onClick={()=>void setTracking()}>{t(tracking?"Stop collecting":"Collect new bars locally")}</button>
+                </div>
+                {marketOpsError&&<small role="alert">{marketOpsError}</small>}
               </div>
               <span>{history ? `${history.source} · ${t("latest bar")} ${dt(history.bars.at(-1)!.time)}` : t("Connect local API for market history")}</span>
             </div>
