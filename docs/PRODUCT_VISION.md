@@ -4,6 +4,16 @@
 **Audience:** All future contributors, coding agents, UI/design agents, and project discussions.
 **Product name:** Trading Simulator. Keep a professional, finance-oriented interface.
 
+**Permanent privacy requirement (2026-11-17):** The trading engine and UI
+source code can be public, but the owner's **actual learned/generated,
+optimized, selected or deployed strategies and their parameter values must
+remain confidential**. Keep strategy versions, research output, signals,
+models, trades and performance records in private Git-ignored storage.
+Never leak these through public commits, GitHub Actions, examples, screenshots,
+logs, issue bodies or a public demo. See [Strategy Privacy Policy](STRATEGY_PRIVACY.md).
+This rule applies to all future work, especially AI strategy generation,
+backtesting, trading, notifications and live deployment.
+
 > **This is the product specification, not a statement that these features are already implemented.**
 > The repository began as a historical simulator. The intended product is a continuously running
 > personal quantitative trading research, live signal, and human-approved execution platform.
