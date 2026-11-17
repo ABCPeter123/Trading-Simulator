@@ -12,6 +12,7 @@ import sqlite3
 import ssl
 from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
+from email.utils import getaddresses
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -21,6 +22,7 @@ from . import live_machine as m
 
 def _channels():
     channels=[]
+    selected={x.strip().lower() for x in os.environ.get('TRADING_SIM_NOTIFICATION_CHANNELS','').split(',') if x.strip()}
     if os.environ.get("TRADING_SIM_DISCORD_WEBHOOK", "").strip():
         channels.append("discord")
     if os.environ.get("TRADING_SIM_SMTP_HOST","") and os.environ.get("TRADING_SIM_EMAIL_TO",""):
@@ -31,7 +33,44 @@ def _channels():
         "TRADING_SIM_IMESSAGE_CHAT_GUID",
     )):
         channels.append("imessage")
-    return channels
+    return [c for c in channels if not selected or c in selected]
+
+def _email_targets():
+    recipients=getaddresses([os.environ.get("TRADING_SIM_EMAIL_TO","").replace(";",",")])
+    result=[]
+    for _,addr in recipients:
+        if not addr or addr.count("@")!=1 or any(c.isspace() for c in addr):
+            raise ValueError("Invalid private notification recipient")
+        if addr not in result:result.append(addr)
+    if not result:raise ValueError("At least one email recipient is required")
+    return result
+
+def _send_email(title:str,body:str,html_body:str|None=None):
+    host=os.environ["TRADING_SIM_SMTP_HOST"].strip()
+    port=int(os.environ.get("TRADING_SIM_SMTP_PORT","465"))
+    sender=(os.environ.get("TRADING_SIM_EMAIL_FROM") or os.environ.get("TRADING_SIM_SMTP_USER","")).strip()
+    if not host or not sender or any(c.isspace() for c in sender) or port not in (465,587):
+        raise ValueError("Invalid SMTP sender or port")
+    targets=_email_targets()
+    msg=EmailMessage()
+    msg["From"]=sender
+    msg["To"]=", ".join(targets)
+    msg["Subject"]="Trading Simulator: "+title.replace(chr(13)," ").replace(chr(10)," ")[:160]
+    msg.set_content(body)
+    if html_body:msg.add_alternative(html_body,subtype="html")
+    user=os.environ.get("TRADING_SIM_SMTP_USER","").strip()
+    password=os.environ.get("TRADING_SIM_SMTP_PASSWORD","")
+    if host.lower()=="smtp.gmail.com" and (not user or not password):
+        raise ValueError("Gmail requires authenticated SMTP")
+    if port==465:
+        with smtplib.SMTP_SSL(host,port,timeout=15,context=ssl.create_default_context()) as smtp:
+            if user:smtp.login(user,password)
+            smtp.send_message(msg,to_addrs=targets)
+    else:
+        with smtplib.SMTP(host,port,timeout=15) as smtp:
+            smtp.starttls(context=ssl.create_default_context())
+            if user:smtp.login(user,password)
+            smtp.send_message(msg,to_addrs=targets)
 
 def _send(channel: str, title: str, message: str):
     if channel=="discord":
@@ -42,26 +81,7 @@ def _send(channel: str, title: str, message: str):
         r=httpx.post(url,json={"content":title+"\n"+message},timeout=12)
         r.raise_for_status()
     elif channel=="email":
-        host=os.environ["TRADING_SIM_SMTP_HOST"]
-        port=int(os.environ.get("TRADING_SIM_SMTP_PORT","465"))
-        sender=os.environ.get("TRADING_SIM_EMAIL_FROM") or os.environ.get("TRADING_SIM_SMTP_USER","")
-        target=os.environ["TRADING_SIM_EMAIL_TO"]
-        if not sender or not target:raise ValueError("Email sender and recipient required")
-        letter=EmailMessage()
-        letter["From"]=sender;letter["To"]=target
-        letter["Subject"]="Trading Simulator: "+title
-        letter.set_content(message)
-        if port==465:
-            with smtplib.SMTP_SSL(host,port,timeout=15,context=ssl.create_default_context()) as smtp:
-                if os.environ.get("TRADING_SIM_SMTP_USER"):
-                    smtp.login(os.environ["TRADING_SIM_SMTP_USER"],os.environ["TRADING_SIM_SMTP_PASSWORD"])
-                smtp.send_message(letter)
-        else:
-            with smtplib.SMTP(host,port,timeout=15) as smtp:
-                smtp.starttls(context=ssl.create_default_context())
-                if os.environ.get("TRADING_SIM_SMTP_USER"):
-                    smtp.login(os.environ["TRADING_SIM_SMTP_USER"],os.environ["TRADING_SIM_SMTP_PASSWORD"])
-                smtp.send_message(letter)
+        _send_email(title,message)
     elif channel=="imessage":
         _send_imessage(title,message)
     else:
@@ -118,9 +138,10 @@ def _init(conn):
       attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
       PRIMARY KEY(key,channel))""")
 
-def _deliver_one(key, title, text, repeat_after_min=0):
+def _deliver_one(key, title, text, repeat_after_min=0, only_channel=None, html=None):
     now=datetime.now(timezone.utc)
     for channel in _channels():
+        if only_channel and channel!=only_channel:continue
         # Claims are reserved with a transaction, preventing multiple worker
         # processes from sending the same regular message concurrently.
         with m.LOCK,m.db() as conn:
@@ -136,7 +157,10 @@ def _deliver_one(key, title, text, repeat_after_min=0):
               DO UPDATE SET attempts=deliveries.attempts+1""",(key,channel))
             conn.commit()
         try:
-            _send(channel,title,text)
+            if html is not None and channel=='email':
+                _send_email(title,text,html)
+            else:
+                _send(channel,title,text)
             with m.LOCK,m.db() as conn:
                 _init(conn)
                 conn.execute("UPDATE deliveries SET delivered_at=?,last_error=NULL WHERE key=? AND channel=?",
