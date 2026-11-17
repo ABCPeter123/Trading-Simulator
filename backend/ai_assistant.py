@@ -103,21 +103,60 @@ def configuration():
     }
 
 
-def provider_status():
+# Only explicitly configured model IDs can be selected by the browser. Never
+# accept arbitrary inference URLs, model paths, or environment overrides from it.
+DEFAULT_LOCAL_MODELS = ("TwIL-8B-Q4_K_M-balanced.gguf",
+                        "Qwen3.5-9B-Q4_K_M.gguf")
+
+
+def local_model_choices():
+    raw = os.environ.get("TRADING_SIM_AI_MODELS", "")
+    values = (item.strip() for item in raw.split(",")) if raw.strip() else DEFAULT_LOCAL_MODELS
+    return tuple(dict.fromkeys(item for item in values
+                               if item and len(item) <= 100 and "/" not in item
+                               and "\\" not in item and not item.startswith(".")))[:8]
+
+
+def selected_local_model(requested=None):
+    config = configuration()
+    if requested is not None and config["provider"] != "llama_cpp":
+        raise HTTPException(422, detail="Model selection requires local llama.cpp.")
+    selected = requested if requested is not None else config["model"]
+    if selected not in (*local_model_choices(), config["model"]):
+        raise HTTPException(422, detail="Selected local AI model is not approved by backend configuration.")
+    return selected
+
+
+def provider_status(model=None):
     """Show whether the selected local model is actually available."""
     config = configuration()
     if config["provider"] == "llama_cpp":
+        selected = selected_local_model(model)
+        config = {**config, "model": selected}
+        choices = local_model_choices()
+        available_models = []
+        loaded = False
         try:
-            with httpx.Client(timeout=2,trust_env=False) as client:
-                reply=client.get(LLAMA_CPP_MODELS_URL)
+            with httpx.Client(timeout=2, trust_env=False) as client:
+                reply = client.get(LLAMA_CPP_MODELS_URL)
                 reply.raise_for_status()
-                available=reply.json().get("data",[])
-                ready=isinstance(available,list) and bool(available)
-        except (httpx.HTTPError,ValueError,TypeError,KeyError):
-            ready=False
-        return {**config,"ready":ready,"loaded":ready,"warming":False,
-                "description":config["description"] if ready else
-                "Local llama.cpp server unavailable on 127.0.0.1:8081. Start it with the selected GGUF model."}
+                rows = reply.json().get("data", [])
+                if isinstance(rows, list):
+                    available_models = [row["id"] for row in rows
+                                        if isinstance(row, dict)
+                                        and isinstance(row.get("id"), str)
+                                        and row["id"] in choices]
+                    loaded = any(row.get("id") == selected
+                                 and row.get("status", {}).get("value") == "loaded"
+                                 for row in rows if isinstance(row, dict)
+                                 and isinstance(row.get("status", {}), dict))
+        except (httpx.HTTPError, ValueError, TypeError, KeyError):
+            pass
+        ready = selected in available_models
+        return {**config, "ready": ready, "loaded": loaded,
+                "warming": False, "available_models": available_models,
+                "description": config["description"] if ready else
+                "Local llama.cpp model unavailable. Check router port 8081 and the selected model ID."}
     if config["provider"] != "ollama":
         return {**config, "ready": config["configured"]}
     ready = False
@@ -244,7 +283,7 @@ def response_text(payload):
     ).strip()
 
 
-def call_model(system: str, user: str) -> str:
+def call_model(system: str, user: str, model: str | None = None) -> str:
     config = configuration()
     if not config["configured"]:
         raise HTTPException(503, detail=config["description"])
@@ -264,12 +303,13 @@ def call_model(system: str, user: str) -> str:
                 reply.raise_for_status()
                 return str(reply.json()["message"]["content"])
         if config["provider"] == "llama_cpp":
+            selected = selected_local_model(model)
             # Fixed loopback-only endpoint, no outbound AI traffic. Model
             # weights must be installed and licensed separately by the user.
             timeout=httpx.Timeout(connect=5.0,read=ollama_timeout_seconds(),write=15.0,pool=5.0)
             with httpx.Client(timeout=timeout,trust_env=False) as client:
                 reply=client.post(LLAMA_CPP_CHAT_URL,json={
-                    "model":config["model"],"stream":False,"temperature":0.2,
+                    "model":selected,"stream":False,"temperature":0.2,
                     "max_tokens":local_output_token_limit(),
                     "messages":[{"role":"system","content":system},
                                 {"role":"user","content":user}],
@@ -354,12 +394,13 @@ def validate_proposal(proposal, mode, symbols):
     return cleaned, None
 
 
-def advise(mode: str, run_id: str, question: str, history=None, language="en"):
+def advise(mode: str, run_id: str, question: str, history=None, language="en", model=None):
     question = question.strip()
     if not question or len(question) > MAX_QUESTION:
         raise HTTPException(422, detail="Question must be 1-1200 characters.")
     if not configuration()["configured"]:
         raise HTTPException(503, detail=configuration()["description"])
+    selected = selected_local_model(model) if model is not None else None
     context = game_context(mode, run_id)
     recent = []
     for item in (history or [])[-6:]:
@@ -371,12 +412,13 @@ def advise(mode: str, run_id: str, question: str, history=None, language="en"):
         "question": question,
         "requested_language": "zh-CN" if language == "zh-CN" or re.search(r"[\u3400-\u9fff]", question) else "en",
     }, ensure_ascii=False, separators=(",", ":"))
-    answer, candidate = parse_answer(call_model(SYSTEM_PROMPT, user))
+    answer, candidate = parse_answer(call_model(SYSTEM_PROMPT, user, selected) if selected is not None
+                                     else call_model(SYSTEM_PROMPT, user))
     strategy, warning = validate_proposal(candidate, mode, context["symbols"])
     config = configuration()
     return {
         "answer": answer, "proposed_strategy": strategy,
         "proposal_validated": bool(strategy), "warning": warning,
-        "provider": config["provider"], "model": config["model"],
+        "provider": config["provider"], "model": selected or config["model"],
         "applied": False, "scope": "revealed_historical_data_only",
     }
