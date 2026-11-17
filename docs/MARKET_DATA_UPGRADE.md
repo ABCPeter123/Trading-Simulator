@@ -130,7 +130,7 @@ Model details as of November 17, 2026:
 **Optional setup after installing llama.cpp on your own PC:**
 
 ```powershell
-llama-server -hf webAI-Official/TwIL-8B --hf-file TwIL-8B-Q4_K_M-balanced.gguf --alias TwIL-8B-Q4_K_M-balanced.gguf --host 127.0.0.1 --port 8081
+llama-server -hf webAI-Official/TwIL-8B --hf-file TwIL-8B-Q4_K_M-balanced.gguf --alias TwIL-8B-Q4_K_M-balanced.gguf --host 127.0.0.1 --port 8081 --reasoning off --ctx-size 8192
 ```
 
 This downloads weights on the local machine and runs a loopback-only
