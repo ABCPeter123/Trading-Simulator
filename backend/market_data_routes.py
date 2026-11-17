@@ -43,11 +43,33 @@ def coverage(asset_id:str,window:str=Query("1Y"),resolution:str=Query("1d")):
 def health():
     _private()
     entries=market_ingestion.list_subscriptions()
-    return {"subscriptions":len(entries),"active":sum(bool(x["active"]) for x in entries),
-            "errors":sum(bool(x["failure_code"]) for x in entries),
-            "last_updates":[{"asset_id":x["asset_id"],"resolution":x["resolution"],
-                             "last_bar":x["last_bar"],"last_success":x["last_success"],
-                             "failure_code":x["failure_code"]} for x in entries]}
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).timestamp()
+    updates = []
+    for entry in entries:
+        resolution = entry["resolution"]
+        last_bar = entry["last_bar"]
+        expected_seconds = market_ingestion.INTERVAL_SECONDS[resolution]
+        age_seconds = max(0, int(now - last_bar)) if last_bar is not None else None
+        # Outside an exchange session, historical age is not evidence of
+        # a failed publisher. Report age separately from ingest failures.
+        updates.append({
+            "asset_id": entry["asset_id"], "resolution": resolution,
+            "active": bool(entry["active"]), "last_bar": last_bar,
+            "last_success": entry["last_success"],
+            "last_attempt": entry["last_attempt"],
+            "failure_code": entry["failure_code"],
+            "age_seconds": age_seconds,
+            "interval_seconds": expected_seconds,
+            "sync_state": ("disabled" if not entry["active"] else
+                           "error" if entry["failure_code"] else
+                           "not_started" if entry["last_success"] is None else
+                           "healthy"),
+        })
+    return {"subscriptions":len(entries),
+            "active":sum(bool(x["active"]) for x in entries),
+            "errors":sum(bool(x["active"] and x["failure_code"]) for x in entries),
+            "last_updates":updates}
 
 
 @router.get("/archived/{asset_id}")
