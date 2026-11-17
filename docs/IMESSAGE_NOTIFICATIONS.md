@@ -54,10 +54,20 @@ BlueBubbles server. Do not expose an unauthenticated local server to the Interne
    powershell -ExecutionPolicy Bypass -File .\\start-live-machine.ps1
    ```
 
-5. In the private website's **Alerts & System Health** workspace, check the
-   notification channel status. It should list `imessage` after the worker's
-   settings have loaded. Real messages are sent only for actual pending signals
-   or open alerts. No test message is sent automatically on startup.
+5. To send **one owner-approved, generic test iMessage**, run this in the
+   Windows project folder and confirm the interactive prompt:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\\start-live-machine.ps1 -TestIMessage
+   ```
+
+   This test uses no saved strategy or portfolio data. If the Mac relay
+   accepts the message, confirm receipt on the Apple device. Normal worker
+   notifications still trigger only for pending signals and open alerts.
+   The private website's notification delivery history will show successful
+   sends and failed attempts; the API process and worker may have different
+   environment settings, so the browser's channel listing alone is not proof
+   that the background worker has the iMessage settings loaded.
 
 **Generic notice default:** With `TRADING_SIM_IMESSAGE_INCLUDE_DETAILS=0`,
 messages say only that a trading review or critical system alert needs your
