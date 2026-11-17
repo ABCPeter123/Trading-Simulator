@@ -217,3 +217,40 @@ def test_gmail_app_password_with_visual_spaces_is_normalized_only_for_sixteen_ch
     monkeypatch.setenv("TRADING_SIM_SMTP_PASSWORD","abcd efgh ijkl mnop")
     notices._send_email("Synthetic","Data")
     assert captured==["abcdefghijklmnop"]
+
+
+def test_diagnostics_authenticate_without_sending_or_disclosing_private_details(workspace,monkeypatch,capsys):
+    from backend import email_report_probe
+    checked=[]
+    class FakeConnection:
+        def close(self):checked.append("close")
+    def fake_connect(host,port,user,password):
+        checked.append(port)
+        assert host=="smtp.gmail.com"
+        assert user=="sender@example.invalid"
+        assert password=="fictional-app-password"
+        return FakeConnection()
+    monkeypatch.setattr(notices,"_smtp_connect_and_auth",fake_connect)
+    monkeypatch.setattr(notices,"_send_email",lambda *a,**kw:
+                        pytest.fail("Diagnostics must never send mail"))
+    assert email_report_probe.diagnose()==0
+    assert checked==[465,"close",587,"close"]
+    output=capsys.readouterr().out
+    assert "465 SSL" in output
+    assert "587 STARTTLS" in output
+    assert "No message will be sent" in output
+    assert "fictional-app-password" not in output
+    assert "sender@example.invalid" not in output
+
+
+def test_diagnostics_report_authentication_failure_without_raw_exception(workspace,monkeypatch,capsys):
+    from backend import email_report_probe
+    def fake_connect(host,port,user,password):
+        raise notices.SMTPDeliveryFailure("authenticate",port,"SMTPAuthenticationError")
+    monkeypatch.setattr(notices,"_smtp_connect_and_auth",fake_connect)
+    assert email_report_probe.diagnose()==1
+    out=capsys.readouterr().out
+    assert out.count("authentication")>=0 or "authenticate" in out
+    assert "SMTPAuthenticationError" in out
+    assert "fictional-app-password" not in out
+    assert "sender@example.invalid" not in out
