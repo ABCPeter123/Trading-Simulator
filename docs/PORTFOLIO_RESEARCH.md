@@ -88,8 +88,8 @@ at every worker tick.
   slippage, and $1 minimum or $0.005/share commission. These are not
   executable quotes or a complete cost model.
 - Maximum configured single-position exposure is 5-50%. Additional
-  coarse group caps: equity 70%, bonds 55%, commodity ETFs 35% and
-  crypto 10%. Unallocated cash is retained rather than force invested.
+  coarse group caps: equities 70%, bonds 55%, commodity ETFs 35%,
+  real estate 20% and crypto-related exposure 10%. Unallocated cash is retained rather than force invested.
   The group classifier is a simple instrument-category mapping,
   **not** an audited look-through of ETF constituents or correlations.
 - Fees, turnover, net returns, Sharpe, drawdown, actual portfolio weights,
