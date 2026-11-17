@@ -123,3 +123,20 @@ def test_command_line_success_status(tmp_path,monkeypatch):
     monkeypatch.setattr(publisher,"publish",lambda url:None)
     assert publisher.main([FAKE_URL])==0
     assert status_path.read_text(encoding="utf-8").strip()=="OK"
+
+def test_local_publishing_token_takes_precedence_over_inherited_env(tmp_path,monkeypatch):
+    token_file=tmp_path/"vercel-token.txt"
+    token_file.write_text("synthetic-valid-file-token",encoding="utf-8")
+    monkeypatch.setattr(publisher,"TOKEN_FILE",token_file)
+    monkeypatch.setenv("TRADING_SIM_VERCEL_TOKEN","synthetic-wrong-env-token")
+    captured={}
+    class Response:
+        status=200
+        def __enter__(self):return self
+        def __exit__(self,*args):return False
+    def publish_request(req,timeout):
+        captured["auth"]=req.get_header("Authorization")
+        return Response()
+    monkeypatch.setattr(publisher,"urlopen",publish_request)
+    publisher.publish(FAKE_URL)
+    assert captured["auth"]=="Bearer synthetic-valid-file-token"
