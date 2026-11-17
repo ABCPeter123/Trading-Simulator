@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 import os
 import hmac
+from . import bridge_password
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -44,6 +45,7 @@ if PUBLIC_DEMO:
 # owner's computer; the temporary tunnel transports requests, not storage.
 PRIVATE_BRIDGE = os.environ.get("TRADING_SIM_PRIVATE_BRIDGE") == "1"
 BRIDGE_TOKEN = os.environ.get("TRADING_SIM_PRIVATE_API_TOKEN", "")
+BRIDGE_PASSWORD_HASH = os.environ.get("TRADING_SIM_PRIVATE_PASSWORD_HASH", "")
 BRIDGE_ORIGINS = [
     origin.strip().rstrip("/")
     for origin in os.environ.get("TRADING_SIM_ALLOWED_ORIGINS", "").split(",")
@@ -52,8 +54,10 @@ BRIDGE_ORIGINS = [
 if PRIVATE_BRIDGE:
     if PUBLIC_DEMO:
         raise RuntimeError("A public shared demo cannot be a private trading bridge.")
-    if len(BRIDGE_TOKEN) < 48:
-        raise RuntimeError("Private bridge requires a random API token of at least 48 characters.")
+    if not BRIDGE_PASSWORD_HASH and len(BRIDGE_TOKEN) < 48:
+        raise RuntimeError("Private bridge requires a password verifier or a random API token of at least 48 characters.")
+    if BRIDGE_PASSWORD_HASH and not BRIDGE_PASSWORD_HASH.startswith("pbkdf2-sha256$"):
+        raise RuntimeError("Invalid private password verifier.")
     if not BRIDGE_ORIGINS or any(
         urlparse(origin).scheme != "https"
         or not urlparse(origin).hostname
@@ -84,9 +88,13 @@ async def protect_private_bridge(request: Request, call_next):
         if origin and origin not in BRIDGE_ORIGINS:
             return JSONResponse({"detail": "Origin not authorized."}, status_code=403)
         expected = "Bearer " + BRIDGE_TOKEN
-        # CORS preflight carries no authorization header. The CORS middleware
-        # validates its requested origin and method before the actual API call.
-        if request.method != "OPTIONS" and not hmac.compare_digest(request.headers.get("authorization", ""), expected):
+        # Browser password login is the only anonymous API action. Existing
+        # token-mode connections remain supported for local legacy setups.
+        login_route = BRIDGE_PASSWORD_HASH and request.url.path in ("/api/auth/login","/api/auth/status")
+        authorized = (bridge_password.authenticated(request.headers.get("authorization",""))
+                      if BRIDGE_PASSWORD_HASH else
+                      hmac.compare_digest(request.headers.get("authorization",""),expected))
+        if request.method != "OPTIONS" and not login_route and not authorized:
             denied = JSONResponse({"detail": "Private engine authorization required."}, status_code=401)
             denied.headers["Cache-Control"] = "no-store"
             if origin in BRIDGE_ORIGINS:
@@ -112,6 +120,34 @@ class NewOrder(BaseModel):
 @app.get("/api/instruments")
 def instruments(search: str = Query("", max_length=80), category: str = Query("", max_length=30), limit: int = Query(500, ge=1, le=500)):
     return list_instruments(search, category, limit)
+
+class BridgeLogin(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+
+@app.get("/api/auth/status")
+def bridge_auth_status():
+    if not PRIVATE_BRIDGE or not BRIDGE_PASSWORD_HASH:
+        raise HTTPException(404, detail="Password login unavailable.")
+    return {"mode":"private-bridge-password","login":"password"}
+
+@app.post("/api/auth/login")
+def bridge_auth_login(body: BridgeLogin, request: Request):
+    if not PRIVATE_BRIDGE or not BRIDGE_PASSWORD_HASH:
+        raise HTTPException(404, detail="Password login unavailable.")
+    # IP supplied by trusted Cloudflare connector; spoofing this header does
+    # not bypass the global login-attempt budget.
+    ip=request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "unknown")
+    session=bridge_password.new_session(body.password,BRIDGE_PASSWORD_HASH,ip)
+    if not session:
+        raise HTTPException(401,detail="Incorrect password or too many attempts. Try again later.")
+    return {"mode":"private-bridge","token":session,"expires_in":bridge_password.SESSION_SECONDS}
+
+@app.post("/api/auth/logout")
+def bridge_auth_logout(request: Request):
+    if not PRIVATE_BRIDGE or not BRIDGE_PASSWORD_HASH:
+        raise HTTPException(404,detail="Password logout unavailable.")
+    bridge_password.revoke(request.headers.get("authorization",""))
+    return {"logged_out":True}
 
 @app.get("/api/health")
 def health():
