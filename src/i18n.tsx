@@ -12,6 +12,16 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Execution versus recommendation": "实际成交与策略建议对比",
+  "Review execution delays and price deviations from the signal reference. These differences can explain why actual results diverge from backtests.": "查看实际成交相对建议的时间延迟与价格偏差，以分析实盘与回测结果不一致的原因。",
+  "No confirmed trades linked to recommendations yet.": "尚无关联策略建议的已确认交易。",
+  "Suggested price": "建议参考价格",
+  "Price difference": "价格偏差",
+  "Delay (hours)": "延迟（小时）",
+  "Exceptions": "异常情况",
+  "Late fill": "成交超过有效期",
+  "Changed action": "修改了交易操作",
+  "Within window": "在有效期内",
   "Realized-loss stop (%)": "已实现亏损暂停阈值（%）",
   "Realized-loss stop": "已实现亏损保护",
   "Loss stop": "亏损暂停阈值",
