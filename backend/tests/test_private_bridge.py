@@ -66,3 +66,22 @@ def test_private_bridge_fail_closed_without_token_or_valid_origin():
         result = probe(invalid, script)
         assert result.returncode != 0, f"Unsafe private bridge started: {invalid.keys()}"
         assert "RuntimeError" in result.stderr
+
+def test_local_api_is_password_free_only_without_private_bridge():
+    # Localhost Vite uses a separate FastAPI process; an inherited bridge
+    # password verifier must not silently turn it into a cloud-only service.
+    script = """
+from fastapi.testclient import TestClient
+from backend.main import app
+c=TestClient(app)
+r=c.get('/api/health')
+assert r.status_code==200, r.text
+assert r.json()['mode']=='local'
+assert c.get('/api/live/research/portfolio/jobs').status_code==200
+assert c.post('/api/auth/login',json={'password':'fixture'}).status_code==404
+print('local api requires no cloud password')
+"""
+    result = probe({"TRADING_SIM_PRIVATE_BRIDGE":"0",
+                    "TRADING_SIM_PRIVATE_PASSWORD_HASH":"fixture-not-used"}, script)
+    assert result.returncode==0, result.stderr
+    assert "local api requires no cloud password" in result.stdout
