@@ -79,7 +79,9 @@ async def protect_private_bridge(request: Request, call_next):
         if origin and origin not in BRIDGE_ORIGINS:
             return JSONResponse({"detail": "Origin not authorized."}, status_code=403)
         expected = "Bearer " + BRIDGE_TOKEN
-        if not hmac.compare_digest(request.headers.get("authorization", ""), expected):
+        # CORS preflight carries no authorization header. The CORS middleware
+        # validates its requested origin and method before the actual API call.
+        if request.method != "OPTIONS" and not hmac.compare_digest(request.headers.get("authorization", ""), expected):
             return JSONResponse({"detail": "Private engine authorization required."}, status_code=401)
     response = await call_next(request)
     if PRIVATE_BRIDGE:
