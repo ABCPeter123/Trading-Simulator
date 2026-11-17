@@ -10,6 +10,44 @@
 
 A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Live strategy machine, optimization, and real trade journal (beta)
+
+The project now supports a private end-to-end workflow:
+
+- **Strategy Discovery:** test 16 example SMA parameter combinations on separate
+  training, validation, and held-out test periods. Save research outputs
+  and approved candidate versions only in local, Git-ignored databases.
+- **Live Strategy Machine:** deploy a saved strategy in paper or human
+  execution monitoring mode. A separate Python background worker
+  evaluates completed prior-day candles on trading days, records
+  idempotent suggestions and suppresses stale/unreliable data.
+- **Risk and notifications:** cap allocations and daily recommendations,
+  block signals on feed errors, escalate missed urgent signals, and deliver
+  deduplicated Discord or email alerts using private local credentials.
+- **Human-confirmed execution:** record actual broker fills with editable
+  price, quantity, fees, currency, timestamp, reference and notes.
+  Corrections preserve an audit trail, with distinct reported results
+  for different currencies.
+- **Operational dashboard:** six top-level workspaces organize monitoring,
+  research, strategy discovery, live signals, actual trades, and incidents.
+
+Start the independent worker on Windows after updating:
+
+```powershell
+git pull
+powershell -ExecutionPolicy Bypass -File .\start-live-machine.ps1
+```
+
+The worker operates independently of the browser while the PC stays on.
+Optionally use `-InstallAtLogon` to register a logon-triggered scheduled
+task. The full local setup, privacy policy and production limitations are
+in [Live machine setup and safety](docs/LIVE_MACHINE.md).
+
+**No broker orders are automatically placed.** Actual live trading is
+manual by design. Historical optimization, live signals, portfolio marks,
+leverage and shorting are not guarantees of profitability. More advanced
+portfolio risk controls and brokerage reconciliation remain on the roadmap.
+
 ## Vercel cloud frontend, private local data
 
 The **Vercel deployment hosts only the static React website**. Your actual
