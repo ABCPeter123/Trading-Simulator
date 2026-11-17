@@ -36,7 +36,10 @@ def _channels():
     return [c for c in channels if not selected or c in selected]
 
 def _email_targets():
-    recipients=getaddresses([os.environ.get("TRADING_SIM_EMAIL_TO","").replace(";",",")])
+    raw=os.environ.get("TRADING_SIM_EMAIL_TO","")
+    if "\r" in raw or "\n" in raw:
+        raise ValueError("Invalid private notification recipient")
+    recipients=getaddresses([raw.replace(";",",")])
     result=[]
     for _,addr in recipients:
         if not addr or addr.count("@")!=1 or any(c.isspace() for c in addr):
