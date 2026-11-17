@@ -1,5 +1,13 @@
 # Trading Simulator
 
+> **Long-term product direction:** A professional, always-on quantitative trading
+> research, live signal, risk-monitoring, and human-confirmed trade management
+> platform. The historical simulator is one stage of the product, not the final
+> purpose. Read the [canonical product vision](docs/PRODUCT_VISION.md) and
+> [contributor instructions](AGENTS.md) before planning or implementing new work.
+> Real 24/7 signal operation, external trade confirmations and live portfolio
+> monitoring are **planned capabilities**, not yet production-ready.
+
 A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
 ## Research UI, longer history, and local AI improvements
