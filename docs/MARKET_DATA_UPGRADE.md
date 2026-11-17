@@ -47,7 +47,8 @@ In the Market Desk, choose a symbol and candle interval and press
   existing historical adapter. Subsequent collection requests only the
   period since the latest archived candle, with a three-candle overlap
   to capture corrections. Existing Parquet files are atomically merged
-  and de-duplicated.
+  and de-duplicated. Previously archived wider chart windows are also
+  updated with the incremental bars, without re-downloading their old history.
 - Minimum collection spacing: 60s for 1m, 120s for 5m, 300s for 15m,
   600s for hourly and 3600s for daily; the worker checks due items
   every 30 seconds. Failed requests have 3x cooldown.
@@ -56,6 +57,11 @@ In the Market Desk, choose a symbol and candle interval and press
 - Public API quotas, upstream availability, rate limits and returned
   timestamps determine actual freshness. This is **not** tick streaming,
   licensed consolidated real-time NBBO, or broker execution.
+- While a symbol/interval is subscribed, the Market Desk's regular
+  two-minute chart refresh reads the private archived candles through
+  `GET /api/market-data/archived/{asset_id}`. It no longer repeats a
+  full external history request. Quote polling stays separate and can still
+  be delayed. The first chart view may load full provider history once.
 - Market symbols are verified, no browser-supplied arbitrary endpoints,
   and shared public demo sessions cannot start or inspect ingestion.
 
