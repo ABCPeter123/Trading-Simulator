@@ -7,6 +7,7 @@ Nothing is queued on Vercel, and website navigation never kills jobs.
 from __future__ import annotations
 
 import json
+from contextlib import closing
 import math
 import os
 import sqlite3
@@ -83,7 +84,7 @@ def enqueue(symbols: list[str], max_drawdown_pct: float = 25.,
             "max_position_pct":max_position_pct}
     moment=_now()
     with LOCK:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             conn.execute("BEGIN IMMEDIATE")
             active=conn.execute("SELECT COUNT(*) FROM research_jobs WHERE status IN ('queued','running')").fetchone()[0]
             if active>=MAX_PENDING:
@@ -104,7 +105,7 @@ def enqueue(symbols: list[str], max_drawdown_pct: float = 25.,
 
 def list_jobs(limit: int = 50):
     with LOCK:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             rows=conn.execute(
                 "SELECT * FROM research_jobs ORDER BY created_at DESC LIMIT ?", (min(max(limit,1),100),)
             ).fetchall()
@@ -113,7 +114,7 @@ def list_jobs(limit: int = 50):
 
 def get_job(job_id: str):
     with LOCK:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             row=conn.execute("SELECT * FROM research_jobs WHERE id=?",(job_id,)).fetchone()
             if row is None:
                 raise HTTPException(404, "Research job not found.")
@@ -122,7 +123,7 @@ def get_job(job_id: str):
 
 def cancel(job_id: str):
     with LOCK:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             conn.execute("BEGIN IMMEDIATE")
             job=conn.execute("SELECT * FROM research_jobs WHERE id=?",(job_id,)).fetchone()
             if job is None:
@@ -140,7 +141,7 @@ class JobCancelled(Exception):
 
 
 def _is_cancelled(job_id):
-    with _connect() as conn:
+    with closing(_connect()) as conn, conn:
         row=conn.execute("SELECT status FROM research_jobs WHERE id=?",(job_id,)).fetchone()
         return row is None or row["status"]=="cancelled"
 
@@ -148,7 +149,7 @@ def _is_cancelled(job_id):
 def _progress(job_id, percent, stage):
     if _is_cancelled(job_id):
         raise JobCancelled()
-    with _connect() as conn:
+    with closing(_connect()) as conn, conn:
         conn.execute("""UPDATE research_jobs SET progress=?,stage=?,updated_at=?
                      WHERE id=? AND status='running'""",
                      (max(0,min(99,int(percent))),stage[:100],_now(),job_id))
@@ -158,7 +159,7 @@ def _progress(job_id, percent, stage):
 
 def _claim_next():
     with LOCK:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             conn.execute("BEGIN IMMEDIATE")
             # A worker crash / PC shutdown makes RUNNING jobs recoverable.
             # If its original result already persisted, process_one will link
@@ -180,7 +181,7 @@ def _claim_next():
 
 def _finish(job_id, status, stage, result=None, code=None):
     with LOCK:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             conn.execute("""UPDATE research_jobs SET status=?,progress=?,stage=?,
                result_run_id=?,error_code=?,finished_at=?,updated_at=?
                WHERE id=? AND status='running'""",
