@@ -18,6 +18,21 @@ backtesting, trading, notifications and live deployment.
 > The repository began as a historical simulator. The intended product is a continuously running
 > personal quantitative trading research, live signal, and human-approved execution platform.
 
+## Permanent research scope: diversified multi-asset portfolios
+
+The trading and investment strategy is a **diversified set of exposures
+and instruments**, not a strategy restricted to one stock or ETF.
+The system must optimize and monitor portfolio-level allocation,
+correlations, diversification, shared cash, drawdown, concentration,
+fees, risk budgets and execution constraints across asset categories.
+Independent ticker-level strategies remain useful building blocks but
+must feed portfolio-wide decisions. Do not revert the default Strategy
+Discovery interface to a single-symbol SMA search. Real output remains
+local/private according to the confidentiality policy.
+
+See [implemented multi-asset research](PORTFOLIO_RESEARCH.md) and its
+current limitations.
+
 ## 1. North-star objective
 
 Build an end-to-end trading decision platform that helps its owner:
