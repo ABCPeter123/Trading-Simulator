@@ -324,10 +324,15 @@ def record_fill(data):
         late=datetime.fromisoformat(stamp)>datetime.fromisoformat(signal["expires_at"])
         mismatch=data["asset_id"]!=signal["asset_id"] or data["side"]!=signal["side"]
         if deviation>3 or late or mismatch:
-            record_alert("fill:variance:"+identifier,"warning",
-                         "Confirmed execution differs from original recommendation",
-                         "Review the broker fill and signal: price moved more than 3%, "
-                         "the action was recorded after expiry, or the instrument/side changed.")
+            try:
+                record_alert("fill:variance:"+identifier,"warning",
+                             "Confirmed execution differs from original recommendation",
+                             "Review the broker fill and signal: price moved more than 3%, "
+                             "the action was recorded after expiry, or the instrument/side changed.")
+            except Exception as exc:
+                # The confirmed trade has already committed; an alert delivery
+                # failure must never cause the operator to retry and duplicate it.
+                logger.warning("Could not record trade variance alert: %s",type(exc).__name__)
     return result
 
 def edit_fill(fill_id,data):
