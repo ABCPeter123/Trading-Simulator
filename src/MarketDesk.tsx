@@ -7,7 +7,9 @@ import {
   Play, RefreshCw, RotateCcw, Search, ShieldCheck, Wallet, X,
 } from "lucide-react";
 import { PriceChart } from "./components/PriceChart";
-import { ASSET_CLASSES, ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
+import { ASSET_CLASSES, catalog as FALLBACK_ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
+import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
+import type { CatalogInstrument, DiscoveredInstrument } from "./arcadeApi";
 import { getAccount, getBacktest, getHistory, getQuote, resetAccount, sendOrder, supportsCashTrading } from "./api";
 import type { AccountResponse, BacktestResponse, HistoryResponse, QuoteResponse } from "./api";
 import { advanceReplay, NEW_REPLAY, replayFillPrice, replayStartIndex } from "./replay";
@@ -26,6 +28,10 @@ const copyReplay = (account:ReplayAccount):ReplayAccount => JSON.parse(JSON.stri
 
 export default function MarketDesk() {
   const {t} = useI18n();
+  const [catalog, setCatalog] = useState<Asset[]>(FALLBACK_ASSETS);
+  const [remoteMatches,setRemoteMatches] = useState<DiscoveredInstrument[]>([]);
+  const [catalogBusy,setCatalogBusy] = useState(false);
+  const [catalogError,setCatalogError] = useState("");
   const [terminalTab,setTerminalTab] = useState<"market"|"portfolio"|"research">("market");
   const [assetClass, setAssetClass] = useState<AssetClass>("Stocks");
   const [selectedId, setSelectedId] = useState("aapl");
@@ -57,7 +63,43 @@ export default function MarketDesk() {
   const [backtest, setBacktest] = useState<BacktestResponse | null>(null);
   const [backtestError, setBacktestError] = useState("");
   const [runningBacktest, setRunningBacktest] = useState(false);
-  const selectedAsset = ASSETS.find(asset => asset.id === selectedId) ?? ASSETS[0];
+  const selectedAsset = catalog.find(asset => asset.id === selectedId) ?? catalog[0] ?? FALLBACK_ASSETS[0];
+  useEffect(()=>{
+    let active=true;
+    void gameCatalog().then(items=>{
+      if(!active)return;
+      setCatalog(items.map(item=>{
+        const existing=FALLBACK_ASSETS.find(asset=>asset.id===item.id);
+        return {
+          id:item.id,symbol:item.symbol,name:item.name,
+          exchange:existing?.exchange??item.currency,
+          assetClass:item.asset_class as AssetClass,decimals:item.decimals,
+          spreadBps:existing?.spreadBps??5,accent:existing?.accent??"#78b6cb",
+        };
+      }));
+    }).catch(()=>{if(active)setCatalogError("Instrument catalog is unavailable. Showing fallback instruments.");});
+    return ()=>{active=false;};
+  },[]);
+  async function findRemote(){
+    if(search.trim().length<2)return;
+    setCatalogBusy(true);setCatalogError("");
+    try{setRemoteMatches(await gameDiscover(search.trim()));}
+    catch(e){setCatalogError(errorMessage(e));}
+    finally{setCatalogBusy(false);}
+  }
+  async function importRemote(symbol:string){
+    setCatalogBusy(true);setCatalogError("");
+    try {
+      const item=await gameImportTicker(symbol);
+      setCatalog(previous=>previous.some(a=>a.id===item.id)?previous:[...previous,{
+        id:item.id,symbol:item.symbol,name:item.name,exchange:item.currency,
+        assetClass:item.asset_class as AssetClass,decimals:item.decimals,
+        spreadBps:5,accent:"#78b6cb",
+      }]);
+      setSelectedId(item.id);setRemoteMatches([]);setSearch("");
+    }catch(e){setCatalogError(errorMessage(e));}
+    finally{setCatalogBusy(false);}
+  }
   const supported = supportsCashTrading(selectedAsset.id, selectedAsset.assetClass);
   const allBars = history?.asset_id === selectedId ? history.bars : [];
   const visibleBars = useMemo(() => mode === "replay" ? allBars.slice(0, replayIndex + 1) : allBars, [mode, allBars, replayIndex]);
@@ -150,7 +192,7 @@ export default function MarketDesk() {
   function changeClass(next: AssetClass) {
     setAssetClass(next);
     setSearch("");
-    selectAsset(ASSETS.find(asset => asset.assetClass === next) ?? ASSETS[0]);
+    selectAsset(catalog.find(asset => asset.assetClass === next) ?? catalog[0]);
   }
   function changeMode(next: "market" | "replay") {
     setMode(next);
@@ -268,7 +310,7 @@ export default function MarketDesk() {
   const tradeCount = mode === "replay" ? replayAccount.fills.length : (account?.fills.length ?? 0);
   const canTrade = supported && validQuantity && (mode === "replay" ? allBars.length > 2 && replayIndex < allBars.length - 1 && !replayAccount.pending : !!quoteReady);
 
-  const watchlist = ASSETS.filter(asset => asset.assetClass === assetClass &&
+  const watchlist = catalog.filter(asset => asset.assetClass === assetClass &&
     `${asset.symbol} ${asset.name}`.toLowerCase().includes(search.trim().toLowerCase()));
 
   return (
@@ -292,13 +334,25 @@ export default function MarketDesk() {
             onClick={()=>setTerminalTab(tab)}>{t(tab==="market"?"Market & Charts":tab==="portfolio"?"Account & Orders":"Backtest Research")}</button>)}
         </nav>
         <aside className="watchlist-panel">
-          <div className="watchlist-heading"><div><span className="eyebrow">{t("MARKET EXPLORER")}</span><h2>{t("Watchlist")}</h2></div><span className="subtle-counter">{ASSETS.length} {t("assets")}</span></div>
+          <div className="watchlist-heading"><div><span className="eyebrow">{t("MARKET EXPLORER")}</span><h2>{t("Watchlist")}</h2></div><span className="subtle-counter">{catalog.length} {t("assets")}</span></div>
           <label className="search-field"><Search size={16}/>
             <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("Search symbols...")} aria-label={t("Search symbols")}/>
           </label>
           <div className="category-tabs" role="tablist" aria-label={t("Asset classes")}>
             {ASSET_CLASSES.map(group =>
               <button key={group} type="button" role="tab" aria-selected={assetClass===group} className={assetClass===group?"category-active":""} onClick={() => changeClass(group)}>{t(group)}</button>)}
+          </div>
+          <div className="market-catalog-actions">
+            <button type="button" disabled={catalogBusy||search.trim().length<2} onClick={()=>void findRemote()}>
+              {t("Search provider")}
+            </button>
+            {catalogError&&<small role="alert">{catalogError}</small>}
+            {remoteMatches.length>0&&<div className="market-catalog-matches">
+              {remoteMatches.slice(0,6).map(item=><button key={item.symbol} type="button"
+                disabled={catalogBusy} onClick={()=>void importRemote(item.symbol)}>
+                {item.symbol} · {item.name} <span>{t("Import")}</span>
+              </button>)}
+            </div>}
           </div>
           <div className="watchlist-table-label"><span>{t("SYMBOL / NAME")}</span><span>{t("LAST KNOWN / STATUS")}</span></div>
           <div className="watchlist-items">
@@ -403,7 +457,7 @@ export default function MarketDesk() {
                 </tr></tbody></table> : <div className="empty-state"><Wallet size={25}/><strong>{t("No replay positions")}</strong><span>{t("Queue a buy and advance to the next candle.")}</span></div>
                   : account?.positions.length ? <table className="data-table"><thead><tr><th>{t("ASSET")}</th><th>{t("QUANTITY")}</th><th>{t("AVERAGE COST")}</th><th>{t("MARKET VALUE")}</th><th>{t("UNREALIZED P&L")}</th></tr></thead>
                     <tbody>{account.positions.map(position => {
-                      const asset = ASSETS.find(item => item.id === position.asset_id);
+                      const asset = catalog.find(item => item.id === position.asset_id);
                       return <tr key={position.asset_id}><td><strong>{asset?.symbol ?? position.asset_id}</strong><small>{asset?.assetClass?t(asset.assetClass):""}</small></td><td>{formatQuantity(position.quantity)}</td>
                         <td>{formatPrice(position.average_cost, asset?.decimals ?? 2)}</td><td>{position.market_value === null ? t("Unpriced") : formatMoney(position.market_value)}</td>
                         <td className={position.unrealized_pnl == null ? "" : position.unrealized_pnl >= 0?"positive":"negative"}>{position.unrealized_pnl === null ? "—" : formatMoney(position.unrealized_pnl)}</td>
@@ -417,9 +471,9 @@ export default function MarketDesk() {
                       <td>{dt(fill.time)}</td><td><strong>{selectedAsset.symbol}</strong></td>
                       <td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td><td>{formatQuantity(fill.quantity)}</td><td>{formatPrice(fill.price, selectedAsset.decimals)}</td><td>{formatMoney(fill.fee)}</td>
                     </tr>) : account?.fills.map(fill => <tr key={fill.id}>
-                      <td>{dt(fill.created_at)}</td><td><strong>{ASSETS.find(a=>a.id===fill.asset_id)?.symbol ?? fill.asset_id}</strong></td>
+                      <td>{dt(fill.created_at)}</td><td><strong>{catalog.find(a=>a.id===fill.asset_id)?.symbol ?? fill.asset_id}</strong></td>
                       <td className={fill.side==="buy"?"positive":"negative"}>{t(fill.side.toUpperCase())}</td><td>{formatQuantity(fill.quantity)}</td>
-                      <td>{formatPrice(fill.price, ASSETS.find(a=>a.id===fill.asset_id)?.decimals ?? 2)}</td><td>{formatMoney(fill.fee)}</td>
+                      <td>{formatPrice(fill.price, catalog.find(a=>a.id===fill.asset_id)?.decimals ?? 2)}</td><td>{formatMoney(fill.fee)}</td>
                     </tr>)}</tbody></table>
                   : <div className="empty-state"><Clock3 size={25}/><strong>{t("No executed orders")}</strong><span>{t("Paper fills will appear here.")}</span></div>
               )}
@@ -456,10 +510,10 @@ export default function MarketDesk() {
             <div className="ticket-security"><span className="ticket-security-symbol">{selectedAsset.symbol}</span><span className="ticket-security-class">{t(selectedAsset.assetClass)}<ChevronDown size={12}/></span></div>
             <label className="terminal-order-asset-picker">{t("Instrument")}
               <select value={selectedId} onChange={event=>{
-                const next=ASSETS.find(asset=>asset.id===event.target.value);
+                const next=catalog.find(asset=>asset.id===event.target.value);
                 if(next){setAssetClass(next.assetClass);setSearch("");selectAsset(next);}
               }}>
-                {ASSETS.map(asset=><option key={asset.id} value={asset.id}>{asset.symbol} · {asset.name}</option>)}
+                {catalog.map(asset=><option key={asset.id} value={asset.id}>{asset.symbol} · {asset.name}</option>)}
               </select>
             </label>
             <div className="side-switch">
