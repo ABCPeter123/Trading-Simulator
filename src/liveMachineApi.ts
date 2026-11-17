@@ -30,8 +30,8 @@ export interface MachineStatus {
   execution_mode:string;broker_connected:boolean;
 }
 export interface Journal {
-  fills:ConfirmedFill[];positions:{asset_id:string;quantity:number;average_cost:number;realized_pnl:number}[];
-  realized_pnl:number;note:string;
+  fills:ConfirmedFill[];positions:{asset_id:string;currency:string;quantity:number;average_cost:number;realized_pnl:number}[];
+  realized_pnl:number|null;realized_by_currency:Record<string,number>;note:string;
 }
 export interface NotificationStatus {
   channels:string[];
