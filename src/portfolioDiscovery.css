@@ -46,3 +46,9 @@ font-size:13px;width:100%;box-sizing:border-box;resize:vertical;padding:10px;min
 .pd-track i{height:100%;display:block;background:#6bd9b0;border-radius:9px}
 .pd-matrix th,.pd-matrix td{text-align:center!important}
 @media(max-width:860px){.pd-layout{grid-template-columns:1fr}.pd-header{flex-direction:column}.pd-private{align-self:flex-start}}
+
+.disc-workspace .pd-switch{display:flex;flex-wrap:wrap;gap:8px;padding:19px clamp(16px,2.4vw,35px) 0;max-width:1550px;margin:0 auto}
+.pd-switch button{cursor:pointer;padding:11px 16px;font-size:12px;border-radius:8px;
+ background:#102332;color:#9db7c8;border:1px solid #385067;font-weight:650}
+.pd-switch button[aria-current=page]{color:#082920;background:#77d9b5;border-color:#77d9b5}
+@media(max-width:650px){.pd-switch button{flex:1 1 180px}}
