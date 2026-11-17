@@ -157,7 +157,29 @@ try {
                 $saved=(Get-Content -LiteralPath $statusFile -Raw -ErrorAction SilentlyContinue).Trim()
                 if(-not [string]::IsNullOrWhiteSpace($saved)){ $detail=$saved }
             }
-            if($detail -match 'HTTP 40[13]'){
+            if($detail -match 'HTTP 40[13]' -and -not $SkipSetup){
+                # Repair the credential while the password-protected tunnel stays up.
+                Write-Host "[setup] Your local Vercel credential cannot update team PP (pp-48b0)." -ForegroundColor Yellow
+                $repair=Read-Host "Paste a replacement PP-scoped Vercel access token now? [y/N]"
+                if($repair -match '^(y|yes)$'){
+                    $secure=Read-Host -AsSecureString "Paste new team Vercel token (hidden)"
+                    $bstr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+                    try { $replacement=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+                    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+                    if(-not [string]::IsNullOrWhiteSpace($replacement)){
+                        Set-Content -LiteralPath $vercelFile -Value $replacement.Trim() -NoNewline -Encoding ASCII
+                        Remove-Variable replacement -ErrorAction SilentlyContinue
+                        & $python (Join-Path $root "scripts\publish_tunnel.py") $tunnelUrl
+                        $published=($LASTEXITCODE -eq 0)
+                        if($published){
+                            Write-Host "[private] Link publishing authorized. Future tunnel URLs will synchronize automatically." -ForegroundColor Green
+                        }elseif(Test-Path -LiteralPath $statusFile){
+                            $detail=(Get-Content -LiteralPath $statusFile -Raw -ErrorAction SilentlyContinue).Trim()
+                        }
+                    }
+                }
+            }
+            if(-not $published -and $detail -match 'HTTP 40[13]'){
                 # A bad/mis-scoped Vercel token must not kill an otherwise healthy
                 # password-protected API or Cloudflare tunnel.
                 Write-Host "[private] Auto-registration failed: $detail" -ForegroundColor Yellow
@@ -165,7 +187,7 @@ try {
                 Write-Host "[private] Temporary tunnel URL (owner only): $tunnelUrl" -ForegroundColor Cyan
                 Write-Host "[private] Publish ONLY that URL into the PP team's Global Config bridge item via your connected Vercel account." -ForegroundColor Cyan
                 Write-Host "[private] For automatic registration next time, restart with -ResetVercelToken and a PP-scoped Vercel token." -ForegroundColor Yellow
-            }else{
+            }elseif(-not $published){
                 throw "Could not publish private tunnel address: $detail (exit $publishExit)"
             }
         }
