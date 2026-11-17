@@ -84,7 +84,11 @@ messages to others.
    quantity, price, fee, timestamp, currency, broker reference,
    notes and asset. You can also record an unsolicited/manual trade.
    All corrections preserve a revision history.
-7. **Dashboard and Alerts:** inspect worker heartbeat, risk state,
+7. **Execution attribution:** compare the actual broker fill with the
+   original signal reference price, elapsed hours, expiry window and
+   changes to symbol/side. Material deviations create review alerts,
+   never automatic broker corrections.
+8. **Dashboard and Alerts:** inspect worker heartbeat, risk state,
    completed evaluations, pending action cards, actual confirmed
    holdings, realized results by currency, delivery attempts
    and critical incidents.
