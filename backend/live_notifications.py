@@ -186,15 +186,15 @@ def deliver_pending():
     for sig in pending:
         if datetime.fromisoformat(sig["expires_at"]) < datetime.now(timezone.utc):continue
         title=f"Review {sig['side'].upper()} signal for {sig['asset_id'].upper()}"
-        text=(f"TRADING ACTION: {sig['side'].upper()} {sig['asset_id'].upper()}\\n"
-              f"Status: {sig['status']}\\n"
-              f"Suggested allocation limit: {sig['allocation_pct']:.2f}% of reference capital\\n"
-              f"Reference price: {sig['price_reference']:.4f}\\n"
-              f"Suggested notional: {sig['suggested_notional'] if sig['suggested_notional'] is not None else 'Unavailable'}\\n"
-              f"Forecast probability of price increase: {sig['forecast_prob_up_pct'] if sig['forecast_prob_up_pct'] is not None else 'Unavailable'}%\\n"
-              f"Signal created: {sig['created_at']}\\n"
-              f"Valid until: {sig['expires_at']}\\n"
-              f"Strategy rationale: {sig['rationale']}\\n"
+        text=(f"TRADING ACTION: {sig['side'].upper()} {sig['asset_id'].upper()}\n"
+              f"Status: {sig['status']}\n"
+              f"Suggested allocation limit: {sig['allocation_pct']:.2f}% of reference capital\n"
+              f"Reference price: {sig['price_reference']:.4f}\n"
+              f"Suggested notional: {sig['suggested_notional'] if sig['suggested_notional'] is not None else 'Unavailable'}\n"
+              f"Forecast probability of price increase: {sig['forecast_prob_up_pct'] if sig['forecast_prob_up_pct'] is not None else 'Unavailable'}%\n"
+              f"Signal created: {sig['created_at']}\n"
+              f"Valid until: {sig['expires_at']}\n"
+              f"Strategy rationale: {sig['rationale']}\n"
               "This is a strategy recommendation, not a broker order. "
               "Review and execute manually if appropriate. Record any actual fill separately.")
         _deliver_one("signal:"+sig["id"],title,text)
