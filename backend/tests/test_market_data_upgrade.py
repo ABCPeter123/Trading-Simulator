@@ -148,3 +148,41 @@ def test_completed_intraday_signal_is_evaluated_once_per_bar(tmp_path,monkeypatc
     with live.db() as conn:
         assert conn.execute("SELECT COUNT(*) FROM evaluations").fetchone()[0]==1
     assert len(live.signals())==1
+
+
+def test_crypto_daily_incremental_never_saves_five_minute_or_open_daily_candles(local_data,monkeypatch):
+    previous=int(datetime(2026,11,15,tzinfo=timezone.utc).timestamp())
+    seed={"time":previous,"open":100,"high":105,"low":95,"close":102,"volume":1000}
+    archive.record_history({"asset_id":"btcusd","range":"1Y","bars":[seed]})
+    seen=[]
+    now=datetime(2026,11,17,12,tzinfo=timezone.utc)
+    today=int(datetime(2026,11,17,tzinfo=timezone.utc).timestamp())
+    class Response:
+        def raise_for_status(self):pass
+        def json(self):
+            return [[previous,95,105,100,102,1000],
+                    [today,100,110,103,108,1100]]
+    class Client:
+        def get(self,url,params):
+            seen.append(params)
+            return Response()
+    monkeypatch.setattr(ingest.market,"_client",Client())
+    result=ingest.ingest_once("btcusd","1d",now)
+    assert seen[0]["granularity"]==86400
+    assert result["added"]==0
+    assert quality.analyze("btcusd","1Y")["bars"]==1
+
+
+def test_optional_twil_provider_and_private_reasoning_strip(monkeypatch):
+    from backend import ai_assistant as ai
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER","llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL","TwIL-8B-Q4_K_M-balanced.gguf")
+    config=ai.configuration()
+    assert config["configured"] and not config["remote"]
+    assert config["model"]=="TwIL-8B-Q4_K_M-balanced.gguf"
+    answer,rule=ai.parse_answer(
+        '<think>Synthetic hidden analysis</think> {"answer":"Synthetic result only","strategy":null}')
+    assert answer=="Synthetic result only"
+    assert rule is None
+    with pytest.raises(HTTPException):
+        ai.parse_answer("<think>unfinished synthetic reasoning")
