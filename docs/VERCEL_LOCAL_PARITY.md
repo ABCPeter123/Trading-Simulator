@@ -15,6 +15,26 @@ contains next-milestone portfolio research, queue and local worker improvements.
 Instead the script creates a **separate local snapshot** at exactly the live
 source commit. The newer local UI remains the working version.
 
+## One-command comparison
+
+For the simplest setup, update your checkout and run:
+
+```powershell
+cd E:\Trading-Simulator
+git pull
+.\start-local.ps1 -CompareVercel
+```
+
+Or use `npm run dev:compare` in PowerShell. The launcher starts both
+frontends along with the normal local Python API and research worker.
+Opening the baseline for the first time installs its own npm packages.
+
+- **http://127.0.0.1:5173**: the evolving development application
+- **http://127.0.0.1:5174**: the exact source of the currently published site
+
+The live website is untouched. You can also run the two frontends
+manually using the steps below.
+
 ## Start the two UIs side-by-side on your Windows laptop
 
 In PowerShell terminal 1:
