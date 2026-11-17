@@ -85,6 +85,7 @@ if ($LegacyToken) {
 }
 $backend=$null
 $researchWorker=$null
+$marketWorker=$null
 $tunnel=$null
 try {
     $backend=Start-Process -FilePath $python -WorkingDirectory $root -PassThru -ArgumentList @("-m","uvicorn","backend.main:app","--host","127.0.0.1","--port","8002") -RedirectStandardOutput (Join-Path $stateDir "api.stdout.log") -RedirectStandardError (Join-Path $stateDir "api.stderr.log")
@@ -112,6 +113,23 @@ try {
         throw "Local research worker exited unexpectedly. See .local-state/private-bridge/research.stderr.log."
     }
     Write-Host "[research] Background portfolio job processor is active on this PC." -ForegroundColor Green
+    # Market collection must continue when the private website disconnects.
+    # Reuse a collector launched by the local npm environment to avoid double
+    # polling anonymous market data providers.
+    $marketAlreadyRunning=$false
+    try {
+        $marketAlreadyRunning=@(Get-CimInstance Win32_Process -Filter "Name='python.exe' or Name='pythonw.exe'" -ErrorAction Stop |
+            Where-Object { $_.CommandLine -match 'backend[.]market_ingest_worker' }).Count -gt 0
+    }catch{
+        # Do not start a potential duplicate if inspection is unavailable.
+        $marketAlreadyRunning=$true
+    }
+    if(-not $marketAlreadyRunning){
+        $marketWorker=Start-Process -FilePath $python -WorkingDirectory $root -PassThru -ArgumentList @("-m","backend.market_ingest_worker","--interval","30") -RedirectStandardOutput (Join-Path $stateDir "market.stdout.log") -RedirectStandardError (Join-Path $stateDir "market.stderr.log")
+        Start-Sleep -Milliseconds 300
+        if($marketWorker.HasExited){throw "Market data collector exited unexpectedly. Check market.stderr.log."}
+    }
+    Write-Host "[market] Incremental local market collector available." -ForegroundColor Green
     # Supervise the temporary Cloudflare URL. Each new tunnel requires a fresh
     # directory publication, but visitors keep using the same Vercel address.
     $restartCount=0
@@ -246,5 +264,6 @@ try {
 } finally {
     if($null -ne $tunnel -and -not $tunnel.HasExited){Stop-Process -Id $tunnel.Id -Force -ErrorAction SilentlyContinue}
     if($null -ne $researchWorker -and -not $researchWorker.HasExited){Stop-Process -Id $researchWorker.Id -Force -ErrorAction SilentlyContinue}
+    if($null -ne $marketWorker -and -not $marketWorker.HasExited){Stop-Process -Id $marketWorker.Id -Force -ErrorAction SilentlyContinue}
     if($null -ne $backend -and -not $backend.HasExited){Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue}
 }
