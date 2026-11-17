@@ -1,7 +1,7 @@
-# AI Strategy Assistant (v0.9)
+# AI Strategy Assistant (v1.0)
 
 The **AI Strategy Assistant** is available in single-asset Trading Arcade and
-multi-asset Portfolio Arcade, directly next to the strategy editor.
+multi-asset Portfolio Arcade as an expandable floating panel in the bottom-right corner. It keeps the editor clear until opened.
 
 Ask natural-language questions in **English or 简体中文**:
 
@@ -17,7 +17,48 @@ A connected language model reads a compact, server-generated report containing
 metrics or suggest trading rules for your current basket. It is not connected to
 a broker or to the internet beyond the explicitly chosen AI provider.
 
-## Troubleshooting slow or timed-out Ollama responses
+## Windows local TwIL / Qwen router setup
+
+Run both GGUF models from `models/private/` using llama.cpp's loopback-only
+router. The installed router can advertise **model stems**, not the full
+`.gguf` filenames. The API now validates both representations against
+the configured allowlist and sends router-compatible model names.
+
+Example local `.env`:
+
+```dotenv
+TRADING_SIM_AI_PROVIDER=llama_cpp
+TRADING_SIM_AI_MODEL=TwIL-8B-Q4_K_M-balanced.gguf
+TRADING_SIM_AI_MODELS=TwIL-8B-Q4_K_M-balanced.gguf,Qwen3.5-9B-Q4_K_M.gguf
+TRADING_SIM_AI_TIMEOUT_SECONDS=600
+TRADING_SIM_AI_MAX_OUTPUT_TOKENS=8192
+```
+
+`start-local.ps1` now starts background API, Vite, market collection, research
+worker and, if installed and needed, a loopback-only llama.cpp router without
+opening new visible PowerShell windows. It reuses an already running router.
+
+```powershell
+cd E:\Trading-Simulator
+.\stop-local.ps1
+.\start-local.ps1
+```
+
+The stop script manages services launched by the new launcher only.
+Close terminals from older launcher versions manually once. Diagnostics
+stay private under `.local-state/logs/`. The backend must restart after
+changing local `.env` because a Vite refresh cannot change server environment
+variables.
+
+From a saved simulation, click the AI button in the lower-right corner to
+expand or collapse the chat. Select TwIL or Qwen directly in the panel. The
+assistant is still read-only and generates draft DSL for separate review.
+The button only appears when an applicable saved research simulation is open.
+
+The llama.cpp server must stay on `127.0.0.1:8081`; do not expose an
+unauthenticated AI router on a public interface or tunnel.
+
+## Legacy: troubleshooting slow or timed-out Ollama responses
 
 The original local Ollama integration had a 45-second response timeout. It
 now uses a **240-second read timeout** by default, configurable via
@@ -120,7 +161,7 @@ For Simplified Chinese explanations, prefer a multilingual local model
 such as Qwen. TwIL's model card lists **English** as its language.
 No model receives credentials or authority to place trades.
 
-## First-time setup: local Ollama (default)
+## Legacy first-time setup: local Ollama (optional)
 
 This option is free to use locally, with no remote model API required.
 
