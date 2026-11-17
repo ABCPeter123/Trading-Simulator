@@ -70,7 +70,7 @@ if ($LegacyToken) {
     $vercelFile=Join-Path $stateDir "vercel-token.txt"
     if ($ResetVercelToken -or -not (Test-Path $vercelFile)) {
         Write-Host "[setup] Create a Vercel access token at https://vercel.com/account/tokens" -ForegroundColor Yellow
-        Write-Host "[setup] IMPORTANT: select the Vercel TEAM that owns Trading Simulator, not your Personal Account." -ForegroundColor Yellow
+        Write-Host "[setup] IMPORTANT: select the Vercel team PP (pp-48b0), not your Personal Account." -ForegroundColor Yellow
         Write-Host "[setup] The token must be permitted to WRITE Global Config items in that team." -ForegroundColor Yellow
         $secure=Read-Host -AsSecureString "Paste Vercel access token (hidden, local storage only)"
         $bstr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
