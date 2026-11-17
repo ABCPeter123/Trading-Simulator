@@ -78,7 +78,7 @@ PROB_UP(h) is a historical GBM modeled probability (0-100%), not advance knowled
 
 
 def configuration():
-    provider = os.environ.get("TRADING_SIM_AI_PROVIDER", "ollama").strip().lower()
+    provider = os.environ.get("TRADING_SIM_AI_PROVIDER", "llama_cpp").strip().lower()
     if provider not in ("ollama", "llama_cpp", "openai", "off"):
         provider = "off"
     model = (os.environ.get("TRADING_SIM_AI_MODEL", "") or
@@ -117,14 +117,29 @@ def local_model_choices():
                                and "\\" not in item and not item.startswith(".")))[:8]
 
 
+def _model_key(name: str) -> str:
+    """Match GGUF file names with llama.cpp router model IDs.
+
+    Router mode normally exposes model file stems (without .gguf).
+    Comparison is case-insensitive, but only specifically allowed names
+    can be used. Do not accept directory paths or arbitrary models.
+    """
+    return name[:-5].casefold() if name.lower().endswith(".gguf") else name.casefold()
+
+
 def selected_local_model(requested=None):
     config = configuration()
     if requested is not None and config["provider"] != "llama_cpp":
         raise HTTPException(422, detail="Model selection requires local llama.cpp.")
     selected = requested if requested is not None else config["model"]
-    if selected not in (*local_model_choices(), config["model"]):
+    allowed = (*local_model_choices(), config["model"])
+    if (not isinstance(selected, str) or "/" in selected or "\\" in selected
+            or selected.startswith(".") or not any(
+                _model_key(selected) == _model_key(choice) for choice in allowed)):
         raise HTTPException(422, detail="Selected local AI model is not approved by backend configuration.")
-    return selected
+    # The llama.cpp router reports the GGUF stem as its model ID.
+    # Return an explicit allowlisted router-compatible ID, never a file path.
+    return selected[:-5] if selected.lower().endswith(".gguf") else selected
 
 
 def provider_status(model=None):
@@ -133,7 +148,7 @@ def provider_status(model=None):
     if config["provider"] == "llama_cpp":
         selected = selected_local_model(model)
         config = {**config, "model": selected}
-        choices = local_model_choices()
+        choices = (*local_model_choices(), configuration()["model"])
         available_models = []
         loaded = False
         try:
@@ -142,21 +157,26 @@ def provider_status(model=None):
                 reply.raise_for_status()
                 rows = reply.json().get("data", [])
                 if isinstance(rows, list):
+                    approved = {_model_key(choice) for choice in choices}
                     available_models = [row["id"] for row in rows
                                         if isinstance(row, dict)
                                         and isinstance(row.get("id"), str)
-                                        and row["id"] in choices]
-                    loaded = any(row.get("id") == selected
-                                 and row.get("status", {}).get("value") == "loaded"
-                                 for row in rows if isinstance(row, dict)
-                                 and isinstance(row.get("status", {}), dict))
+                                        and _model_key(row["id"]) in approved]
+                    loaded = any(_model_key(row.get("id", "")) == _model_key(selected)
+                                 and isinstance(row.get("status"), dict)
+                                 and row["status"].get("value") == "loaded"
+                                 for row in rows if isinstance(row, dict))
         except (httpx.HTTPError, ValueError, TypeError, KeyError):
             pass
-        ready = selected in available_models
+        ready = any(_model_key(item) == _model_key(selected) for item in available_models)
+        if ready:
+            selected = next(item for item in available_models
+                            if _model_key(item) == _model_key(selected))
+            config["model"] = selected
         return {**config, "ready": ready, "loaded": loaded,
                 "warming": False, "available_models": available_models,
                 "description": config["description"] if ready else
-                "Local llama.cpp model unavailable. Check router port 8081 and the selected model ID."}
+                "Local llama.cpp model unavailable. Confirm server port 8081 and model names."}
     if config["provider"] != "ollama":
         return {**config, "ready": config["configured"]}
     ready = False
