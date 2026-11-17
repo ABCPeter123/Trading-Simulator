@@ -223,11 +223,14 @@ def acknowledge_alert(alert_id, status="acknowledged"):
         return _one(conn,"SELECT * FROM alerts WHERE id=?",(alert_id,))
 
 def _positions(rows):
-    """Confirmed actual executions only; weighted average long cost model."""
-    holdings,realized={},0.
+    """Long positions and realized cost basis, NEVER summing unrelated currencies."""
+    holdings,by_currency={},{}
     for f in rows:
-        asset=f["asset_id"]
-        pos=holdings.setdefault(asset,{"asset_id":asset,"quantity":0.,"average_cost":0.,"realized_pnl":0.})
+        asset,currency=f["asset_id"],f["currency"]
+        key=(currency,asset)
+        pos=holdings.setdefault(key,{"asset_id":asset,"currency":currency,
+            "quantity":0.,"average_cost":0.,"realized_pnl":0.})
+        by_currency.setdefault(currency,0.)
         qty=float(f["quantity"])
         px=float(f["price"])
         fee=float(f["fee"])
@@ -240,17 +243,19 @@ def _positions(rows):
                 raise HTTPException(409,detail="Sell exceeds confirmed long holdings. Shorting is not enabled.")
             gain=qty*(px-pos["average_cost"])-fee
             pos["realized_pnl"]+=gain
-            realized+=gain
+            by_currency[currency]+=gain
             pos["quantity"]=max(0.,pos["quantity"]-qty)
             if pos["quantity"]==0:pos["average_cost"]=0.
-    return list(holdings.values()),realized
+    realized=sum(by_currency.values()) if len(by_currency)<=1 else None
+    return list(holdings.values()),realized,by_currency
 
 def journal():
     with LOCK,db() as conn:
         rows=_rows(conn,"SELECT * FROM fills ORDER BY executed_at ASC, created_at ASC")
-        positions,realized=_positions(rows)
-    return {"fills":list(reversed(rows)),"positions":positions,"realized_pnl":realized,
-            "note":"Confirmed manual executions only; no price marks or broker reconciliation."}
+        positions,realized,by_currency=_positions(rows)
+    return {"fills":list(reversed(rows)),"positions":positions,
+            "realized_pnl":realized,"realized_by_currency":by_currency,
+            "note":"Confirmed manual executions only; separate currencies, no price marks or broker reconciliation."}
 
 def record_fill(data):
     qty,price,fee=data["quantity"],data["price"],data["fee"]
