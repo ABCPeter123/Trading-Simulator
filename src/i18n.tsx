@@ -12,6 +12,8 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "TwIL runs on your laptop. Model responses are research-only and require validation.": "TwIL 在你的电脑本地运行。模型回复仅供研究，必须经过验证。",
+  "Start llama.cpp with a licensed local GGUF model on port 8081.": "请在端口 8081 启动已获授权的本地 GGUF llama.cpp 模型。",
   "Indices": "指数",
   "Funds": "基金",
   "Supports USD/CAD stocks and ETFs, plus USD cryptocurrencies. Canadian securities are converted using the previous completed USD/CAD daily FX close. Crypto weekends are excluded when mixed with stock assets.": "支持美元／加元计价的股票与 ETF，以及美元计价的加密资产。加拿大证券使用前一已完成交易日的 USD/CAD 收盘汇率折算。混合股票资产时排除加密资产周末交易日。",
