@@ -1,0 +1,10 @@
+{
+  "project": "trading-simulator",
+  "vercel_team": "pp-48b0",
+  "source_repo": "ABCPeter123/Trading-Simulator",
+  "source_branch": "main",
+  "deployed_commit": "f079adf8d8133892106985b57d068981ba9987c2",
+  "deployment_url": "https://trading-simulator-8zujax723-pp-48b0.vercel.app",
+  "deployed_at_utc": "2026-11-17T19:21:15.476Z",
+  "purpose": "Frozen actual Vercel production deployment snapshot for local side-by-side comparison; update only after explicit approval of a major production release."
+}
