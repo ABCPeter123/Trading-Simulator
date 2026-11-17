@@ -69,7 +69,7 @@ if PRIVATE_BRIDGE:
         CORSMiddleware, allow_origins=BRIDGE_ORIGINS,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
-        allow_credentials=False, max_age=600,
+        allow_credentials=False, allow_private_network=True, max_age=600,
     )
 
 @app.middleware("http")
