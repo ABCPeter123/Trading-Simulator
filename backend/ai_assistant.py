@@ -264,7 +264,8 @@ def call_model(system: str, user: str) -> str:
             with httpx.Client(timeout=timeout,trust_env=False) as client:
                 reply=client.post(LLAMA_CPP_CHAT_URL,json={
                     "model":config["model"],"stream":False,"temperature":0.2,
-                    "max_tokens":1600,
+                    "max_tokens":max(1024,min(16384,int(os.environ.get(
+                        "TRADING_SIM_AI_MAX_OUTPUT_TOKENS","8192")))),
                     "messages":[{"role":"system","content":system},
                                 {"role":"user","content":user}],
                 })
