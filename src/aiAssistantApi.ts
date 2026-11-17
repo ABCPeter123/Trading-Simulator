@@ -1,6 +1,6 @@
 import { request } from "./api";
 
-export type AIProvider = "ollama" | "openai" | "off";
+export type AIProvider = "ollama" | "llama_cpp" | "openai" | "off";
 export type AIMode = "single" | "portfolio";
 export interface AIStatus {
   provider: AIProvider;
