@@ -168,7 +168,7 @@ export default function PortfolioDiscovery(){
         <label>{t("Assets, separated by commas. Choose 2 to 10.")}
           <textarea rows={3} value={symbols} onChange={e=>setSymbols(e.target.value)}
             spellCheck={false} placeholder="spy, ief, gld, eem, btcusd"/></label>
-        <p className="disc-muted">{t("Supports USD stocks, ETFs and cryptocurrencies. Try equities, bonds, commodities and alternatives. Crypto weekends are excluded when mixed with stock assets.")}</p>
+        <p className="disc-muted">{t("Supports USD/CAD stocks and ETFs, plus USD cryptocurrencies. Canadian securities are converted using the previous completed USD/CAD daily FX close. Crypto weekends are excluded when mixed with stock assets.")}</p>
         <label>{t("Validation drawdown limit (%)")}
           <input type="number" min="1" max="50" value={drawdown}
             onChange={e=>setDrawdown(e.target.value)}/></label>
