@@ -96,3 +96,7 @@ export const subscribeMarket=(assetId:string,resolution:string)=>
 export const unsubscribeMarket=(assetId:string,resolution:string)=>
   request<{asset_id:string;resolution:string;active:boolean}>("/market-data/subscriptions/"+
     encodeURIComponent(assetId)+"/"+encodeURIComponent(resolution),{method:"DELETE"});
+
+export const getArchivedMarketHistory=(assetId:string,window:string,resolution:string)=>
+  request<HistoryResponse>("/market-data/archived/"+encodeURIComponent(assetId)+
+    "?window="+encodeURIComponent(window)+"&resolution="+encodeURIComponent(resolution));
