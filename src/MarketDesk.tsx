@@ -11,7 +11,7 @@ import { ASSET_CLASSES, ASSETS as FALLBACK_ASSETS, formatMoney, formatPrice } fr
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
 import type { DiscoveredInstrument } from "./arcadeApi";
 import { getAccount, getBacktest, getHistory, getQuote, resetAccount, sendOrder, supportsCashTrading,
-  getMarketCoverage,getMarketSubscriptions,subscribeMarket,unsubscribeMarket } from "./api";
+  getMarketCoverage,getMarketSubscriptions,subscribeMarket,unsubscribeMarket,getArchivedMarketHistory } from "./api";
 import type { AccountResponse, BacktestResponse, HistoryResponse, QuoteResponse, MarketCoverage, MarketSubscription } from "./api";
 import { advanceReplay, NEW_REPLAY, replayFillPrice, replayStartIndex } from "./replay";
 import type { ReplayAccount } from "./replay";
@@ -164,15 +164,21 @@ export default function MarketDesk() {
 
   useEffect(() => { void loadAccount(); }, [loadAccount]);
 
-  // Update charts periodically in market mode. Freeze the loaded dataset during replay.
+  // Ingestion-enabled charts read the already-recorded local archive.
+  // Do not refetch the entire Yahoo/Coinbase history every two minutes.
+  // Replay remains immutable while the user is backtesting history.
   useEffect(() => {
     if (mode !== "market") return;
     let cancelled = false;
     const timer = setInterval(() => {
-      void getHistory(selectedId, range, resolution).then(next => { if (!cancelled) setHistory(next); }).catch(() => {});
+      const load=tracking
+        ? getArchivedMarketHistory(selectedId,range,resolution)
+        : getHistory(selectedId,range,resolution);
+      void load.then(next => { if (!cancelled) setHistory(next); })
+        .catch(() => {});
     }, 120_000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [mode, selectedId, range, resolution]);
+  }, [mode, selectedId, range, resolution, !!tracking]);
 
   useEffect(() => {
     let cancelled = false;
