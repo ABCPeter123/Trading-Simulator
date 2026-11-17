@@ -24,6 +24,55 @@ All rules are predefined public research families. Actual winning models,
 scores, parameters, research sessions and execution data stay on the
 private Windows PC, never in a public test fixture or Git commit.
 
+## Queue portfolio research from the website
+
+The preferred workflow is **web controlled, Windows executed, private SQLite
+persisted**. The Vercel website never runs computational Python, stores
+job parameters, or receives Vercel-side copies of research results.
+
+1. Update `E:\\Trading-Simulator` with `git pull`, then **restart**
+   `start-private-bridge.ps1`. The launcher starts both FastAPI and a
+   dedicated `backend.research_worker` Python process. Existing bridge
+   sessions and tunnel publication behavior remain unchanged.
+2. Open the permanent Trading Simulator website, enter the shared password,
+   and navigate to **Strategy Discovery > Portfolio research, multi-asset**.
+3. Select 2-10 supported USD instruments and the two risk limits.
+   Select **Queue research on laptop**. The request returns immediately
+   with a durable job ID, not a long-running HTTP calculation.
+4. Watch progress in **Laptop research queue**. Jobs progress through
+   queued, running, completed, failed or cancelled. The UI polls every
+   five seconds while open. It can be closed, reloaded or reopened on
+   another device with the same private-password login.
+5. Open the completed study to inspect full saved performance, correlation
+   matrices, holdings, executions and model rankings. Use **Cancel research**
+   on queued/running jobs if desired. Cancellation happens at safe
+   checkpoints between market downloads and model evaluations.
+
+The queue has a bounded capacity of 20 unfinished jobs. A restarted worker
+recovers stale interrupted jobs after 30 minutes, and uses the job ID as the
+saved research run ID so it can link an already persisted result without
+recomputation. It performs at most one study at a time. Jobs contain
+only a validated research configuration, never arbitrary shell commands,
+Python programs or browser-supplied price history.
+
+**Local files**:
+
+- `data/research_queue.sqlite3`: queue, job state, timestamps and progress
+- `data/portfolio_research.sqlite3`: private completed study details
+- `.local-state/private-bridge/research.stderr.log`: credential-free worker logs
+
+A laptop that is asleep, powered off or whose private bridge is stopped
+cannot accept website requests and will not run research. Jobs already
+queued remain durable and run when the bridge and worker are restarted.
+Vercel is a static frontend and address lookup, **not a cloud job broker**.
+A request must reach the laptop once to enter its local queue.
+
+The browser uses the same existing password-protected tunnel as other
+private functions. The shared password grants full access to the private
+workspace, including research, so share it only with trusted people. The
+server rejects all research jobs in public-demo mode. Research does not
+run on the Vercel deployment or GitHub Actions.
+
 ## Analyze your basket on Windows
 
 Pull latest changes:
