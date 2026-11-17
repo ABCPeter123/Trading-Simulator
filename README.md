@@ -10,6 +10,33 @@
 
 A **local-first historical trading simulator with integrated paper market research** using public financial market data. It runs in your browser at `127.0.0.1:5173` with a Python service on `127.0.0.1:8000`. No hosted database, deployment, brokerage account, or paid API key is required.
 
+## Multi-asset portfolio strategy research (beta)
+
+**Portfolio-first is the default Strategy Discovery workflow.** Compare
+five allocation families (equal weight, inverse volatility, trend filter,
+relative momentum and volatility target) across **2-10 instruments**,
+with shared cash, category exposure caps, estimated trading costs,
+chronological validation and a held-out historical test. Review model
+rankings, equity curves, correlations, holdings and simulated fills.
+Older single-ticker SMA research remains available in its own secondary tab.
+
+Run directly on Windows without visiting the dashboard:
+
+```powershell
+cd E:\\Trading-Simulator
+git pull
+powershell -ExecutionPolicy Bypass -File .\\start-live-machine.ps1 -ComparePortfolio
+```
+
+Add `-PortfolioAssets "spy,qqq,ief,gld,eem,vnq,btcusd"` to choose
+your own supported basket. Add `-EmailPortfolioStudy` for an
+owner-confirmed email of the full briefing including research outcomes.
+
+Studies are saved only to Git-ignored `data/portfolio_research.sqlite3`,
+not to GitHub or Vercel. Research uses actual private-host provider candles
+and does not automatically execute or deploy portfolio decisions.
+See [methodology and limitations](docs/PORTFOLIO_RESEARCH.md).
+
 ## Live strategy machine, optimization, and real trade journal (beta)
 
 The project now supports a private end-to-end workflow:
