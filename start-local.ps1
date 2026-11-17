@@ -4,7 +4,8 @@ param(
     [switch]$SetupOnly,
     [switch]$NoBrowser,
     [switch]$Mobile,
-    [switch]$NoResearchWorker
+    [switch]$NoResearchWorker,
+    [switch]$CompareVercel
 )
 
 $ErrorActionPreference = "Stop"
@@ -167,6 +168,20 @@ if (-not $NoResearchWorker) {
         Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList "-NoExit -ExecutionPolicy Bypass -File `"$researchScript`""
         Write-Host "[research] Started background research queue worker in another PowerShell window." -ForegroundColor Green
     }
+}
+
+if ($CompareVercel) {
+    # Keep the real deployed source on a separate loopback port while the
+    # evolving main branch stays on 5173. Never reset or deploy anything.
+    if (Test-LocalPort 5174) {
+        Write-Host "[baseline] Port 5174 is in use. Reusing the existing listener; verify it is your baseline preview." -ForegroundColor Yellow
+    } else {
+        $baselineScript = Join-Path $root "scripts\start-vercel-baseline.ps1"
+        $baselineArgs = "-NoExit -NoProfile -ExecutionPolicy Bypass -File " + ('"' + $baselineScript + '"')
+        Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList $baselineArgs
+        Write-Host "[baseline] Starting the exact deployed Vercel source in a separate PowerShell terminal." -ForegroundColor Green
+    }
+    Write-Host "[baseline] Published source: http://127.0.0.1:5174" -ForegroundColor Cyan
 }
 
 Write-Host "[ready] PC browser: http://127.0.0.1:5173" -ForegroundColor Cyan
