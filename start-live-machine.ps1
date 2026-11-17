@@ -74,47 +74,9 @@ if (Test-Path $envFile) {
 }
 $env:TRADING_SIM_PUBLIC_DEMO="0"
 if ($SendEmailReport) {
-    Write-Host "[live] Email a complete live strategy and portfolio report to the recipient(s) configured in private .env." -ForegroundColor Cyan
+    Write-Host "[live] Email complete private portfolio and risk report to configured .env recipients." -ForegroundColor Cyan
     $approval=Read-Host "This sends private trading information by email. Continue? [y/N]"
-    if ($approval -notmatch '^(y|yes)
-    Write-Host "[live] Send one generic test message through your own Mac iMessage relay?" -ForegroundColor Cyan
-    $approval=Read-Host "This sends a real iMessage to your configured chat. Continue? [y/N]"
     if ($approval -notmatch '^(y|yes)$') {
-        Write-Host "[live] iMessage test canceled. Nothing was sent." -ForegroundColor Yellow
-        exit 0
-    }
-    & $python -m backend.imessage_probe
-    exit $LASTEXITCODE
-}
-if ($Once) {
-    Write-Host "[live] Running one monitoring and notification cycle..." -ForegroundColor Cyan
-    & $python -m backend.live_worker --once --interval $IntervalSeconds
-    exit $LASTEXITCODE
-}
-if ($Foreground) {
-    Write-Host "[live] Persistent worker started; Windows Task Scheduler can monitor and restart this process." -ForegroundColor Green
-    & $python -m backend.live_worker --interval $IntervalSeconds
-    exit $LASTEXITCODE
-}
-$old=Existing-Worker
-if ($null -ne $old) {
-    Write-Host "[live] Worker already running (PID $($old.ProcessId))." -ForegroundColor Yellow
-    exit 0
-}
-$out=Join-Path $state "worker.stdout.log"
-$err=Join-Path $state "worker.stderr.log"
-$proc=Start-Process -FilePath $python -WorkingDirectory $root -PassThru -ArgumentList @("-m","backend.live_worker","--interval","$IntervalSeconds") -RedirectStandardOutput $out -RedirectStandardError $err
-Set-Content -LiteralPath $pidFile -Value $proc.Id -Encoding ASCII
-Start-Sleep -Milliseconds 1200
-if ($proc.HasExited) {
-    Remove-Item $pidFile -ErrorAction SilentlyContinue
-    throw "Strategy monitor exited unexpectedly. Check .local-state/live-machine/worker.stderr.log."
-}
-Write-Host "[live] Background strategy monitor running (PID $($proc.Id))." -ForegroundColor Green
-Write-Host "[live] Research, saved strategies, signals, alerts and confirmed fills stay in ignored data/." -ForegroundColor Cyan
-Write-Host "[live] Browser and localhost API may close; worker continues until stopped or Windows shuts down." -ForegroundColor Cyan
-Write-Host "[live] To stop: .\start-live-machine.ps1 -Stop" -ForegroundColor Cyan
-) {
         Write-Host "[live] Email report canceled. Nothing was sent." -ForegroundColor Yellow
         exit 0
     }
