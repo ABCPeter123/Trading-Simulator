@@ -125,8 +125,25 @@ this legacy mode is not the normal website sign-in experience.
 
 ## Failure modes
 
+- **Tunnel directory update failed:** Earlier launchers called the removed
+  Vercel `/v1/edge-config` endpoint. This has been fixed to
+  `/v1/global-config`. First run `git pull`, then restart the bridge.
+  The publisher now reports its actual HTTP status without exposing any
+  credentials. Do not recreate your password or reinstall Cloudflare.
+- **HTTP 401:** The locally saved Vercel access token is invalid or expired.
+  Create a new token at https://vercel.com/account/tokens and run
+  `powershell -ExecutionPolicy Bypass -File .\\start-private-bridge.ps1 -ResetVercelToken`.
+  The flag replaces only the locally saved Vercel publishing token. It does
+  NOT replace the website's shared password.
+- **HTTP 403:** Create the replacement token with scope set to the **team**
+  that owns the Trading Simulator Vercel project, not your personal account.
+  It must allow updating that team's Global Config items. Re-run with
+  `-ResetVercelToken`.
+- **HTTP 404:** Pull the latest code, which uses the current
+  `/v1/global-config` endpoint. If it still fails, the token may belong
+  to another Vercel team or account.
 - **Missing token:** Owner creates a Vercel access token with access to
-  Global Config and enters it once on the desktop launcher.
+  the correct team's Global Config and enters it once on the desktop launcher.
 - **Vercel locator is offline:** Confirm that `start-private-bridge.ps1`
   remains running, and review
   `.local-state/private-bridge/cloudflared.stderr.log`.
