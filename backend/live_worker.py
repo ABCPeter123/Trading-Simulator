@@ -13,7 +13,7 @@ import signal
 import sys
 import time
 
-from . import live_machine, live_notifications
+from . import live_machine, live_notifications, live_email_digest
 
 def main():
     parser=argparse.ArgumentParser()
@@ -35,6 +35,7 @@ def main():
         try:
             live_machine.run_once(worker_heartbeat=True)
             live_notifications.deliver_pending()
+            live_email_digest.maybe_send_daily()
         except Exception as exc:
             # Worker errors must not leak credentials or saved strategy programs.
             logging.error("Live machine cycle failed: %s",type(exc).__name__)
