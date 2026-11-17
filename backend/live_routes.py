@@ -12,6 +12,7 @@ from . import live_machine as engine
 from . import live_notifications
 from . import research_optimizer
 from . import portfolio_research
+from . import research_queue
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -188,3 +189,30 @@ def portfolio_research_runs():
 def portfolio_research_run(run_id:str):
     private()
     return portfolio_research.load_run(run_id)
+
+
+# Research queue is the website-first workflow. Requests only persist a job
+# configuration on the password-protected Windows backend. The local worker
+# computes independently of the browser and writes private full results.
+@router.post("/research/portfolio/jobs",status_code=202)
+def queue_portfolio_study(body:PortfolioCompareBody):
+    private()
+    return research_queue.enqueue(**body.model_dump())
+
+
+@router.get("/research/portfolio/jobs")
+def portfolio_jobs():
+    private()
+    return research_queue.list_jobs()
+
+
+@router.get("/research/portfolio/jobs/{job_id}")
+def portfolio_job(job_id:str):
+    private()
+    return research_queue.get_job(job_id)
+
+
+@router.post("/research/portfolio/jobs/{job_id}/cancel")
+def cancel_portfolio_job(job_id:str):
+    private()
+    return research_queue.cancel(job_id)
