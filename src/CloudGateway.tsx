@@ -1,4 +1,5 @@
 import {useMemo,useState} from "react";
+import type {FormEvent} from "react";
 import {Activity,ArrowRight,Cloud,Database,KeyRound,LockKeyhole,ShieldCheck,WifiOff} from "lucide-react";
 import {PriceChart} from "./components/PriceChart";
 import {ASSETS} from "./data/demoMarket";
@@ -36,7 +37,7 @@ export default function CloudGateway({onConnected}:{onConnected:()=>void}){
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const bars=useMemo(sampleData,[]);
-  async function submit(e:React.FormEvent){
+  async function submit(e:FormEvent){
     e.preventDefault();setBusy(true);setMessage("");
     try{
       await connectPrivateEngine(origin,token);
