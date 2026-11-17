@@ -128,7 +128,17 @@ function Test-LocalPort([int]$Port) {
 }
 
 if (Test-LocalPort 8000) {
-    Write-Host "[run] Port 8000 is already in use. Not starting a duplicate API." -ForegroundColor Yellow
+    # Never silently proxy the password-free local frontend into a protected
+    # private-bridge API or an unrelated application occupying this port.
+    try {
+        $health = Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 3 -ErrorAction Stop
+    } catch {
+        throw "Port 8000 is occupied but a password-free local API could not be verified. Stop the other process and restart start-local.ps1."
+    }
+    if ($health.mode -ne "local") {
+        throw "Port 8000 is serving '$($health.mode)' instead of local mode. Stop the private bridge or conflicting process before starting password-free local development."
+    }
+    Write-Host "[run] Reusing verified password-free local API on port 8000." -ForegroundColor Green
 } else {
     $script = Join-Path $root "scripts\run-backend.ps1"
     Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList "-NoExit -ExecutionPolicy Bypass -File `"$script`""
