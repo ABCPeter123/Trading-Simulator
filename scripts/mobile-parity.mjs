@@ -295,6 +295,18 @@ try {
       throw new Error(width + "px unhandled page error: " + error.message);
     });
     await page.goto(base,{waitUntil:"domcontentloaded"});
+    for(const [name,target] of [
+      ["Dashboard",".ops-shell"],
+      ["Live Strategy Machine",".ops-shell"],
+      ["Trade Journal",".ops-shell"],
+      ["Alerts & Health",".ops-shell"],
+      ["Strategy Lab & Backtesting",".arc-layout"],
+    ]){
+      await page.locator(".ops-main-tabs").getByRole("button",{name,exact:true}).click();
+      await visible(page,target,width+" main navigation "+name);
+      const horizontal=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
+      if(horizontal>3)throw new Error(width+" "+name+" main navigation overflows by "+horizontal+"px");
+    }
     await verifyMode(page,"single",width);
     await page.locator(".sim-mode-tabs").getByRole("button",{name:"Portfolio Simulator",exact:true}).click();
     await verifyMode(page,"portfolio",width);
