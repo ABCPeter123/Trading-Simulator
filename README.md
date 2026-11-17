@@ -18,6 +18,14 @@ relative momentum and volatility target) across **2-10 instruments**,
 with shared cash, category exposure caps, estimated trading costs,
 chronological validation and a held-out historical test. Review model
 rankings, equity curves, correlations, holdings and simulated fills.
+
+**Queue from the website, execute on Windows:** the primary research button
+now creates a durable background job in the laptop's local SQLite queue.
+`start-private-bridge.ps1` also starts the independent research worker;
+jobs continue after browser close, and the web UI polls progress, supports
+cancellation, and opens the complete saved study on completion. The website
+requires the private PC to be powered on to enqueue new work, but a previously
+queued job survives a restart. Read [browser queue setup and data locations](docs/PORTFOLIO_RESEARCH.md#queue-portfolio-research-from-the-website).
 Older single-ticker SMA research remains available in its own secondary tab.
 
 Run directly on Windows without visiting the dashboard:
