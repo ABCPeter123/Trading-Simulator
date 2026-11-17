@@ -49,6 +49,10 @@ try {
 $env:TRADING_SIM_PRIVATE_BRIDGE = "1"
 $env:TRADING_SIM_PRIVATE_API_TOKEN = $token
 $env:TRADING_SIM_ALLOWED_ORIGINS = $AllowedOrigin
+# Public/tunneled authentication must not accidentally trigger paid API costs.
+# Local Ollama remains usable when installed and running.
+$env:TRADING_SIM_AI_PROVIDER = "ollama"
+Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:TRADING_SIM_PUBLIC_DEMO -ErrorAction SilentlyContinue
 $backend = $null
 try {
