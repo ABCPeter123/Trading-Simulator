@@ -3,6 +3,8 @@ import ReactDOM from "react-dom/client";
 import TradingArcade from "./TradingArcade";
 import PortfolioArcade from "./PortfolioArcade";
 import CloudGateway from "./CloudGateway";
+import LiveOperations from "./LiveOperations";
+import type {OperationsSection} from "./LiveOperations";
 import {cloudFrontend, disconnectPrivateEngine, hasPrivateConnection} from "./privateConnection";
 import { I18nProvider, LanguageSwitcher, useI18n } from "./i18n";
 import "./styles.css";
@@ -31,6 +33,7 @@ function Simulator() {
     return ()=>{cancelled=true;if(retry)clearTimeout(retry);};
   },[]);
   const [mode, setMode] = useState<"single" | "portfolio">("single");
+  const [section,setSection]=useState<"research"|OperationsSection>(import.meta.env.VITE_PUBLIC_DEMO==="1"?"research":"dashboard");
   const [privateConnected,setPrivateConnected] = useState(hasPrivateConnection());
   if(cloudFrontend && !privateConnected) return <><CloudGateway onConnected={()=>setPrivateConnected(true)}/><LanguageSwitcher/></>;
   return <>
@@ -44,18 +47,28 @@ function Simulator() {
       <div className="public-demo-banner" role="status">
         {t("PUBLIC DEMO · Shared sandbox. Never enter your private strategy, credentials, or actual financial data. Visitors may see each other's demo sessions.")}
       </div>}
-    <nav className="sim-mode-tabs" aria-label={t("Simulation mode")}>
-      <span className="sim-mode-title">{t("Trading Simulator")}</span>
-      <button type="button" className={mode === "single" ? "selected" : ""}
-        aria-current={mode === "single" ? "page" : undefined}
-        onClick={() => setMode("single")}>{t("Single-asset research")}</button>
-      <button type="button" className={mode === "portfolio" ? "selected" : ""}
-        aria-current={mode === "portfolio" ? "page" : undefined}
-        onClick={() => setMode("portfolio")}>{t("Portfolio Simulator")}</button>
-    </nav>
-    {mode === "portfolio"
-      ? <PortfolioArcade onExit={() => setMode("single")} />
-      : <TradingArcade onOpenPortfolio={() => setMode("portfolio")} />}
+    {import.meta.env.VITE_PUBLIC_DEMO !== "1" && <nav className="ops-main-tabs" aria-label={t("Application sections")}>
+      <span className="ops-tab-brand">{t("Trading Simulator")}</span>
+      {([["dashboard","Dashboard"],["research","Strategy Lab & Backtesting"],
+        ["machine","Live Strategy Machine"],["journal","Trade Journal"],["alerts","Alerts & Health"]] as const)
+        .map(([id,label])=><button type="button" key={id} className={section===id?"active":""}
+          aria-current={section===id?"page":undefined} onClick={()=>setSection(id)}>{t(label)}</button>)}
+    </nav>}
+    {section==="research" || import.meta.env.VITE_PUBLIC_DEMO==="1" ? <>
+      <nav className="sim-mode-tabs" aria-label={t("Simulation mode")}>
+        <span className="sim-mode-title">{t("Research Workspaces")}</span>
+        <button type="button" className={mode === "single" ? "selected" : ""}
+          aria-current={mode === "single" ? "page" : undefined}
+          onClick={() => setMode("single")}>{t("Single-asset research")}</button>
+        <button type="button" className={mode === "portfolio" ? "selected" : ""}
+          aria-current={mode === "portfolio" ? "page" : undefined}
+          onClick={() => setMode("portfolio")}>{t("Portfolio Simulator")}</button>
+      </nav>
+      {mode === "portfolio"
+        ? <PortfolioArcade onExit={() => setMode("single")} />
+        : <TradingArcade onOpenPortfolio={() => setMode("portfolio")} />}
+    </> : <LiveOperations section={section}/>}
+
     <LanguageSwitcher/>
   </>;
 }
