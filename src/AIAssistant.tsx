@@ -81,18 +81,20 @@ export default function AIAssistant({mode,runId,onDraft}: {
         <h2>{t("AI Strategy Assistant")}</h2>
         <p>{t("Ask about your actual replay results, or request an editable trading strategy.")}</p>
       </div>
-      <span className="ai-chip">{status?.provider==="openai"?"OpenAI":status?.provider==="ollama"?"Ollama":t("Not configured")} · {status?.loaded?t("Model loaded"):status?.warming?t("Loading model"):status?.ready?t("Connected"):t("Not ready")}</span>
+      <span className="ai-chip">{status?.provider==="openai"?"OpenAI":status?.provider==="ollama"?"Ollama":status?.provider==="llama_cpp"?"TwIL / llama.cpp":t("Not configured")} · {status?.loaded?t("Model loaded"):status?.warming?t("Loading model"):status?.ready?t("Connected"):t("Not ready")}</span>
     </div>
     <div className="ai-status">
       <ShieldCheck size={14}/>
       <span>{status?.description ? (status.provider==="ollama"&&!status.ready
         ? `${t("Ollama is unavailable or the model is missing. Run:")} ollama pull ${status.model}` : status.provider==="ollama"
         ? status.warming?t("Ollama is preloading the model locally."):status.loaded?t("Ollama is loaded and ready for research."):t("Ollama runs locally. Install Ollama and pull the model to ask questions.")
+        : status.provider==="llama_cpp"
+        ? status.ready?t("TwIL runs on your laptop. Model responses are research-only and require validation."):t("Start llama.cpp with a licensed local GGUF model on port 8081.")
         : status.provider==="openai"
         ? t("OpenAI runs remotely. Each question sends summarized historical game data.")
         : t("AI is disabled.")) : t("Checking AI connection...")}</span>
       {status?.model&&<strong>{status.model}</strong>}
-      {status?.provider==="ollama"&&<button className="ai-refresh" type="button" onClick={()=>void getAIStatus().then(setStatus).catch(e=>setStatusError(e instanceof Error?e.message:t("AI status unavailable.")))}><RefreshCcw size={13}/>{t("Recheck AI")}</button>}
+      {(status?.provider==="ollama"||status?.provider==="llama_cpp")&&<button className="ai-refresh" type="button" onClick={()=>void getAIStatus().then(setStatus).catch(e=>setStatusError(e instanceof Error?e.message:t("AI status unavailable.")))}><RefreshCcw size={13}/>{t("Recheck AI")}</button>}
     </div>
     {statusError&&<p role="alert" className="ai-error">{t(statusError)}</p>}
     {!status?.ready&&status&&<p className="ai-setup">{t("Configure the backend AI provider to enable questions. See the AI setup guide.")}</p>}
