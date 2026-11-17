@@ -3,9 +3,11 @@
  */
 export const cloudFrontend = import.meta.env.VITE_CLOUD_FRONTEND === "1";
 let connection: {origin:string;token:string}|null = null;
+let locationRefresh: ReturnType<typeof setInterval>|null = null;
 
 export function hasPrivateConnection() { return !!connection; }
 export function disconnectPrivateEngine() {
+  if(locationRefresh!==null){clearInterval(locationRefresh);locationRefresh=null;}
   const current=connection;
   connection=null;
   if(current)void fetch(current.origin+"/api/auth/logout",{
@@ -27,10 +29,8 @@ export function privateRequestHeaders(extra?: HeadersInit) {
   return headers;
 }
 
-export async function connectPrivateEngine(password:string): Promise<void> {
-  if (!cloudFrontend) throw new Error("Private connection applies only to cloud frontend.");
-  if (!password || password.length>128) throw new Error("Enter your shared web password.");
-  // This is a tiny public locator, not a database or a data proxy.
+async function locatePrivateEngine():Promise<string>{
+  // Public connection metadata only. Never send the password or session here.
   const lookup=await fetch("/api/bridge-location",{
     cache:"no-store",signal:AbortSignal.timeout(10000),
   }).catch(()=>{throw new Error("Cannot look up your desktop connection.");});
@@ -41,11 +41,31 @@ export async function connectPrivateEngine(password:string): Promise<void> {
   let url:URL;
   try {url=new URL(address);} catch{throw new Error("Invalid desktop tunnel address.");}
   if(url.protocol!=="https:"||!url.hostname.endsWith(".trycloudflare.com")||
-      url.pathname!=="/"||url.search||url.hash||url.username||url.password)
+      url.port||url.pathname!=="/"||url.search||url.hash||url.username||url.password)
     throw new Error("Connection directory returned an invalid tunnel.");
+  return url.origin;
+}
+
+function watchPrivateEngineLocation(){
+  if(locationRefresh!==null)clearInterval(locationRefresh);
+  // The owner's Quick Tunnel may reconnect with a new hostname. Existing
+  // sessions belong to the same local backend and can follow that address.
+  // Failure to poll never logs the user out or exposes credentials to Vercel.
+  locationRefresh=setInterval(()=>{
+    if(!connection)return;
+    void locatePrivateEngine().then(origin=>{
+      if(connection && connection.origin!==origin)connection={...connection,origin};
+    }).catch(()=>{});
+  },30000);
+}
+
+export async function connectPrivateEngine(password:string): Promise<void> {
+  if (!cloudFrontend) throw new Error("Private connection applies only to cloud frontend.");
+  if (!password || password.length>128) throw new Error("Enter your shared web password.");
+  const origin=await locatePrivateEngine();
   // Password is sent ONLY to the owner's FastAPI instance through HTTPS
   // and Cloudflare. Vercel never receives the plaintext or session token.
-  const response=await fetch(url.origin+"/api/auth/login",{
+  const response=await fetch(origin+"/api/auth/login",{
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({password}),cache:"no-store",signal:AbortSignal.timeout(12000),
   }).catch(()=>{throw new Error("Your desktop is offline or the private tunnel is unavailable.");});
@@ -56,10 +76,11 @@ export async function connectPrivateEngine(password:string): Promise<void> {
   if(!result||typeof result!=="object"||!("token" in result)||
      typeof result.token!=="string"||!("mode" in result)||result.mode!=="private-bridge")
     throw new Error("Unexpected private login response.");
-  const health=await fetch(url.origin+"/api/health",{
+  const health=await fetch(origin+"/api/health",{
     headers:{"Authorization":"Bearer "+result.token},
     cache:"no-store",signal:AbortSignal.timeout(8000),
   });
   if(!health.ok)throw new Error("Your secure login session could not be verified.");
-  connection={origin:url.origin,token:result.token};
+  connection={origin,token:result.token};
+  watchPrivateEngineLocation();
 }
