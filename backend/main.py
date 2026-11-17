@@ -87,6 +87,9 @@ async def protect_private_bridge(request: Request, call_next):
     if PRIVATE_BRIDGE:
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
+        if request.method == "OPTIONS" and request.headers.get("origin") in BRIDGE_ORIGINS:
+            # Chromium local-network preflight where applicable.
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
     return response
 
 class NewOrder(BaseModel):
