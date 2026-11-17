@@ -51,10 +51,19 @@ data.
    with trusted visitors. Do not share your desktop logs, Vercel access
    token, or raw strategy backups.
 
-**Subsequent runs use the saved password verifier and owner Vercel token
-automatically.** If Cloudflare picks a different temporary URL, the
-launcher updates Vercel Global Config again. Visitors don't change their
-login flow. Your password stays the same until you rotate it.
+**Automatic discovery is handled by the desktop launcher, not ChatGPT.**
+After a valid PP-team write-authorized Vercel token is saved locally, every
+startup registers its new Cloudflare Quick Tunnel URL in Global Config.
+If the tunnel process exits, the launcher restarts it and publishes the
+replacement URL automatically. Transient publish failures are retried.
+The browser also refreshes the directory every 30 seconds while a user is
+connected, so it can follow a new tunnel without needing a new address or
+re-entering the password while the same backend session remains valid.
+
+**The Vercel token is owner-only infrastructure authorization.** Visitors need
+only the permanent website and the single shared web password. The token
+is not a visitor credential or an alternate way to sign in. It must be
+configured once and renewed if revoked, expired, or unauthorized.
 
 To reset the shared password:
 
@@ -150,8 +159,10 @@ this legacy mode is not the normal website sign-in experience.
 - **HTTP 403:** The saved publishing token cannot write Global Config for
   the **PP (`pp-48b0`) team**. Create a new access token at
   https://vercel.com/account/tokens and choose PP, not Personal Account.
-  Restart with `-ResetVercelToken` and enter the new token at the hidden prompt.
-  The password and local trading data are unchanged.
+  Either restart with `-ResetVercelToken` or, on an interactive launcher,
+  accept the new in-place token prompt when HTTP 403 is returned. The script
+  retries publishing while the current tunnel stays online. The shared
+  password and private trading data are unchanged.
   **Recovery behavior:** On HTTP 401 or 403, the current launcher keeps the
   password-protected desktop API and tunnel running and prints the temporary
   Cloudflare address for the owner. The permanent Vercel website cannot find
