@@ -25,6 +25,7 @@ class DeployBody(BaseModel):
     state:Literal["paper","live-monitor"]="paper"
     capital:float=Field(default=100000,ge=100,le=1e10)
     max_allocation_pct:float=Field(default=10,gt=0,le=25)
+    max_realized_loss_pct:float=Field(default=5,ge=0.5,le=25)
     max_daily_signals:int=Field(default=4,ge=1,le=20)
 
 class StateBody(BaseModel):
