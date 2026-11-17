@@ -156,3 +156,44 @@ def test_api_validation_and_persistence(private_workspace):
       "asset_id":"spy","side":"sell","quantity":10,"price":100,"fee":0,
       "currency":"USD","executed_at":morning().isoformat(),
     }).status_code==409
+
+
+def test_realized_loss_circuit_breaker_pauses_strategy(private_workspace):
+    saved=library.store("single","Synthetic risk test",SYNTHETIC,["spy"])
+    dep=m.deploy(saved["id"],capital=10000,max_realized_loss_pct=5)
+    m.record_fill({"asset_id":"spy","side":"buy","quantity":100,
+        "price":100.,"fee":0.,"currency":"USD",
+        "executed_at":morning().isoformat()})
+    m.record_fill({"asset_id":"spy","side":"sell","quantity":100,
+        "price":1.,"fee":0.,"currency":"USD",
+        "executed_at":(morning()+timedelta(minutes=1)).isoformat()})
+    m.run_once(now=morning(),source=source)
+    assert m.signals()==[]
+    assert m.deployments()[0]["state"]=="paused"
+    assert any("loss" in a["key"] for a in m.alerts() if a["severity"]=="critical")
+
+def test_currencies_never_aggregate_without_fx(private_workspace):
+    for currency in ("USD","CAD"):
+        m.record_fill({"asset_id":"spy","side":"buy","quantity":3,
+          "price":100.,"fee":1.,"currency":currency,
+          "executed_at":morning().isoformat()})
+        m.record_fill({"asset_id":"spy","side":"sell","quantity":1,
+          "price":110.,"fee":1.,"currency":currency,
+          "executed_at":(morning()+timedelta(minutes=2)).isoformat()})
+    j=m.journal()
+    assert j["realized_pnl"] is None
+    assert set(j["realized_by_currency"])=={"USD","CAD"}
+    assert len(j["positions"])==2
+
+def test_existing_private_deployment_database_migrates_loss_stop(private_workspace):
+    import sqlite3
+    private_workspace.mkdir(exist_ok=True)
+    with sqlite3.connect(m.DB_PATH) as conn:
+        conn.execute("""CREATE TABLE deployments (
+          id TEXT PRIMARY KEY, strategy_id TEXT, name TEXT, mode TEXT, code TEXT,
+          symbols TEXT, state TEXT, capital REAL, max_allocation_pct REAL,
+          max_daily_signals INTEGER, created_at TEXT, updated_at TEXT,
+          last_evaluated_at TEXT, last_error TEXT)""")
+    with m.db() as conn:
+        names={x["name"] for x in conn.execute("PRAGMA table_info(deployments)")}
+    assert "max_realized_loss_pct" in names
