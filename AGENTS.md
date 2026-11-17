@@ -35,6 +35,13 @@ only to the same trusted LAN, never to the internet or a public tunnel.
 the published website until an authorized release. This policy applies
 alongside portfolio-first research and strategy confidentiality.
 
+**Live website parity:** The actual production commit is pinned in
+`config/production-baseline.json`, and the separate detached local preview
+runs via `scripts/start-vercel-baseline.ps1` on port 5174. Main stays the
+ongoing development source on port 5173, including unreleased improvements.
+Never reset main to production, alter owner data, or deploy while performing
+parity checks. See `docs/VERCEL_LOCAL_PARITY.md`.
+
 ## Mandatory portfolio-first research direction
 
 **The product's trading strategy is a diversified portfolio of instruments,
