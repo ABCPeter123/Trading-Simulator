@@ -110,9 +110,28 @@ def ingest_once(asset_id:str,resolution:str,now:datetime|None=None):
         if start>=end: return {"asset_id":asset_id,"resolution":resolution,"added":0,"latest":previous}
         if asset.kind=="Crypto":
             if resolution=="1d":
-                # The public Coinbase daily candle API is supported by its
-                # regular bounded 1Y adapter; it can return a recent correction.
-                bars=market.coinbase_candles(asset,"1D")
+                # Request actual 86,400-second daily candles. Never use the
+                # normal "1D" DISPLAY window, which intentionally means
+                # five-minute candles and would corrupt the daily archive.
+                start=max(start,now-timedelta(days=240))
+                response=market._client.get(
+                    "https://api.exchange.coinbase.com/products/"+asset.ticker+"/candles",
+                    params={"granularity":86400,"start":start.isoformat(),"end":end.isoformat()})
+                response.raise_for_status()
+                rows=response.json()
+                if not isinstance(rows,list):
+                    raise ValueError("Invalid Coinbase daily OHLCV response.")
+                bars=[]
+                for row in rows:
+                    if not isinstance(row,list) or len(row)<6:continue
+                    stamp,low,high,opening,closing,vol=row[:6]
+                    stamp=int(stamp)
+                    # Last daily candle may still be forming.
+                    if stamp+86400>now.timestamp():continue
+                    bars.append({"time":stamp,"open":float(opening),
+                                 "high":float(high),"low":float(low),
+                                 "close":float(closing),"volume":float(vol)})
+                bars.sort(key=lambda bar:bar["time"])
             else:
                 bars=intraday.fetch_coinbase(asset,start,end,resolution)
         else:
