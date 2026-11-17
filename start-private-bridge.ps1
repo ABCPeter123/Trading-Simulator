@@ -3,6 +3,7 @@ param(
     [string]$AllowedOrigin = "https://trading-simulator-pp-48b0.vercel.app",
     [string]$CloudflaredPath = "",
     [switch]$SetPassword,
+    [switch]$ResetVercelToken,
     [switch]$SkipSetup,
     [switch]$LegacyToken,
     [switch]$RotateToken
@@ -67,9 +68,10 @@ if ($LegacyToken) {
     }
     $env:TRADING_SIM_PRIVATE_PASSWORD_HASH=$hash
     $vercelFile=Join-Path $stateDir "vercel-token.txt"
-    if (-not (Test-Path $vercelFile)) {
-        Write-Host "[setup] One-time owner setup: create a Vercel access token at https://vercel.com/account/tokens" -ForegroundColor Yellow
-        Write-Host "[setup] The token must have access to the Trading Simulator project's Global Config." -ForegroundColor Yellow
+    if ($ResetVercelToken -or -not (Test-Path $vercelFile)) {
+        Write-Host "[setup] Create a Vercel access token at https://vercel.com/account/tokens" -ForegroundColor Yellow
+        Write-Host "[setup] IMPORTANT: select the Vercel TEAM that owns Trading Simulator, not your Personal Account." -ForegroundColor Yellow
+        Write-Host "[setup] The token must be permitted to WRITE Global Config items in that team." -ForegroundColor Yellow
         $secure=Read-Host -AsSecureString "Paste Vercel access token (hidden, local storage only)"
         $bstr=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
         try { $vercelToken=[Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
@@ -119,7 +121,9 @@ try {
     if(-not $tunnelUrl){throw "Could not obtain Cloudflare Quick Tunnel address. See .local-state/private-bridge/cloudflared.stderr.log."}
     if(-not $LegacyToken){
         & $python (Join-Path $root "scripts\publish_tunnel.py") $tunnelUrl
-        if($LASTEXITCODE -ne 0){throw "Tunnel directory update failed. Check your Vercel token permissions."}
+        if($LASTEXITCODE -ne 0){
+            throw "Tunnel directory publish failed (exit $LASTEXITCODE). See the safe HTTP status above. To replace the local Vercel token, rerun with -ResetVercelToken."
+        }
         Write-Host "[private] Website: $AllowedOrigin" -ForegroundColor Green
         Write-Host "[private] Visitors enter ONLY the shared password. Do not give them the tunnel address." -ForegroundColor Green
     }else{
