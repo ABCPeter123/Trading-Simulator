@@ -11,7 +11,7 @@ if (-not (Test-Path $python)) {
 $envPath = Join-Path $root ".env"
 if (Test-Path $envPath) {
     foreach ($line in Get-Content -LiteralPath $envPath -Encoding UTF8) {
-        if ($line -match '^\s*(TRADING_SIM_AI_PROVIDER|TRADING_SIM_AI_MODEL|TRADING_SIM_AI_TIMEOUT_SECONDS|OPENAI_API_KEY)\s*=\s*(.+)') {
+        if ($line -match '^\s*(TRADING_SIM_AI_PROVIDER|TRADING_SIM_AI_MODEL|TRADING_SIM_AI_MODELS|TRADING_SIM_AI_TIMEOUT_SECONDS|TRADING_SIM_AI_MAX_OUTPUT_TOKENS|OPENAI_API_KEY)\s*=\s*(.+)') {
             $key = $Matches[1]
             $value = $Matches[2].Trim().Trim('"').Trim("'")
             [Environment]::SetEnvironmentVariable($key, $value, "Process")
