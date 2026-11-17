@@ -240,13 +240,16 @@ def _deliver_one(key, title, text, repeat_after_min=0, only_channel=None, html=N
                 conn.execute("UPDATE deliveries SET delivered_at=?,last_error=NULL WHERE key=? AND channel=?",
                              (now.isoformat(),key,channel))
         except Exception as exc:
-            # Never put private webhook URL, SMTP password, or strategy text in
-            # exception details exposed by monitoring APIs.
+            # Only report fixed stage/port/class names, never raw server
+            # replies, recipient addresses, passwords or strategy content.
+            safe_error=(f"SMTP:{exc.stage}:{exc.port}:{exc.cause}"
+                        if isinstance(exc, SMTPDeliveryFailure)
+                        else type(exc).__name__)
             with m.LOCK,m.db() as conn:
                 _init(conn)
                 conn.execute("UPDATE deliveries SET last_error=? WHERE key=? AND channel=?",
-                    (type(exc).__name__,key,channel))
-            m.logger.warning("Notification delivery failed: %s",type(exc).__name__)
+                    (safe_error,key,channel))
+            m.logger.warning("Notification delivery failed: %s",safe_error)
 
 def deliver_pending():
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
