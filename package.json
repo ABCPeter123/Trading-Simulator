@@ -11,7 +11,8 @@
     "preview": "vite preview --host 127.0.0.1",
     "verify:local": "npm run build",
     "baseline:status": "node scripts/check-vercel-baseline.mjs",
-    "baseline:preview": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-vercel-baseline.ps1"
+    "baseline:preview": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-vercel-baseline.ps1",
+    "dev:compare": "powershell -NoProfile -ExecutionPolicy Bypass -File ./start-local.ps1 -CompareVercel"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
