@@ -28,6 +28,12 @@ interface PortfolioStudy {
   test_used_for_selection:boolean;assumptions:string;qualification_note:string;
 }
 interface Prior {id:string;created_at:string;basket:string[];selected:string|null}
+interface ResearchJob {
+  id:string;kind:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";
+  symbols:string[];max_drawdown_pct:number;max_position_pct:number;progress:number;
+  stage:string;result_run_id:string|null;error_code:string|null;created_at:string;
+  updated_at:string;started_at:string|null;finished_at:string|null;
+}
 type DetailTab="performance"|"allocation"|"executions";
 const modelLabels:Record<string,string>={
   equal_weight:"Equal weight",inverse_volatility:"Inverse volatility",
@@ -82,19 +88,50 @@ export default function PortfolioDiscovery(){
   const [error,setError]=useState("");
   const [selected,setSelected]=useState<PortfolioStudy|null>(null);
   const [runs,setRuns]=useState<Prior[]>([]);
+  const [jobs,setJobs]=useState<ResearchJob[]>([]);
+  const [recentJob,setRecentJob]=useState<string|null>(null);
   const [tab,setTab]=useState<DetailTab>("performance");
-  const refresh=useCallback(async()=>{setRuns(await request<Prior[]>("/live/research/portfolio/runs"));},[]);
+  const refresh=useCallback(async()=>{
+    const [saved,queued]=await Promise.all([
+      request<Prior[]>("/live/research/portfolio/runs"),
+      request<ResearchJob[]>("/live/research/portfolio/jobs"),
+    ]);
+    setRuns(saved);setJobs(queued);
+  },[]);
   useEffect(()=>{void refresh().catch(e=>setError(String(e)));},[refresh]);
+  useEffect(()=>{
+    // The queue and its actual computation run on the laptop, not here.
+    // Poll only while the tab is open; closing the browser never cancels work.
+    const timer=window.setInterval(()=>{
+      void request<ResearchJob[]>("/live/research/portfolio/jobs").then(setJobs).catch(()=>{});
+    },5000);
+    return ()=>window.clearInterval(timer);
+  },[]);
+  useEffect(()=>{
+    if(!recentJob)return;
+    const job=jobs.find(x=>x.id===recentJob);
+    if(job?.status==="completed"&&job.result_run_id){
+      const runId=job.result_run_id;
+      setRecentJob(null);
+      void request<PortfolioStudy>("/live/research/portfolio/runs/"+encodeURIComponent(runId))
+        .then(study=>{setSelected(study);setTab("performance");void refresh().catch(()=>{});})
+        .catch(e=>setError(String(e)));
+    }else if(job?.status==="failed"||job?.status==="cancelled"){
+      setRecentJob(null);
+    }
+  },[jobs,recentJob,refresh]);
   async function compare(){
     setBusy(true);setError("");
     const basket=symbols.split(/[,;\s]+/).map(x=>x.trim().toLowerCase()).filter(Boolean);
     try{
       if(basket.length<2||basket.length>10)throw new Error("Enter between 2 and 10 instruments.");
-      const study=await request<PortfolioStudy>("/live/research/portfolio/compare",{
+      const job=await request<ResearchJob>("/live/research/portfolio/jobs",{
         method:"POST",body:JSON.stringify({symbols:basket,
           max_drawdown_pct:Number(drawdown),max_position_pct:Number(maxPosition)}),
       });
-      setSelected(study);setTab("performance");await refresh();
+      setRecentJob(job.id);
+      setJobs(items=>[job,...items.filter(x=>x.id!==job.id)]);
+      await refresh();
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);}
   }
@@ -105,6 +142,15 @@ export default function PortfolioDiscovery(){
       setTab("performance");}
     catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);}
+  }
+  async function cancelJob(id:string){
+    setError("");
+    try{
+      const cancelled=await request<ResearchJob>(
+        "/live/research/portfolio/jobs/"+encodeURIComponent(id)+"/cancel",{method:"POST"});
+      setJobs(items=>items.map(x=>x.id===id?cancelled:x));
+      if(recentJob===id)setRecentJob(null);
+    }catch(e){setError(e instanceof Error?e.message:String(e));}
   }
   const chosen=selected?.selected;
   const metrics=chosen?.held_out_test;
@@ -130,8 +176,32 @@ export default function PortfolioDiscovery(){
           <input type="number" min="5" max="50" value={maxPosition}
             onChange={e=>setMaxPosition(e.target.value)}/></label>
         <button className="disc-primary" disabled={busy} onClick={()=>void compare()}>
-          <ChartNoAxesCombined size={16}/>{busy?t("Analyzing portfolio..."):t("Compare portfolio models")}</button>
+          <ChartNoAxesCombined size={16}/>{busy?t("Queuing study..."):t("Queue research on laptop")}</button>
         <p className="disc-muted">{t("Five models. Monthly rebalancing, spread, slippage, commission. Selection uses training and validation only. Nothing deploys automatically.")}</p>
+        <h3>{t("Laptop research queue")}</h3>
+        {!jobs.length&&<p className="disc-muted">{t("No queued research jobs.")}</p>}
+        <div className="pd-jobs" role="region" aria-label={t("Laptop research queue")}>
+        {jobs.slice(0,20).map(job=><div className="pd-job" key={job.id}>
+          <div className="pd-job-top">
+            <strong>{job.symbols.map(s=>s.toUpperCase()).join(" · ")}</strong>
+            <span className={"pd-job-status pd-"+job.status}>{t(job.status)}</span>
+          </div>
+          <div className="pd-job-stage">{t(job.stage)} · {dt(job.created_at)}</div>
+          {(job.status==="queued"||job.status==="running")&&
+            <div className="pd-job-meter" role="progressbar" aria-label={t("Research progress")}
+              aria-valuenow={job.progress} aria-valuemin={0} aria-valuemax={100}>
+              <i style={{width:pct(job.progress)}}/>
+            </div>}
+          <div className="pd-job-actions">
+            {job.status==="completed"&&job.result_run_id&&
+              <button disabled={busy} onClick={()=>void open(job.result_run_id!)}>{t("Open results")}</button>}
+            {(job.status==="queued"||job.status==="running")&&
+              <button disabled={busy} onClick={()=>void cancelJob(job.id)}>{t("Cancel research")}</button>}
+            {job.status==="failed"&&<small>{t("Research failed")}: {job.error_code??t("Unknown error")}</small>}
+          </div>
+        </div>)}
+        </div>
+        <p className="disc-muted">{t("Jobs run independently on your Windows laptop. You can close this browser and return later. The laptop and private bridge must stay running.")}</p>
         <h3>{t("Previous portfolio studies")}</h3>
         {!runs.length&&<p className="disc-muted">{t("No previous portfolio study.")}</p>}
         {runs.map(r=><button key={r.id} className="disc-run" disabled={busy} onClick={()=>void open(r.id)}>
