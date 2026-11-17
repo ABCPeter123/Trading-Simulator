@@ -5,6 +5,7 @@ export type AIMode = "single" | "portfolio";
 export interface AIStatus {
   provider: AIProvider;
   model: string;
+  available_models?: string[];
   configured: boolean;
   ready: boolean;
   remote: boolean;
@@ -26,10 +27,10 @@ export interface AIAnswer {
   applied: false;
   scope: string;
 }
-export const getAIStatus = () => request<AIStatus>("/ai/status");
+export const getAIStatus = (model?: string) => request<AIStatus>(`/ai/status${model ? `?model=${encodeURIComponent(model)}` : ""}`);
 export const warmupAI = () => request<{started:boolean;reason:string}>("/ai/warmup",{method:"POST"});
-export const askAI = (mode: AIMode, runId: string, question: string, history: AIMessage[], language: "en"|"zh-CN" = "en") =>
+export const askAI = (mode: AIMode, runId: string, question: string, history: AIMessage[], language: "en"|"zh-CN" = "en", model?: string) =>
   request<AIAnswer>("/ai/ask", {
     method: "POST",
-    body: JSON.stringify({mode, run_id: runId, question, history: history.slice(-6), language}),
+    body: JSON.stringify({mode, run_id: runId, question, history: history.slice(-6), language, ...(model ? {model} : {})}),
   });
