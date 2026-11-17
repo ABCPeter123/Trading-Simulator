@@ -28,7 +28,6 @@ const zh: Record<string, string> = {
   "weekday coverage estimate": "工作日覆盖估计",
   "Collect new bars locally": "在本地采集新 K 线",
   "Stop collecting": "停止采集",
-  "Import": "导入",
   "Signal evaluation interval": "信号评估周期",
   "Daily, previous completed session": "每日，前一完整交易日",
   "Hourly, completed candle": "每小时，已收盘 K 线",
