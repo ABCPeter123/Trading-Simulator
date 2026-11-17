@@ -100,6 +100,14 @@ if ($updateNode) {
 # npm install can create/change package-lock.json, so compute signature afterwards.
 Set-Content -LiteralPath $nodeStamp -Value (Manifest-Signature @($packageJson, $packageLock))
 
+# Install a local commit-time strategy/privacy check in Git checkouts.
+# The installer never overwrites a developer's existing pre-commit hook.
+$privacyInstaller = Join-Path $root "scripts\install_privacy_hook.py"
+if (Test-Path $privacyInstaller) {
+    & $python $privacyInstaller
+    Assert-Success "Installing strategy privacy guard"
+}
+
 if ($SetupOnly) {
     Write-Host "[ready] Dependencies checked. No servers started." -ForegroundColor Green
     exit 0
