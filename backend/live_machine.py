@@ -361,8 +361,8 @@ def _evaluate_deployment(dep,now,source):
     from .assets import get_instrument
     allowed=set(json.loads(dep["symbols"]))
     if dep["mode"]=="single":
-        rules=[(dep["symbols"],dep["symbols"],r) for r in compile_rules(dep["code"])]
-        rules=[(json.loads(dep["symbols"])[0],json.loads(dep["symbols"])[0],r) for _,_,r in rules]
+        symbol=json.loads(dep["symbols"])[0]
+        rules=[(symbol,symbol,r) for r in compile_rules(dep["code"])]
     else:
         rules=[(r.signal_id,r.target_id,r.rule) for r in compile_portfolio_rules(dep["code"],allowed)]
     for source_symbol in sorted({a for a,_,_ in rules}):
@@ -421,7 +421,7 @@ def _evaluate_deployment(dep,now,source):
                         forecast=probability_up(bars,20)
                     except Exception:
                         forecast=None
-                    conn.execute("""INSERT INTO signals VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    conn.execute("""INSERT INTO signals VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                       (str(uuid4()),dep["id"],eval_id,source_symbol,target,
                        rule.side,allocation,float(dep["capital"])*allocation/100,
                        float(latest["close"]),int(latest["time"]),now_iso,_next_expiry(now),
