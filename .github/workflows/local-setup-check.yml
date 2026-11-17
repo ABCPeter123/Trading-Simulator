@@ -23,7 +23,7 @@ jobs:
       - name: Parse PowerShell without running installers
         shell: powershell
         run: |
-          $paths = @("start-local.ps1", "start-live-machine.ps1", "start-private-bridge.ps1", "scripts/run-backend.ps1", "scripts/run-frontend.ps1", "scripts/run-research-worker.ps1", "scripts/start-vercel-baseline.ps1")
+          $paths = @("start-local.ps1", "start-live-machine.ps1", "start-private-bridge.ps1", "scripts/run-backend.ps1", "scripts/run-frontend.ps1", "scripts/run-research-worker.ps1", "scripts/run-market-ingest-worker.ps1", "scripts/start-vercel-baseline.ps1")
           foreach ($path in $paths) {
             $tokens = $null
             $parseErrors = $null
