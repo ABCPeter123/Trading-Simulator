@@ -84,6 +84,7 @@ if ($LegacyToken) {
     }
 }
 $backend=$null
+$researchWorker=$null
 $tunnel=$null
 try {
     $backend=Start-Process -FilePath $python -WorkingDirectory $root -PassThru -ArgumentList @("-m","uvicorn","backend.main:app","--host","127.0.0.1","--port","8002") -RedirectStandardOutput (Join-Path $stateDir "api.stdout.log") -RedirectStandardError (Join-Path $stateDir "api.stderr.log")
@@ -103,6 +104,14 @@ try {
     }
     if(-not $ready){throw "Private API did not start. See .local-state/private-bridge/api.stderr.log."}
     Write-Host "[private] Local password-protected trading API is ready." -ForegroundColor Green
+    # A separate local worker consumes persisted research jobs even if the
+    # browser disconnects. It never uploads job data to Vercel or GitHub.
+    $researchWorker=Start-Process -FilePath $python -WorkingDirectory $root -PassThru -ArgumentList @("-m","backend.research_worker","--interval","3") -RedirectStandardOutput (Join-Path $stateDir "research.stdout.log") -RedirectStandardError (Join-Path $stateDir "research.stderr.log")
+    Start-Sleep -Milliseconds 600
+    if($researchWorker.HasExited) {
+        throw "Local research worker exited unexpectedly. See .local-state/private-bridge/research.stderr.log."
+    }
+    Write-Host "[research] Background portfolio job processor is active on this PC." -ForegroundColor Green
     # Supervise the temporary Cloudflare URL. Each new tunnel requires a fresh
     # directory publication, but visitors keep using the same Vercel address.
     $restartCount=0
@@ -236,5 +245,6 @@ try {
 
 } finally {
     if($null -ne $tunnel -and -not $tunnel.HasExited){Stop-Process -Id $tunnel.Id -Force -ErrorAction SilentlyContinue}
+    if($null -ne $researchWorker -and -not $researchWorker.HasExited){Stop-Process -Id $researchWorker.Id -Force -ErrorAction SilentlyContinue}
     if($null -ne $backend -and -not $backend.HasExited){Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue}
 }
