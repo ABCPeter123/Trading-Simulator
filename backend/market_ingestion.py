@@ -55,6 +55,8 @@ def subscribe(asset_id:str,resolution:str="5m"):
         raise HTTPException(422,detail="Ingestion requires 1m, 5m, 15m, 1h or 1d.")
     if not item.ticker or item.kind=="Options":
         raise HTTPException(422,detail="No supported market feed for this instrument.")
+    if item.kind=="Funds" and resolution!="1d":
+        raise HTTPException(422,detail="Mutual fund NAV history supports daily collection only.")
     now=datetime.now(timezone.utc).isoformat()
     with LOCK,closing(_db()) as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -163,8 +165,25 @@ def run_due(now:datetime|None=None):
         # closed unless the source has never been seeded. Missing historical
         # candles can still be seeded on demand via the ordinary chart API.
         asset=get_instrument(item["asset_id"])
-        if asset.kind not in ("Crypto",) and not market.market_open(asset,now):
-            continue
+        if asset.kind not in ("Crypto",):
+            # Daily mutual-fund NAVs and other post-close history are only
+            # collectible after the session. They never become live quotes.
+            from zoneinfo import ZoneInfo
+            local=now.astimezone(ZoneInfo("America/New_York"))
+            if local.weekday()>=5:
+                continue
+            if asset.kind=="Funds":
+                if not (resolution=="1d" and local.hour>=17):
+                    continue
+            elif asset.kind=="Indices":
+                if resolution=="1d":
+                    if local.hour<17:continue
+                elif not (9<=local.hour<16):
+                    continue
+            elif resolution=="1d":
+                if local.hour<17:continue
+            elif not market.market_open(asset,now):
+                continue
         stamp=now.isoformat()
         with LOCK,closing(_db()) as conn:
             conn.execute("UPDATE subscriptions SET last_attempt=? WHERE asset_id=? AND resolution=?",
