@@ -26,7 +26,7 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setenv("TRADING_SIM_SMTP_HOST","smtp.gmail.com")
     monkeypatch.setenv("TRADING_SIM_SMTP_PORT","465")
     monkeypatch.setenv("TRADING_SIM_SMTP_USER","sender@example.invalid")
-    monkeypatch.setenv("TRADING_SIM_SMTP_PASSWORD","fictional-app-password")
+    monkeypatch.setenv("TRADING_SIM_SMTP_PASSWORD","abcdefghijklmnop")
     monkeypatch.setenv("TRADING_SIM_EMAIL_FROM","sender@example.invalid")
     monkeypatch.setenv("TRADING_SIM_EMAIL_TO","first@example.invalid, second@example.invalid")
     monkeypatch.setenv("TRADING_SIM_EMAIL_DIGEST_ENABLED","1")
@@ -40,9 +40,10 @@ def test_email_recipients_and_html_are_sent_together(workspace,monkeypatch):
         def __init__(self,*args,**kwargs):pass
         def __enter__(self):return self
         def __exit__(self,*args):return False
+        def ehlo(self):return (250,b"fake")
         def login(self,user,password):
             assert user=="sender@example.invalid"
-            assert password=="fictional-app-password"
+            assert password=="abcdefghijklmnop"
         def send_message(self,msg,to_addrs=None):
             messages.append((msg,to_addrs))
     monkeypatch.setattr(notices.smtplib,"SMTP_SSL",FakeSMTP)
@@ -133,6 +134,7 @@ def test_gmail_falls_back_from_disconnected_ssl_to_starttls_before_login(workspa
             calls.append(("starttls_connect",args[1]))
         def starttls(self,context):
             calls.append(("tls",True))
+        def ehlo(self):return (250,b"fake")
         def login(self,username,password):
             calls.append(("login",password))
         def send_message(self,msg,to_addrs):
@@ -154,6 +156,7 @@ def test_smtp_authentication_failure_does_not_try_other_port(workspace,monkeypat
     class Rejected:
         def __init__(self,*args,**kwargs):
             calls.append("connect")
+        def ehlo(self):return (250,b"fake")
         def login(self,username,password):
             calls.append("login")
             raise __import__("smtplib").SMTPAuthenticationError(535,b"mocked-secret-never-log")
@@ -174,6 +177,7 @@ def test_no_resend_or_false_failure_after_successful_send(workspace,monkeypatch)
     sends=[]
     class SuccessThenQuitWouldFail:
         def __init__(self,*args,**kwargs):pass
+        def ehlo(self):return (250,b"fake")
         def login(self,username,password):pass
         def send_message(self,msg,to_addrs):
             sends.append(True)
@@ -209,6 +213,7 @@ def test_gmail_app_password_with_visual_spaces_is_normalized_only_for_sixteen_ch
     captured=[]
     class Fake:
         def __init__(self,*args,**kwargs):pass
+        def ehlo(self):return (250,b"fake")
         def login(self,user,password):
             captured.append(password)
         def send_message(self,msg,to_addrs):return {}
@@ -228,7 +233,7 @@ def test_diagnostics_authenticate_without_sending_or_disclosing_private_details(
         checked.append(port)
         assert host=="smtp.gmail.com"
         assert user=="sender@example.invalid"
-        assert password=="fictional-app-password"
+        assert password=="abcdefghijklmnop"
         return FakeConnection()
     monkeypatch.setattr(notices,"_smtp_connect_and_auth",fake_connect)
     monkeypatch.setattr(notices,"_send_email",lambda *a,**kw:
@@ -239,7 +244,7 @@ def test_diagnostics_authenticate_without_sending_or_disclosing_private_details(
     assert "465 SSL" in output
     assert "587 STARTTLS" in output
     assert "No message will be sent" in output
-    assert "fictional-app-password" not in output
+    assert "abcdefghijklmnop" not in output
     assert "sender@example.invalid" not in output
 
 
@@ -252,5 +257,33 @@ def test_diagnostics_report_authentication_failure_without_raw_exception(workspa
     out=capsys.readouterr().out
     assert out.count("authentication")>=0 or "authenticate" in out
     assert "SMTPAuthenticationError" in out
-    assert "fictional-app-password" not in out
+    assert "abcdefghijklmnop" not in out
     assert "sender@example.invalid" not in out
+
+
+def test_drop_during_ehlo_is_not_reported_as_authentication(workspace,monkeypatch):
+    class DropDuringHello:
+        def __init__(self,*a,**kw):pass
+        def ehlo(self):
+            raise __import__("smtplib").SMTPServerDisconnected("fake dropped during EHLO")
+        def close(self):pass
+    monkeypatch.setattr(notices.smtplib,"SMTP_SSL",DropDuringHello)
+    monkeypatch.setattr(notices.smtplib,"SMTP",lambda *a,**kw:
+                        pytest.fail("Never retry port when EHLO disconnects"))
+    with pytest.raises(notices.SMTPDeliveryFailure) as issue:
+        notices._send_email("Synthetic","Report")
+    assert issue.value.stage=="ehlo"
+    assert issue.value.cause=="SMTPServerDisconnected"
+
+
+def test_rejects_incorrect_google_app_password_shape_without_connecting(workspace,monkeypatch,capsys):
+    from backend import email_report_probe
+    monkeypatch.setenv("TRADING_SIM_SMTP_PASSWORD","not-a-google-app-password")
+    monkeypatch.setattr(notices,"_smtp_connect_and_auth",
+                        lambda *a,**kw:pytest.fail("Must not authenticate"))
+    assert email_report_probe.diagnose()==2
+    out=capsys.readouterr()
+    assert "expected a 16-character" in out.err
+    assert "not-a-google-app-password" not in out.err
+    with pytest.raises(ValueError):
+        notices._send_email("Synthetic","Report")
