@@ -32,16 +32,15 @@ function sampleData():MarketBar[]{
 
 export default function CloudGateway({onConnected}:{onConnected:()=>void}){
   const {t}=useI18n();
-  const [origin,setOrigin]=useState("");
-  const [token,setToken]=useState("");
+  const [password,setPassword]=useState("");
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const bars=useMemo(sampleData,[]);
   async function submit(e:FormEvent){
     e.preventDefault();setBusy(true);setMessage("");
     try{
-      await connectPrivateEngine(origin,token);
-      setToken("");onConnected();
+      await connectPrivateEngine(password);
+      setPassword("");onConnected();
     }catch(err){setMessage(err instanceof Error?err.message:String(err));}
     finally{setBusy(false);}
   }
@@ -62,20 +61,15 @@ export default function CloudGateway({onConnected}:{onConnected:()=>void}){
         </div>
       </section>
       <div className="cloud-gateway-grid">
-        <section className="cloud-gateway-connect" aria-label={t("Connect private engine")}>
+        <section className="cloud-gateway-connect" aria-label={t("Sign in to private workspace")}>
           <div className="cloud-gateway-section-icon"><KeyRound size={19}/></div>
           <h2>{t("Connect private engine")}</h2>
-          <p>{t("Your local Python service provides the trading data and calculations. The browser never sends an access token to Vercel.")}</p>
+          <p>{t("Enter the shared password provided by the owner. The connection to the private desktop is found automatically. No URL or API token is needed.")}</p>
           <form onSubmit={e=>void submit(e)}>
-            <label>{t("Engine URL")}
-              <input type="url" value={origin} onChange={e=>setOrigin(e.target.value)}
-                placeholder="https://your-private-tunnel.trycloudflare.com"
-                autoComplete="off" spellCheck={false} required/>
-            </label>
-            <label>{t("Private access token")}
-              <input type="password" value={token} onChange={e=>setToken(e.target.value)}
-                placeholder={t("Paste the token from your private bridge terminal")}
-                autoComplete="off" minLength={48} required/>
+            <label>{t("Access password")}
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
+                placeholder={t("Enter your access password")}
+                autoComplete="current-password" minLength={12} maxLength={128} required/>
             </label>
             {message&&<p className="cloud-gateway-error" role="alert">{message}</p>}
             <button disabled={busy} type="submit">{busy?t("Connecting..."):t("Open trading workspace")}<ArrowRight size={17}/></button>
@@ -83,8 +77,8 @@ export default function CloudGateway({onConnected}:{onConnected:()=>void}){
           <div className="cloud-gateway-help">
             <WifiOff size={17}/><div>
               <strong>{t("No engine running yet?")}</strong>
-              <p>{t("Start the private bridge on your Windows PC. Then copy its temporary HTTPS address and access token here. The PC must stay online.")}</p>
-              <code>powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1 -AllowedOrigin "{typeof window!=="undefined"?window.location.origin:"https://your-site.vercel.app"}"</code>
+              <p>{t("The owner starts the private bridge on their desktop. If the desktop is offline, the workspace cannot connect.")}</p>
+              <code>powershell -ExecutionPolicy Bypass -File .\start-private-bridge.ps1</code>
             </div>
           </div>
         </section>
