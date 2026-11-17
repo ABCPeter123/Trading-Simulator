@@ -25,9 +25,14 @@ before the security's date**. It never uses today's FX close for today's
 open execution. Dates without a recent FX observation are excluded; a
 short/missing FX series fails closed. Every research result records source
 conversion metadata. These are indicative historical valuations, not
-executable FX rates. The legacy historical portfolio simulator still uses
-a USD-only cash ledger, while mixed-currency **research comparisons**
-support CAD. No real broker trades or currency conversions are executed.
+executable FX rates. The historical portfolio simulator now accepts CAD stocks and ETFs too,
+using **USD-equivalent OHLC** derived from the previous completed FX daily
+close, with the existing shared USD cash ledger. Historical fills and P&L
+are expressed in USD equivalents. Both portfolio simulations and research
+comparisons retain their own frozen source prices and FX conversion
+provenance. The FX conversion is an indicative historical approximation,
+not a simulated currency exchange order, tick-accurate FX rate, or real
+broker execution.
 
 ## 3. Bounded incremental local history collector
 
