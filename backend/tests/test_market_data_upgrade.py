@@ -208,3 +208,29 @@ def test_mutual_fund_cannot_request_intraday_ingestion(local_data,monkeypatch):
         ingest.subscribe("example-fund","5m")
     assert denied.value.status_code==422
     assert ingest.subscribe("example-fund","1d")["active"] is True
+
+
+def test_incremental_daily_updates_max_archive_without_refetch(local_data,monkeypatch):
+    original=candles(date(2026,11,9),5)
+    archive.record_history({"asset_id":"spy","range":"MAX","bars":original})
+    archive.record_history({"asset_id":"spy","range":"1Y","bars":original})
+    last=original[-1]["time"]
+    appended={**original[-1],"time":last+86400,"close":original[-1]["close"]*1.002}
+    seen=[]
+    def recent_fetch(asset,start,end,resolution):
+        seen.append((asset.id,start,resolution))
+        return [original[-1],appended]
+    monkeypatch.setattr(ingest.intraday,"fetch_yahoo",recent_fetch)
+    result=ingest.ingest_once("spy","1d",datetime(2026,11,18,tzinfo=timezone.utc))
+    assert result["added"]==1 and seen[0][2]=="1d"
+    response=TestClient(app).get("/api/market-data/archived/spy?window=MAX&resolution=1d")
+    assert response.status_code==200,response.text
+    assert len(response.json()["bars"])==len(original)+1
+    assert response.json()["execution_eligible"] is False
+    assert response.json()["offline_cache"] is True
+    assert quality.analyze("spy","MAX")["last_bar"]==last+86400
+
+
+def test_fresh_incremental_archive_is_not_a_quote_source(local_data):
+    assert TestClient(app).get("/api/market-data/archived/spy?window=1Y").status_code==404
+    assert quality.analyze("spy","1Y")["status"]=="missing"
