@@ -8,7 +8,8 @@ forward-filled into tradable candles.
 from __future__ import annotations
 
 from contextlib import closing
-from datetime import datetime, timezone
+from bisect import bisect_left
+from datetime import datetime, timezone, date, timedelta
 from decimal import Decimal
 from pathlib import Path
 from threading import RLock
@@ -136,10 +137,45 @@ def create_season(symbols, period="5Y", starting_point=0.3, start_date=None, res
     if not 0.15 <= starting_point <= 0.75:
         raise HTTPException(422, detail="Invalid season starting point.")
     instruments = [get_instrument(asset_id) for asset_id in symbols]
-    if any(not i.tradable or i.currency != "USD" or i.kind not in ("Stocks", "ETFs", "Crypto") for i in instruments):
-        raise HTTPException(422, detail="Multi-asset seasons currently support USD equities, ETFs and crypto only.")
+    if any(i.currency not in ("USD","CAD") or i.kind not in ("Stocks","ETFs","Crypto")
+           or (i.kind=="Crypto" and i.currency!="USD")
+           or (not i.tradable and i.currency!="CAD") for i in instruments):
+        raise HTTPException(422,detail="Portfolio simulation supports USD/CAD stocks and ETFs, plus USD cryptocurrency.")
     raw = {asset_id: (history(asset_id, period) if resolution == "1d"
                       else replay_history(asset_id, period, resolution)) for asset_id in symbols}
+    if any(item.currency=="CAD" for item in instruments):
+        fx_window=period if resolution=="1d" else "2Y"
+        reference=history("usdcad",fx_window)
+        if reference.get("is_demo") or reference.get("offline_cache"):
+            raise HTTPException(422,detail="Real historical USD/CAD daily FX prices are required for CAD portfolio simulations.")
+        fx_rows=reference.get("bars")
+        if not isinstance(fx_rows,list) or len(fx_rows)<2:
+            raise HTTPException(422,detail="Insufficient observed USD/CAD daily FX history.")
+        fx_daily={}
+        for bar in fx_rows:
+            day=datetime.fromtimestamp(int(bar["time"]),timezone.utc).date().isoformat()
+            value=float(bar["close"])
+            if not 0<value<100:
+                raise HTTPException(422,detail="Invalid historical USD/CAD FX close.")
+            fx_daily[day]=value
+        fx_days=sorted(fx_daily)
+        for item in instruments:
+            if item.currency!="CAD":continue
+            payload=raw[item.id]
+            converted=[]
+            for candle in payload["bars"]:
+                day=datetime.fromtimestamp(int(candle["time"]),timezone.utc).date().isoformat()
+                previous=bisect_left(fx_days,day)-1
+                if previous<0:continue
+                fx_date=fx_days[previous]
+                if (date.fromisoformat(day)-date.fromisoformat(fx_date)).days>5:
+                    continue
+                rate=fx_daily[fx_date]
+                converted.append({**candle,**{k:float(candle[k])/rate
+                    for k in ("open","high","low","close")}})
+            raw[item.id]={**payload,"bars":converted,
+                "source":str(payload.get("source","provider"))+
+                    "; USD-equivalent from previous completed USD/CAD FX close"}
     days, daily, warmup = _prepare(raw, resolution)
     index = min(len(days) - 2, max(warmup, int(len(days) * starting_point)))
     if start_date:
@@ -255,7 +291,7 @@ def public(run_id, row, snap, state):
         "orders": state["orders"], "fills": state["fills"][-60:][::-1],
         "events": state["events"], "strategy": state["strategy"], "risk": state["risk"],
         "curve": state["curve"], "updated_at": row["updated_at"],
-        "execution_notice": "Shared USD cash and daily close marks. Trading is allowed only on a symbol's actual historical candle. Stale holdings use the last revealed close; no prices are synthesized. Fills use OHLC approximations.",
+        "execution_notice": "Shared USD cash and observed close marks. CAD asset OHLC is converted into USD equivalents with the previous completed USD/CAD close when applicable. This is research-only currency modeling, not an executable FX rate. Fills use OHLC approximations, and unrevealed candles remain hidden.",
     }
 
 
