@@ -318,7 +318,17 @@ def record_fill(data):
         if signal:
             conn.execute("UPDATE signals SET status='filled' WHERE id=?",(signal["id"],))
         conn.commit()
-        return _one(conn,"SELECT * FROM fills WHERE id=?",(identifier,))
+        result=_one(conn,"SELECT * FROM fills WHERE id=?",(identifier,))
+    if signal:
+        deviation=abs((float(price)/float(signal["price_reference"])-1)*100)
+        late=datetime.fromisoformat(stamp)>datetime.fromisoformat(signal["expires_at"])
+        mismatch=data["asset_id"]!=signal["asset_id"] or data["side"]!=signal["side"]
+        if deviation>3 or late or mismatch:
+            record_alert("fill:variance:"+identifier,"warning",
+                         "Confirmed execution differs from original recommendation",
+                         "Review the broker fill and signal: price moved more than 3%, "
+                         "the action was recorded after expiry, or the instrument/side changed.")
+    return result
 
 def edit_fill(fill_id,data):
     with LOCK,db() as conn:
