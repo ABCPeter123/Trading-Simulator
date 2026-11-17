@@ -12,6 +12,11 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Realized-loss stop (%)": "已实现亏损暂停阈值（%）",
+  "Realized-loss stop": "已实现亏损保护",
+  "Loss stop": "亏损暂停阈值",
+  "Pause and alert": "暂停并发出警报",
+  "Multiple currencies": "多种币种，不能直接合计",
   "Application sections": "应用功能",
   "Dashboard": "仪表盘",
   "Strategy Lab & Backtesting": "策略实验室与回测",
