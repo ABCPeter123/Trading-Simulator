@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import subprocess
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from scripts import check_private_artifacts as privacy
+from scripts import install_privacy_hook
 
 
 class PrivacyCheckTests(unittest.TestCase):
@@ -89,6 +91,28 @@ class PrivacyCheckTests(unittest.TestCase):
                 indexed = dict(privacy.candidates(staged=True))
                 self.assertIn("data/private-strategy.json", indexed)
                 self.assertEqual(privacy.run(staged=True), 1)
+
+    def test_installed_local_hook_blocks_forced_strategy_commit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            subprocess.run(["git","init","-q"],cwd=root,check=True)
+            (root / "scripts").mkdir()
+            shutil.copy2(privacy.__file__,root / "scripts/check_private_artifacts.py")
+            self.assertEqual(install_privacy_hook.install(root),0)
+            (root / "data").mkdir()
+            (root / ".gitignore").write_text("data/\n")
+            (root / "data/real-strategy.json").write_text(
+                '{"example":"stand-in private artifact"}'
+            )
+            subprocess.run(["git","add",".gitignore"],cwd=root,check=True)
+            subprocess.run(["git","add","-f","data/real-strategy.json"],cwd=root,check=True)
+            result=subprocess.run([
+                "git","-c","user.name=PrivacyTest",
+                "-c","user.email=test@example.invalid",
+                "commit","-m","Should be blocked"
+            ],cwd=root,capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn("PRIVATE TRADING DATA CHECK FAILED",result.stderr)
 
     def test_index_scan_uses_staged_version_not_unstaged_edits(self):
         with tempfile.TemporaryDirectory() as folder:
