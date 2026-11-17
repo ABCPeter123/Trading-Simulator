@@ -18,8 +18,13 @@ Trading-Simulator repository and install the Cloudflare tunnel agent once:
 winget install -e --id Cloudflare.cloudflared
 ```
 
-Close and reopen PowerShell so `cloudflared` is available on PATH.
-Then update the project and launch the public site:
+The launcher automatically checks PATH, standard Windows MSI installation
+directories (including `C:\Program Files (x86)\cloudflared`), user and
+machine PATH, and common WinGet portable locations. **A successful winget
+install does not always make the command available in PowerShell.**
+You do not need to reinstall if the binary already exists.
+
+Update the project and launch the public site:
 
 ```powershell
 git pull
@@ -77,8 +82,25 @@ the link with untrusted large audiences or treat it as a production website.
 
 ## Troubleshooting
 
-- **cloudflared missing**: install with `winget` as shown above and open
-  a new PowerShell.
+- **Installed through winget, but cloudflared is still not found:**
+  the MSI can install the executable without adding its directory to PATH.
+  The latest launcher searches standard locations automatically.
+  First run `git pull` and try the launcher again. Verify installation:
+
+  ```powershell
+  winget list -e --id Cloudflare.cloudflared
+  Get-ChildItem "${env:ProgramFiles(x86)}\cloudflared" -Filter cloudflared.exe -ErrorAction SilentlyContinue
+  ```
+
+  If the file exists in another location, pass that exact location:
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\start-public.ps1 -CloudflaredPath "C:\path\to\cloudflared.exe"
+  ```
+
+  Alternatively set `TRADING_SIM_CLOUDFLARED` in your PowerShell process
+  to the executable path. The launcher accepts portable files named
+  `cloudflared-windows-amd64.exe` as well.
 - **Port 8001 or 4173 already in use**: stop the earlier public demo.
   They intentionally do not reuse private ports 8000 and 5173.
 - **Startup or 502 errors**: inspect the four `*.log` files in
