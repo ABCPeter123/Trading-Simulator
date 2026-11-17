@@ -70,7 +70,9 @@ function Simulator() {
       {mode === "portfolio"
         ? <PortfolioArcade onExit={() => setMode("single")} />
         : <TradingArcade onOpenPortfolio={() => setMode("portfolio")} />}
-    </> : section==="discovery"?<StrategyDiscovery/>:<LiveOperations section={section}/>}
+    </> : section==="discovery"?<StrategyDiscovery/>:<LiveOperations section={section} initialSignal={preparedSignal}
+      onRecordSignal={signal=>{setPreparedSignal(signal);setSection("journal");}}
+      onConsumed={()=>setPreparedSignal(null)}/>}
 
     <LanguageSwitcher/>
   </>;
