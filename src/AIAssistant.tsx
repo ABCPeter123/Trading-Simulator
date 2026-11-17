@@ -17,6 +17,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
 }) {
   const {t,locale}=useI18n();
   const [status,setStatus]=useState<AIStatus|null>(null);
+  const [selectedModel,setSelectedModel]=useState("");
   const [statusError,setStatusError]=useState("");
   const [message,setMessage]=useState("");
   const [turns,setTurns]=useState<AIMessage[]>([]);
@@ -28,7 +29,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
 
   useEffect(()=>{
     let alive=true;
-    void getAIStatus().then(next=>{if(alive)setStatus(next);})
+    void getAIStatus().then(next=>{if(alive){setStatus(next);setSelectedModel(next.model);}})
       .catch(err=>{if(alive)setStatusError(err instanceof Error?err.message:"AI status unavailable.");});
     return ()=>{alive=false;};
     // Status reports preload progress; refresh while model is warming.
@@ -46,7 +47,8 @@ export default function AIAssistant({mode,runId,onDraft}: {
     const history=turns.slice(-6);
     setBusy(true);setElapsed(0);setError("");setRetryQuestion("");setMessage("");
     try {
-      const result=await askAI(mode,runId,question,history,locale);
+      const result=await askAI(mode,runId,question,history,locale,
+        status?.provider==="llama_cpp" ? selectedModel : undefined);
       setTurns(prev=>[...prev,{role:"user",content:question},{role:"assistant",content:result.answer}]);
       setAnswers(prev=>[...prev,result]);
     } catch(e) {
@@ -81,7 +83,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
         <h2>{t("AI Strategy Assistant")}</h2>
         <p>{t("Ask about your actual replay results, or request an editable trading strategy.")}</p>
       </div>
-      <span className="ai-chip">{status?.provider==="openai"?"OpenAI":status?.provider==="ollama"?"Ollama":status?.provider==="llama_cpp"?"TwIL / llama.cpp":t("Not configured")} · {status?.loaded?t("Model loaded"):status?.warming?t("Loading model"):status?.ready?t("Connected"):t("Not ready")}</span>
+      <span className="ai-chip">{status?.provider==="openai"?"OpenAI":status?.provider==="ollama"?"Ollama":status?.provider==="llama_cpp"?"llama.cpp":t("Not configured")} · {status?.loaded?t("Model loaded"):status?.warming?t("Loading model"):status?.ready?t("Connected"):t("Not ready")}</span>
     </div>
     <div className="ai-status">
       <ShieldCheck size={14}/>
@@ -89,12 +91,27 @@ export default function AIAssistant({mode,runId,onDraft}: {
         ? `${t("Ollama is unavailable or the model is missing. Run:")} ollama pull ${status.model}` : status.provider==="ollama"
         ? status.warming?t("Ollama is preloading the model locally."):status.loaded?t("Ollama is loaded and ready for research."):t("Ollama runs locally. Install Ollama and pull the model to ask questions.")
         : status.provider==="llama_cpp"
-        ? status.ready?t("TwIL runs on your laptop. Model responses are research-only and require validation."):t("Start llama.cpp with a licensed local GGUF model on port 8081.")
+        ? status.ready?t("The selected llama.cpp model runs locally. AI output still requires validation."):t("Start the llama.cpp router with a supported GGUF model on port 8081.")
         : status.provider==="openai"
         ? t("OpenAI runs remotely. Each question sends summarized historical game data.")
         : t("AI is disabled.")) : t("Checking AI connection...")}</span>
+      {status?.provider==="llama_cpp"&&status.available_models&&status.available_models.length>0&&
+        <label className="ai-model-picker">
+          <span>{locale==="zh-CN"?"本地模型":"Local model"}</span>
+          <select aria-label={locale==="zh-CN"?"选择本地AI模型":"Select local AI model"}
+            value={selectedModel} disabled={busy}
+            onChange={event=>{
+              const next=event.target.value;
+              setSelectedModel(next);
+              setStatus(previous=>previous?{...previous,model:next,ready:false,loaded:false}:previous);
+              void getAIStatus(next).then(setStatus)
+                .catch(e=>setStatusError(e instanceof Error?e.message:"AI model unavailable."));
+            }}>
+            {status.available_models.map(model=><option key={model} value={model}>{model.includes("TwIL")?"TwIL-8B":model.includes("Qwen")?"Qwen 3.5 9B":model}</option>)}
+          </select>
+        </label>}
       {status?.model&&<strong>{status.model}</strong>}
-      {(status?.provider==="ollama"||status?.provider==="llama_cpp")&&<button className="ai-refresh" type="button" onClick={()=>void getAIStatus().then(setStatus).catch(e=>setStatusError(e instanceof Error?e.message:t("AI status unavailable.")))}><RefreshCcw size={13}/>{t("Recheck AI")}</button>}
+      {(status?.provider==="ollama"||status?.provider==="llama_cpp")&&<button className="ai-refresh" type="button" onClick={()=>void getAIStatus(status?.provider==="llama_cpp" ? selectedModel : undefined).then(setStatus).catch(e=>setStatusError(e instanceof Error?e.message:t("AI status unavailable.")))}><RefreshCcw size={13}/>{t("Recheck AI")}</button>}
     </div>
     {statusError&&<p role="alert" className="ai-error">{t(statusError)}</p>}
     {!status?.ready&&status&&<p className="ai-setup">{t("Configure the backend AI provider to enable questions. See the AI setup guide.")}</p>}
@@ -122,7 +139,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
           </div>}
       </div>)}
     </div>}
-    {busy&&<p className="ai-processing" role="status">{t("Local AI is processing your request.")} {elapsed}s · {t("First response may take longer while Ollama loads the model.")}</p>}
+    {busy&&<p className="ai-processing" role="status">{t("Local AI is processing your request.")} {elapsed}s · {status?.provider==="llama_cpp" ? (locale==="zh-CN"?"模型加载和推理可能需要更长时间。":"Loading and reasoning may take longer on the first request.") : t("First response may take longer while Ollama loads the model.")}</p>}
     {error&&<div role="alert" className="ai-error">{t(error)}{retryQuestion&&<button type="button" disabled={busy||!status?.ready} onClick={()=>void send(retryQuestion)}><RefreshCcw size={14}/>{t("Retry question")}</button>}</div>}
     <form className="ai-form" onSubmit={e=>{e.preventDefault();void send(message);}}>
       <textarea rows={2} maxLength={1200} value={message} onChange={e=>setMessage(e.target.value)}
