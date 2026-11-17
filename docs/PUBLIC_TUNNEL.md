@@ -58,7 +58,10 @@ simulations, advance historical replay, experiment with paper positions,
 inspect charts, and save demonstration strategies. Visitors can see and
 change each other's sandbox sessions, balances and strategies. This is
 intentional for short-lived demonstrations and is not suitable for private
-individual user accounts. Don't enter secrets or personal information.
+individual user accounts. **NEVER upload, paste, import or activate your real
+private strategy or proprietary parameter sets on the public demo.** Other
+visitors can read them. Do not enter credentials or personal financial records.
+See [the mandatory strategy privacy policy](STRATEGY_PRIVACY.md).
 
 The sandbox uses its own databases, custom-instrument imports and market
 archives. The owner's private `data/` directory, locally saved accounts,
