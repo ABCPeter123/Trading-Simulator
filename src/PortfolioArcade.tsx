@@ -33,7 +33,9 @@ const SAVED = "trade-sim-active-portfolio-season";
 const errorText = (e: unknown) => e instanceof Error ? e.message : "Operation failed.";
 const fmtQty = (n:number) => n.toLocaleString("en-US", {maximumFractionDigits:8});
 const eligible = (i: CatalogInstrument) =>
-  i.tradable && i.currency === "USD" && ["Stocks","ETFs","Crypto"].includes(i.asset_class);
+  ["Stocks","ETFs","Crypto"].includes(i.asset_class) &&
+  (i.currency==="USD" && i.tradable ||
+    i.currency==="CAD" && ["Stocks","ETFs"].includes(i.asset_class));
 
 export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
   const {t} = useI18n();
@@ -225,6 +227,8 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       <span className="arc-upper">{t("MULTI-ASSET RESEARCH")}</span>
       <h1>{t("Multi-asset Historical Simulator")}</h1>
       <p>{t("Select 2 to 5 instruments using a shared $100,000 simulated USD account. Historical candles are synchronized and upcoming market data remain hidden.")}</p>
+      {basket.some(id=>catalog.find(i=>i.id===id)?.currency==="CAD")&&
+        <p>{t("Canadian asset prices and simulated fills are converted to USD using the previous completed USD/CAD FX close. Results use a shared USD cash account and are indicative.")}</p>}
       <div className="port-picker">
         <div className="port-selected"><strong>{t("YOUR BASKET")} ({basket.length}/5)</strong>
           <div>{basket.map(id=><button key={id} onClick={()=>setBasket(prev=>prev.filter(x=>x!==id))}>{assetName(id)} ×</button>)}</div>
