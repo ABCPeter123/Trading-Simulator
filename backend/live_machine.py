@@ -504,13 +504,18 @@ def _evaluate_deployment(dep,now,source):
                          "No fresh signal will be created for "+source_symbol+". Verify data source and timestamps.")
             logger.warning("Private live evaluation failed for %s: %s",source_symbol,type(exc).__name__)
 
-def run_once(now: datetime | None=None, source=None):
-    """Called by durable worker. No broker connectivity, no direct order placement."""
+def run_once(now: datetime | None=None, source=None, worker_heartbeat: bool=False):
+    """Check eligible signals, independently of browser or actual worker presence.
+
+    The background worker alone updates its heartbeat. Manual API evaluation
+    must never make a stopped worker appear healthy.
+    """
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
         raise RuntimeError("Live strategy machine is prohibited in the public shared demo.")
     from .market import history
     now=now or datetime.now(timezone.utc)
-    _set_heartbeat()
+    if worker_heartbeat:
+        _set_heartbeat()
     with LOCK,db() as conn:
         dep_rows=_rows(conn,"SELECT * FROM deployments WHERE state IN ('paper','live-monitor')")
         conn.execute("UPDATE signals SET status='expired' WHERE status IN ('pending','acknowledged') AND expires_at < ?",(now.isoformat(),))
