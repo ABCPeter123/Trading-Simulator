@@ -53,7 +53,7 @@ def test_detailed_imessage_is_explicit_opt_in(monkeypatch):
         return SimpleNamespace(status_code=200,json=lambda:{"status":200})
     monkeypatch.setattr(notify.httpx,"post",send)
     notify._send_imessage("Synthetic BUY","Synthetic ticker information")
-    assert messages==["Trading Simulator: Synthetic BUY\\nSynthetic ticker information"]
+    assert messages==["Trading Simulator: Synthetic BUY\nSynthetic ticker information"]
 
 
 @pytest.mark.parametrize("server,chat",[
