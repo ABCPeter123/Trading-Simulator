@@ -345,7 +345,8 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
     actual_usd=nominal_usd-fx_fee
     if actual_usd<=0:
         raise HTTPException(422,"CAD-to-USD conversion exhausts paper funding.")
-    pending={"weights":targets,"remaining":config["delay_sessions"],"signal_session":start}
+    pending={"weights":targets,"remaining":config["delay_sessions"],"signal_session":start,
+             "activated_at":at.isoformat() if profile["broker"]!="legacy_research" else None}
     state={"cash":actual_usd,"equity":actual_usd,
            "positions":{s:0 for s in symbols}, "peak":nominal_usd,
            "gross_pct":0., "observed_sessions":0,
@@ -471,11 +472,25 @@ def _advance(c, row, days, market, meta, fx_rates, at):
             raise ValueError("No previous completed daily FX quote.")
         next_session=state["observed_sessions"]+1
         if state["pending"] is not None:
-            state["pending"]["remaining"]-=1
-            if state["pending"]["remaining"]==0:
-                pending_orders=_fill(state,config,meta,symbols,day,opens)
-            else:
-                pending_orders=[]
+            # A paper order created after the session's opening (or
+            # closing) auction cannot be reconstructed as though the
+            # trader had submitted it before that auction took place.
+            activated=state["pending"].get("activated_at")
+            future_fill=True
+            if activated:
+                from datetime import time as clock_time
+                issued=datetime.fromisoformat(activated).astimezone(NY)
+                auction=(clock_time(16,0) if field=="close" else clock_time(9,30))
+                if day<issued.date().isoformat() or (
+                    day==issued.date().isoformat() and issued.time()>=auction
+                ):
+                    future_fill=False
+            if future_fill:
+                state["pending"]["remaining"]-=1
+                if state["pending"]["remaining"]==0:
+                    pending_orders=_fill(state,config,meta,symbols,day,opens)
+                else:
+                    pending_orders=[]
         else:
             pending_orders=[]
         shorts=sum(max(0,-state["positions"][s])*closes[s] for s in symbols)
