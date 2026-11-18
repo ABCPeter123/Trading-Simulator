@@ -194,11 +194,10 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     try{
       let saved=0;
       for(const winner of result.top10){
-        if(winner.model==="blended_portfolio")continue;
         await importTournamentRank(active.id,winner.rank);saved++;
       }
-      setNotice(bilingual(`${saved} compatible models saved privately. Research-only blends remain in the saved research report.`,
-        `已私下保存 ${saved} 个兼容模型。混合策略仅保留于研究报告。`));
+      setNotice(bilingual(`${saved} portfolio versions saved privately. Blends remain research-only and cannot trade.`,
+        `已私下保存 ${saved} 个组合版本。混合策略仍仅限研究，不可交易。`));
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);}
   }
@@ -211,16 +210,21 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     (active.params.equity_class_cap_pct??70)!==70||
     Boolean(active.params.redistribute_excess)));
   const selectedKey=active&&chosen?`${active.id}:${chosen.rank}`:"";
-  const selectedSpec:TournamentModelSpec|null=active&&chosen&&chosen.model!=="blended_portfolio"?{
-    version:(["leveraged_trend","long_short_momentum","market_neutral",
+  const selectedSpec:TournamentModelSpec|null=active&&chosen?{
+    version:(["blended_portfolio","leveraged_trend","long_short_momentum","market_neutral",
       "defensive_rotation","diversified_risk_parity","equity_hedge"].includes(chosen.model)?2:1),
     model:chosen.model,symbols:chosen.symbols,
+    ...(chosen.sleeves?{sleeves:chosen.sleeves}:{}),
+    base_currency:active.params.base_currency??"USD",
+    slippage_bps:active.params.slippage_bps??8,
+    commission_usd:active.params.commission_usd??0,
+    fx_conversion_bps:active.params.fx_conversion_bps??150,
     max_position_pct:active.params.max_position_pct,
     delay_sessions:active.params.delay_sessions,rebalance_sessions:21,
     restricted_research:chosen.restricted_research,
     short_proxy_research:chosen.short_proxy_research,
     research_only:chosen.research_only,
-    ...(standardModel&&active.params.research_objective==="high_performance"?{
+    ...((standardModel||chosen.model==="blended_portfolio")&&active.params.research_objective==="high_performance"?{
       target_investment_pct:active.params.target_investment_pct??95,
       equity_class_cap_pct:active.params.equity_class_cap_pct??70,
       redistribute_excess:Boolean(active.params.redistribute_excess)}:{}),
@@ -405,8 +409,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                   "买卖价差和滑点已计入模拟成交价，不应重复作为显性成本扣除。")}</p>
               </details>}
               {chosen.model==="blended_portfolio"&&<p className="ur-warning">{bilingual(
-                "Blends are evaluated and saved privately with this study, but cannot yet be imported into cash-only simulation or live monitoring.",
-                "混合策略随研究结果私下保存，但目前不能导入现金模拟或实时监控。")}</p>}
+                "Blends support saved private versions and date-scoped or walk-forward research, but not interactive replay or live monitoring.",
+                "混合策略支持私人版本以及按日期或滚动验证研究，但不支持交互式回放或实时监控。")}</p>}
               {selectedSpec&&<TournamentStrategyInspector key={`${active.id}-${chosen.rank}`} spec={selectedSpec}
                 researchStudy={researchJob?.selection===selectedKey?researchJob.job:null} costs={{
                 commission_usd:Number(result.execution_assumptions.commission_usd),
@@ -418,12 +422,10 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
                 {chosen.research_only?
-                  <button type="button" className="ur-primary" disabled={busy||chosen.model==="blended_portfolio"}
+                  <button type="button" className="ur-primary" disabled={busy}
                     aria-busy={busy&&promotionTarget==="research"}
                     onClick={()=>void promote("research")}>
-                    {chosen.model==="blended_portfolio"?
-                      bilingual("Blend saved in report, standalone replay not yet supported","混合策略已保存在报告中，尚不支持单独回放"):
-                      busy&&promotionTarget==="research"?t("Starting historical study..."):
+                    {busy&&promotionTarget==="research"?t("Starting historical study..."):
                       t("Run this strategy in historical research")}
                   </button>:
                   <button type="button" className="ur-primary" disabled={busy}
@@ -445,7 +447,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 </button>
               </div>
               <p>{chosen.model==="blended_portfolio"?
-                bilingual("Shared-cash blends use one backtest ledger and are retained in this private study. Live and custom-period execution are disabled until the importer supports their model sleeves.","共享现金混合策略在同一个回测账本运行并保存在私人研究中。在导入器支持策略权重之前，不提供实时运行和自定义区间执行。"):
+                bilingual("Shared-cash blends now support private saved versions, historical period studies and walk-forward revalidation. Live execution remains disabled.","共享现金混合策略现已支持私人策略版本、历史区间研究和滚动验证。实时执行仍然禁用。"):
                 chosen.research_only?
                 t("Short and margin strategies can run in the historical signed-position research engine. Click Run this strategy in historical research to see simulated fills, equity changes and risk. Cash-only replay and live broker monitoring do not support these exposures."):
                 customResearchExposure?
