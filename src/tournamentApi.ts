@@ -4,6 +4,7 @@ import type {PortfolioSeason} from "./portfolioApi";
 export interface TournamentVersion {
   id:string;name:string;mode:"portfolio_model";source_job_id:string;source_rank:number;
   symbols:string[];model:string;max_position_pct:number;delay_sessions:1|2;
+  research_only?:boolean;
   rebalance_sessions:number;restricted_research:boolean;short_proxy_research:boolean;
   code:string;created_at:string;
 }
@@ -14,6 +15,12 @@ export const modelDescription=(model:string):string=>({
   trend_filter:"Hold assets above their 126-session average and size them by inverse volatility.",
   relative_momentum:"Select the strongest positive blend of 64- and 127-session momentum, sized by inverse volatility.",
   volatility_target:"Use inverse-volatility weights and reduce total exposure toward a 12% annual risk target.",
+  defensive_rotation:"Allocate across growth assets when their trends are healthy, then rotate toward actual bonds and commodities during weaker equity trends.",
+  diversified_risk_parity:"Build inverse-volatility long positions across equities and defensive asset classes with tighter class-level concentration limits.",
+  equity_hedge:"Combine equity exposure with actual bond and commodity holdings to reduce dependence on one asset class.",
+  leveraged_trend:"Research-only: borrow cash to target up to 135% gross long equity exposure in positive-trend stocks, with financing cost and maintenance-risk modeling.",
+  long_short_momentum:"Research-only: hold positive exposure to the strongest equity momentum assets and short the weakest, including borrow fees.",
+  market_neutral:"Research-only: target approximately balanced long and short equity exposures based on momentum, subject to position and financing limits.",
 } as Record<string,string>)[model]??"Unsupported allocation model.";
 
 export const importTournamentRank=(jobId:string,rank:number)=>
