@@ -32,6 +32,58 @@ not dividend-adjusted total-return prices. Continuous futures may require
 roll adjustment before robust multi-year studies. Real-time executable
 quotes are not implied.
 
+## Ongoing collection and delivery limits
+
+The Trading Simulator does not guarantee complete live delivery for all
+instruments. The local collector is opt-in by symbol and candle interval.
+start-local.ps1 starts the local worker, which runs every 30 seconds
+while the PC and worker remain on. It fetches only configured active
+subscriptions, up to 10 due feeds each polling cycle.
+
+Minimum revisit intervals are 1m bars every 60 seconds, 5m bars every
+120 seconds, 15m bars every 300 seconds, 1h every 600 seconds and
+daily every 3600 seconds. Provider latency, trading sessions and rate
+limits can make the actual interval longer. These are polled provider
+candles, not licensed exchange ticks. The download-all historical
+command does not automatically activate ongoing subscriptions.
+
+To check the actual collector from PowerShell:
+
+~~~powershell
+cd E:\Trading-Simulator
+git pull
+.\stop-local.ps1
+.\start-local.ps1 -NoBrowser
+Invoke-RestMethod http://127.0.0.1:8000/api/market-data/health |
+    ConvertTo-Json -Depth 5
+~~~
+
+The new collector heartbeat in the health endpoint shows recently
+confirmed polling or idle state, the last heartbeat time and its age.
+The collector state can instead be stale or unverified. A configured
+active subscription and a prior successful sync alone are never proof
+that the worker is currently running. Market Desk displays this
+separately from subscriptions, last successful sync, and source failures.
+The delivery_guaranteed property is always false.
+
+When the provider or PC is unavailable, a later incremental fetch
+starts at the last saved bar with a three-bar overlap. Archives dedupe
+same timestamps, so successful retries do not insert duplicate candles.
+Provider errors cause a longer retry cooldown (3x the interval).
+Recent trailing gaps can be recovered if a source still retains
+the corresponding bars. Historical missing internal periods, outages
+past retention, incomplete historical sessions, and permanent provider
+omissions are NOT guaranteed recoverable. The coverage API reports
+potential gaps and missing timestamps without fabricating bars.
+Market holidays or halts require calendar-aware review.
+
+For a contractual delivery guarantee, use a licensed exchange feed with
+durable message replay, heartbeats, gap detection, independent audit,
+monitoring, alerts, and a redundant always-on collector. Coinbase has
+public WebSocket trade channels, but the simulator does not currently
+consume them. Yahoo Finance via yfinance is unofficial and has limited
+intraday coverage. The simulator runs this locally, not on Vercel.
+
 ## Download everything, without duplicate bars
 
 To download the maximum available real DAILY history for every built-in
