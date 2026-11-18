@@ -28,3 +28,7 @@
 .ur-results summary{cursor:pointer;font-weight:700}.ur-results details p{overflow-wrap:anywhere}
 @media(max-width:900px){.ur-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.ur-columns{grid-template-columns:1fr}}
 @media(max-width:550px){.ur-shell{padding:12px 10px 40px}.ur-steps{grid-template-columns:1fr}.ur-steps article{padding:10px}.ur-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Keep the experimental dashboard within a 320px handset. Wide ranking and
+   scenario tables retain their own horizontal scroll containers. */
+@media(max-width:550px){.ur-shell{width:100%;max-width:100vw;min-width:0;overflow-x:clip}.ur-header,.ur-steps,.ur-columns,.ur-results{min-width:0;max-width:100%}.ur-header h1,.ur-header p{overflow-wrap:anywhere}}
