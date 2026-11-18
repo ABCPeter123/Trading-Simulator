@@ -71,7 +71,7 @@ def normalize_row(row,index):
     return {"row":index,"symbol":symbol.lower(),"side":side,
             "quantity":_positive(row.get("quantity"),"quantity"),
             "price":_positive(row.get("price"),"price"),
-            "fee":_positive(row.get("fee",0),"fee",True),
+            "fee":_positive(row["fee"],"fee",True) if row.get("fee") is not None else None,
             "currency":"USD","trade_date":trade_day.isoformat(),
             "executed_at":instant.isoformat() if instant else None,
             "broker_ref":broker_ref.strip() if broker_ref else None}
@@ -116,7 +116,8 @@ def _differences(stmt,fill):
         differences.append("quantity")
     if not _close(stmt["price"],fill["price"],relative=.00001,absolute=.01):
         differences.append("price")
-    if not _close(stmt["fee"],fill["fee"],relative=.00001,absolute=.01):
+    if stmt["fee"] is not None and not _close(
+            stmt["fee"],fill["fee"],relative=.00001,absolute=.01):
         differences.append("fee")
     return differences
 
