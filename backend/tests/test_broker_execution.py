@@ -56,7 +56,7 @@ def test_broker_pricing_profiles_and_cash_short_constraints():
     assert broker.fx_commission_usd(ib,10000,1.4)==2
     with pytest.raises(ValueError,match="Short shares"):
         broker.check_model(cash,"long_short_momentum")
-    with pytest.raises(ValueError,match="short"):
+    with pytest.raises(ValueError,match="Short"):
         broker.check_model(margin,"long_short_momentum")
     with pytest.raises(ValueError,match="unverified"):
         broker.check_model(ib,"market_neutral")
