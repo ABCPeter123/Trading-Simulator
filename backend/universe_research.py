@@ -361,8 +361,23 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         except (HTTPException,ValueError,ArithmeticError,TypeError,KeyError) as exc:
             discarded.append({"basket":label,"reason":type(exc).__name__})
     ranked.sort(key=lambda x:(-x["score"],x["basket_type"],x["model"]))
+    # Expose the best qualifying representative of each model family before
+    # filling additional spots by validation score. This is a *diversity-
+    # constrained shortlist*, never mislabel it as global top-ten by score.
+    # Results remain sorted by the same validation score afterward.
+    chosen=[];chosen_models=set();chosen_keys=set()
+    for row in ranked:
+        if row["model"] not in chosen_models and len(chosen)<10:
+            chosen.append(row);chosen_models.add(row["model"])
+            chosen_keys.add((row["model"],row["basket_type"],tuple(row["symbols"])))
+    for row in ranked:
+        key=(row["model"],row["basket_type"],tuple(row["symbols"]))
+        if len(chosen)>=10:break
+        if key not in chosen_keys:
+            chosen.append(row);chosen_keys.add(key)
+    chosen.sort(key=lambda x:(-x["score"],x["basket_type"],x["model"]))
     leaders=[]
-    for i,item in enumerate(ranked[:10]):
+    for i,item in enumerate(chosen):
         broker={**COST_ASSUMPTIONS,"delay_sessions":params["delay_sessions"]}
         slow={**broker,"delay_sessions":2,"slippage_bps":20}
         researcher=adv.segment if item["model"] in adv.MODELS else pr._segment
@@ -410,7 +425,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "method":"Maximum available provider or locally recorded daily history; overlap depends on each basket"},
         "qualified_candidates":len(ranked),"rejected_baskets":discarded,
         "top10":leaders,
-        "selection_method":"Training and validation only. Rank by validation return minus drawdown, turnover, annual volatility and weak historical regimes. Held-out tests and hypothetical scenarios never determine ranking.",
+        "selection_method":"Validation-only family-diversified shortlist: include best qualifying representative of distinct models, then fill remaining places by score. Sort selected finalists by validation return minus drawdown, turnover, volatility and weak historical regimes. This is not the unrestricted global top ten. Held-out tests and future scenarios never determine selection.",
+        "shortlist_is_global_top_ten":False,
         "execution_assumptions":{**COST_ASSUMPTIONS,"configured_delay_sessions":params["delay_sessions"],
                                  "commission_note":"USD $0 listed-stock/ETF commission. FX 1.5% assumed on any cross-currency trade; this is conservative and account-dependent."},
         "test_used_for_selection":False,
