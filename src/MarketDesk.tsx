@@ -498,8 +498,8 @@ export default function MarketDesk() {
                         ? "Provider data archived" : trackedHealth.bootstrap.status==="retry_pending"
                         ? "Retry queued" : "Backfill queued")
                       : t("Backfill status pending")}</span>
-                    {trackedHealth?.bootstrap?.verified_bars>0&&
-                      <span>{trackedHealth.bootstrap.verified_bars} {t("verified provider bars")}</span>}
+                    {(trackedHealth?.bootstrap?.verified_bars??0)>0&&
+                      <span>{trackedHealth?.bootstrap?.verified_bars} {t("verified provider bars")}</span>}
                     {trackedHealth?.bootstrap?.error_code&&
                       <span role="alert">{t("Backfill error")}: {trackedHealth.bootstrap.error_code}</span>}
                   </div>}
@@ -511,7 +511,7 @@ export default function MarketDesk() {
                         ? "Retry queued" : "Waiting for bootstrap")
                       : t("Reconciliation not scheduled")}</span>
                     {trackedHealth?.reconciliation?.due_at&&
-                      <span>{t("Next verification")}: {dt(trackedHealth.reconciliation.due_at)}</span>}
+                      <span>{t("Next verification")}: {dt(trackedHealth?.reconciliation?.due_at ?? "")}</span>}
                     {trackedHealth?.reconciliation?.error_code&&
                       <span role="alert">{t("Reconciliation error")}: {trackedHealth.reconciliation.error_code}</span>}
                   </div>}
