@@ -106,6 +106,8 @@ Add these to your existing Git-ignored local .env:
 ~~~dotenv
 TRADING_SIM_LLAMA_PROFILE=speed
 TRADING_SIM_LLAMA_GPU_LAYERS=auto
+TRADING_SIM_LLAMA_DEVICE=auto
+TRADING_SIM_LLAMA_FIT_TARGET=768
 TRADING_SIM_AI_MAX_OUTPUT_TOKENS=4096
 # Optional manual overrides:
 # TRADING_SIM_LLAMA_THREADS=8
@@ -136,6 +138,30 @@ git pull
 The launcher reuses any existing listener on port 8081, so it cannot
 change settings of a llama.cpp process that was started manually. Close
 that manual process before starting the tuned router.
+
+On a 16 GB Windows laptop with both Intel UHD 630 and a 4 GB GTX 1050 Ti,
+`llama-server --list-devices` can report `Vulkan0` (Intel shared RAM) and
+`Vulkan1` (NVIDIA). The launcher now detects and **explicitly selects the
+dedicated NVIDIA Vulkan adapter**, sets `--split-mode none`, keeps
+`--gpu-layers auto`, and reserves 768 MiB VRAM through `--fit-target`.
+With a model larger than available VRAM, the remainder stays in CPU-accessible
+memory. This is a starting point, not a guaranteed improvement: old mobile
+GPUs may run slower than a well-tuned CPU.
+
+A synthetic benchmark measures actual token generation throughput without
+loading any private trading data:
+
+~~~powershell
+.\scripts\benchmark-local-ai.ps1 -Model Qwen3.5-9B-Q4_K_M
+.\scripts\benchmark-local-ai.ps1 -Model TwIL-8B-Q4_K_M-balanced
+~~~
+
+For a fair CPU comparison, set `TRADING_SIM_LLAMA_DEVICE=cpu` in your
+Git-ignored `.env`, fully restart only the llama.cpp router, and repeat.
+Restore `TRADING_SIM_LLAMA_DEVICE=auto` afterwards. The laptop may use its
+GPU for the desktop, so the 768 MiB margin protects headroom; lower margins
+can increase out-of-memory risk. The runner never combines Intel shared VRAM
+with your dedicated VRAM by default.
 
 Check actual GPU hardware and llama.cpp backend support:
 
