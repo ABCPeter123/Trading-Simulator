@@ -12,6 +12,10 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Top 10 historical research candidates": "历史研究前十名策略",
+  "Ranked using validation history, not future information. Historical candidates are not live trade recommendations.": "仅按历史验证数据排名，不使用未来信息。历史候选策略并非实时交易建议。",
+  "No completed universe scan yet. Run Strategy Tournament in Research Lab.": "尚未完成全市场扫描。请到研究实验室运行策略竞赛。",
+  "Open Strategy Tournament": "打开策略竞赛",
   "STARTER STRATEGIES, EDITABLE": "可编辑的入门策略",
   "Templates are untested starting points. Selecting one only edits the draft. Use Validate and Save to run it in your historical replay.": "模板是未验证的起点。选择模板只会修改草稿，验证并保存后才能在历史回放中运行。",
   "Selecting a template only changes the draft. No trades or deployment occur until you deliberately save and run the replay.": "选择模板只会修改草稿。除非主动保存并运行回放，否则不会进行交易或部署。",
