@@ -192,6 +192,67 @@ is far slower than physical RAM and usually reduces tokens/second.
 Do not force KV cache to disk as a speed optimization. No Windows
 virtual-memory settings are changed automatically.
 
+## Faster optional Qwen3.5-4B on 16 GB Windows
+
+The full 8B and 9B reasoning models can generate only a few tokens per
+second on older CPUs and partially offloaded 4 GB GPUs. At 3 tokens/s,
+a 1000-token answer requires 5.6 minutes of decoding alone.
+Reducing max output to 512 or 768 limits waiting but does **not**
+increase generation throughput. Short budgets can truncate long JSON
+or multi-rule strategy proposals; raise them when a complete proposal
+is needed.
+
+For shorter everyday explanations, you may optionally install
+Qwen3.5-4B-Q4_K_M.gguf (approximately 2.74 GB), publicly hosted in
+the unsloth/Qwen3.5-4B-GGUF Hugging Face repository. This is a distinct
+local model, not a quantization of the 9B model. It retains the 9B and
+TwIL options and changes no saved strategies or live trade data.
+
+The install helper downloads only into the ignored models/private/
+directory, preserves unrelated private .env settings and adds the model
+to the backend allowlist. Passing -SetAsDefault also changes the
+selected default and sets a 768-token output budget.
+
+~~~powershell
+cd E:\Trading-Simulator
+git pull
+.\scripts\install-fast-ai-model.ps1 -SetAsDefault
+.\stop-local.ps1
+.\start-local.ps1 -NoBrowser
+.\scripts\benchmark-local-ai.ps1 -Model Qwen3.5-4B-Q4_K_M -MaxTokens 64
+~~~
+
+The helper requires the publicly available Hugging Face CLI. If hf is
+not installed:
+
+~~~powershell
+python -m pip install -U huggingface_hub
+~~~
+
+Direct download alternative:
+
+~~~powershell
+hf download unsloth/Qwen3.5-4B-GGUF Qwen3.5-4B-Q4_K_M.gguf --local-dir E:\Trading-Simulator\models\private
+~~~
+
+If downloading manually, also append Qwen3.5-4B-Q4_K_M.gguf to your
+TRADING_SIM_AI_MODELS setting in the private .env, then restart the backend
+and router. Model installation is voluntary, never triggered by CI or
+the local launcher. It needs about 3 GB of additional SSD space.
+
+The 4B model receives a shorter read-only research prompt with all
+summary metrics, symbols, risk, holdings and strategy syntax preserved,
+but fewer observation samples and historical fills. Detailed analysis
+remains available with the 8B and 9B models. The smaller model
+explicitly disables optional reasoning tokens in its chat template
+and still passes any generated strategy through the existing DSL
+validator before showing the proposal. This is a speed-quality
+trade-off; benchmark actual throughput before assuming an improvement.
+
+Older CPU or low VRAM systems may benefit from fewer CPU threads or
+switching between NVIDIA Vulkan and CPU. The SSD speeds cold weight
+loading but cannot substitute for RAM or GPU memory during inference.
+
 ## Legacy: troubleshooting slow or timed-out Ollama responses
 
 The original local Ollama integration had a 45-second response timeout. It
