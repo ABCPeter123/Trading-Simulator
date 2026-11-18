@@ -12,6 +12,11 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Observed history": "实际历史数据",
+  "First archived": "最早归档",
+  "bars": "根K线",
+  "to": "至",
+
   "Generating answer": "正在生成回答",
   "Prompt processing": "提示词处理",
   "Generation": "生成",
