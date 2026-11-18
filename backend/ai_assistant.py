@@ -682,7 +682,8 @@ def _visible_answer_preview(raw: str) -> str:
 
 
 def _sse(event: str, payload: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
+    # ASCII-safe JSON escapes partial Unicode surrogate pairs as needed.
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=True, separators=(',', ':'))}\n\n"
 
 
 async def stream_advice(mode: str, run_id: str, question: str,
@@ -777,6 +778,8 @@ async def stream_advice(mode: str, run_id: str, question: str,
                             "first_output_ms": first_output_ms,
                         })
         answer, proposed = parse_answer(raw)
+        if not answer.strip():
+            raise HTTPException(502, detail="Local model returned an empty answer.")
         strategy, warning = validate_proposal(proposed, mode, context["symbols"])
         yield _sse("done", {
             "answer": answer, "proposed_strategy": strategy,
