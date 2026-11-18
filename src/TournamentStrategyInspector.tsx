@@ -47,7 +47,7 @@ const modelRules:Record<string, string[]> = {
 };
 
 const sourceLink="https://github.com/ABCPeter123/Trading-Simulator/blob/main/backend/portfolio_research.py#L186-L235";
-const groupCaps="equity 70%, bonds 55%, commodities 35%, real estate 20%, crypto 10%";
+const groupCaps:[string,number][]=[["Equities",70],["Bonds",55],["Commodities",35],["Real estate",20],["Crypto",10]];
 
 function algorithmFor(spec:TournamentModelSpec):string {
   const modelLines:Record<string,string[]> = {
@@ -144,7 +144,7 @@ export default function TournamentStrategyInspector({
     <ol className="tsi-rules">
       {rules.map((line,i)=><li key={i}>{t(line)}</li>)}
       <li>{t("Hold at most 95% in aggregate before asset and category caps; unused capital remains in cash.")}</li>
-      <li>{t("Apply category exposure caps")}: {groupCaps}.</li>
+      <li>{t("Apply category exposure caps")}: {groupCaps.map(([name,cap])=>`${t(name)} ${cap}%`).join(", ")}.</li>
       <li>{t("Rebalance at the next eligible common-session open using completed historical data, selling before buying. No automatic brokerage execution.")}</li>
     </ol>
     {context==="simulation"&&<p className="tsi-note">{t("Historical replay uses the same target-weight function as tournament research, but its fill and fee approximation is different. Results may not match the tournament backtest exactly.")}</p>}
