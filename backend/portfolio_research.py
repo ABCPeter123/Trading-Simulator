@@ -28,7 +28,7 @@ DB_PATH = Path(os.environ.get(
     Path(__file__).resolve().parents[1] / "data" / "portfolio_research.sqlite3",
 ))
 LOCK = RLock()
-MAX_SYMBOLS = 10
+MAX_SYMBOLS = 16
 STARTING_CAPITAL = 100000.0
 REBALANCE_SESSIONS = 21
 WARMUP = 180
