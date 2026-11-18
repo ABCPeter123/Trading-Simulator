@@ -59,11 +59,12 @@ def candidates(spec, width="focused"):
     Include the initial model first and search other compatible model families.
     Nested variant ordering is fixed, so a repeat study has identical trials.
     """
+    is_blend=spec["model"]=="blended_portfolio"
     if spec["model"] in adv.RESEARCH_ONLY:
         models=[spec["model"], *[m for m in sorted(adv.RESEARCH_ONLY) if m!=spec["model"]]]
     else:
         all_long=[*pr.MODELS, *[m for m in adv.MODELS if m not in adv.RESEARCH_ONLY]]
-        models=[spec["model"], *[m for m in all_long if m!=spec["model"]]]
+        models=all_long if is_blend else [spec["model"], *[m for m in all_long if m!=spec["model"]]]
     cap=float(spec["max_position_pct"])
     caps=list(dict.fromkeys((cap,min(50.,max(10.,cap+10.)))))
     base_target=float(spec.get("target_investment_pct",95.))
@@ -88,6 +89,21 @@ def candidates(spec, width="focused"):
         (("relative_momentum",55),("diversified_risk_parity",45)),
     ) if spec["model"] not in adv.RESEARCH_ONLY else ()
     seen=set()
+    if is_blend:
+        # First try the exact, immutable multi-sleeve model that the owner
+        # selected from the saved report, never replace it with equal weight.
+        original={"model":"blended_portfolio",
+                  "sleeves":blended.validate_sleeves(spec["sleeves"]),
+                  "max_position_pct":cap,
+                  "delay_sessions":spec["delay_sessions"],
+                  "target_investment_pct":base_target,
+                  "equity_class_cap_pct":base_equity,
+                  "redistribute_excess":base_redistribute}
+        key=("blended_portfolio",
+             tuple((x["model"],x["weight_pct"]) for x in original["sleeves"]),
+             variants[0])
+        seen.add(key)
+        yield original
     for variant_index,variant in enumerate(variants):
         for model in models:
             key=(model,variant) if model in pr.MODELS else (model,variant[0])
