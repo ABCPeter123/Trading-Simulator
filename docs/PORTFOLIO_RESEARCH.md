@@ -280,3 +280,40 @@ bias, absence of delisted stocks, historical symbol changes, approximate
 spread/slippage assumptions, overfitting from repeated human experiments,
 or unsupported intraday liquidity and after-hours fills. The daily candle
 model must not be interpreted as verifying executable orders within 12 hours.
+
+
+### Walk-forward attribution, baseline and parameter diagnostics
+
+New private walk-forward studies report diagnostics alongside each unseen fold
+and the final historical audit. Each independently reset fold now compares
+the chosen model with two explicit references:
+
+- **Same-basket equal weight**: a separately executed long-only portfolio
+  using the exact observed symbols and sessions, a 95% gross target, 70%
+  equity exposure cap, position cap from the chosen model, the same funding
+  currency, commission, slippage, FX assumptions and opening-fill delay.
+  This is a within-basket baseline, **not SPY** or a broad-market index.
+- **Fixed annual cash-rate hurdle**: compounds the researcher's assumed
+  annual risk-free rate across the identical sessions. This is a hypothetical
+  numeric threshold, not a historical investable cash-return series or
+  interest credited to the strategy's cash.
+
+The final audit also shows gross and net invested exposure, average cash at
+rebalance snapshots, class-level gross weights at those same snapshots,
+gross buy/sell turnover divided by initial virtual capital, trading count,
+and explicit fees plus margin/borrow costs. **Rebalance snapshots are not
+daily averages**; the daily average gross exposure is separately reported.
+
+For every historical training selection, the engine records the best
+qualified candidates and aggregate rejection reasons. The table and all
+its score components are computed only on older training prices. A small
+five-percentage-point position-cap neighborhood is tested on the **pre-audit
+history** after the final model is selected, with no authority to change
+the selected model or its audit outcome.
+
+These comparisons and sensitivity results are **diagnostic only**. Once
+someone inspects a sealed audit, changing the model because of that audit
+would contaminate the claim of independent verification. Use genuinely new
+forward-paper data for assessing subsequent revisions. This milestone
+does not include point-in-time-delisted instruments, independent market
+benchmarks outside the selected basket, or a live broker execution engine.

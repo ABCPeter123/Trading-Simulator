@@ -95,6 +95,24 @@ def test_expanding_walkforward_seals_final_audit():
     assert normal["final_audit"]["consistency"]["rolling_window_sessions"]==252
     assert "consistency" in normal["walk_forward"]
     assert normal["final_audit"]["return_pct"]!=revised["final_audit"]["return_pct"]
+    # Diagnostic-only historical comparisons MUST remain independent of the
+    # later audit's market path and must never change its frozen selection.
+    for fold in normal["walk_forward"]["folds"]:
+        comparison=fold["unseen_benchmark_comparison"]
+        assert len(comparison["benchmarks"])==2
+        assert comparison["benchmarks"][0]["id"]=="same_basket_equal_weight"
+        assert comparison["benchmarks"][1]["id"]=="constant_cash_hurdle"
+        assert fold["unseen_exposure_and_costs"]["trade_count"]>=0
+        assert fold["training_candidate_diagnostics"]["attempted_count"]==len(
+            list(optimizer.candidates(spec(),"focused")))
+    assert normal["model_search"]["pre_audit_candidate_leaderboard"]==revised["model_search"]["pre_audit_candidate_leaderboard"]
+    assert normal["model_search"]["pre_audit_parameter_stability"]==revised["model_search"]["pre_audit_parameter_stability"]
+    assert normal["model_search"]["pre_audit_parameter_stability"]["pre_audit_only"]
+    assert normal["final_audit"]["benchmark_comparison"]["reproducible_comparison"] is True
+    assert len(normal["final_audit"]["benchmark_comparison"]["benchmarks"])==2
+    assert normal["final_audit"]["exposure_and_costs"]["trade_count"]==normal["final_audit"]["trades"]
+    assert normal["final_audit"]["exposure_and_costs"]["turnover_pct_of_initial_capital"]>=0
+    assert normal["final_audit"]["benchmark_comparison"]["benchmarks"][0]["return_pct"]!=revised["final_audit"]["benchmark_comparison"]["benchmarks"][0]["return_pct"]
     assert normal["no_real_orders"] is True
     assert normal["walk_forward"]["multiplicity_approximation"]["assumed_trials"]==normal["model_search"]["candidate_count"]
     diagnostic=normal["model_search"]["pre_audit_selection_diagnostics"]

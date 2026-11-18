@@ -145,6 +145,47 @@ export interface WalkForwardSelection {
   target_investment_pct?:number;equity_class_cap_pct?:number;
   redistribute_excess?:boolean;
 }
+export interface WalkForwardBenchmark {
+  id:"same_basket_equal_weight"|"constant_cash_hurdle";
+  name:string;return_pct:number;cagr_pct:number|null;excess_sharpe:number|null;
+  drawdown_pct:number;volatility_pct:number|null;
+  excess_return_vs_selected_pct_points:number;
+}
+export interface WalkForwardBenchmarkComparison {
+  benchmarks:WalkForwardBenchmark[];selected_return_pct:number;
+  reproducible_comparison:boolean;limitations:string[];
+}
+export interface WalkForwardExposure {
+  starting_capital_usd:number;ending_equity_usd:number|null;
+  average_gross_invested_pct:number|null;average_net_exposure_pct:number|null;
+  average_rebalance_cash_pct:number|null;final_cash_pct:number|null;
+  average_category_gross_pct:Record<string,number>;
+  average_largest_position_share_of_gross_pct:number|null;
+  position_snapshots:number;snapshot_definition:string;
+  turnover_pct_of_initial_capital:number|null;
+  explicit_fees_and_financing_usd:number|null;
+  transaction_fees_usd:number|null;margin_interest_usd:number|null;
+  short_borrow_cost_usd:number|null;trade_count:number;
+  turnover_interpretation:string;
+}
+export interface WalkForwardCandidates {
+  eligible_count:number;attempted_count:number;rejected_count:number;
+  rejection_reasons:Record<string,number>;
+  best_by_training_score:{
+    rank:number;config:WalkForwardSelection;training_score:number;
+    training_cagr_pct:number|null;training_excess_sharpe:number|null;
+    training_drawdown_pct:number;training_turnover_pct:number|null;
+    training_average_invested_pct:number;score_components:Record<string,number>;
+  }[];
+  basis:string;
+}
+export interface WalkForwardStability {
+  cap_perturbation_pct_points:number;pre_audit_only:boolean;
+  variants:{max_position_pct:number;selected_setting:boolean;cagr_pct?:number|null;
+    excess_sharpe?:number|null;drawdown_pct?:number;turnover_pct?:number|null;
+    error?:string}[];
+  cagr_range_pct_points:number|null;interpretation:string;
+}
 export interface WalkForwardFold {
   fold:number;training_end:string;out_of_sample_start:string;out_of_sample_end:string;
   training_sessions:number;out_of_sample_sessions:number;trials_evaluated:number;
@@ -153,6 +194,9 @@ export interface WalkForwardFold {
   out_of_sample_return_pct:number;out_of_sample_drawdown_pct:number;
   trades:number;fees:number;
   selection_score_breakdown?:{total:number;components:Record<string,number>};
+  training_candidate_diagnostics?:WalkForwardCandidates;
+  unseen_benchmark_comparison?:WalkForwardBenchmarkComparison;
+  unseen_exposure_and_costs?:WalkForwardExposure;
 }
 export interface WalkForwardConsistency {
   rolling_window_sessions:number;rolling_windows:number;
@@ -173,6 +217,8 @@ export interface WalkForwardResult {
   execution_assumptions?:{base_currency:string;commission_usd:number;fx_conversion_bps:number;slippage_bps:number};
   model_search?:{width:string;candidate_count:number;total_train_evaluations:number;
     candidate_scope:string;
+    pre_audit_candidate_leaderboard?:WalkForwardCandidates;
+    pre_audit_parameter_stability?:WalkForwardStability;
     pre_audit_selection_diagnostics?:{
       basis:string;valid_candidate_curves:number;attempted_candidates:number;
       deflated_sharpe:{status:string;probability_pct:number|null;
@@ -193,6 +239,8 @@ export interface WalkForwardResult {
   final_audit?:{
     selected:WalkForwardSelection;selection_score:number;trials_evaluated:number;eligible_trials:number;
     selection_score_breakdown?:{total:number;components:Record<string,number>};
+    benchmark_comparison?:WalkForwardBenchmarkComparison;
+    exposure_and_costs?:WalkForwardExposure;
     start_date:string;end_date:string;sessions:number;objectives:WalkForwardQuality;
     consistency?:WalkForwardConsistency;
     prior_selected_comparison?:{

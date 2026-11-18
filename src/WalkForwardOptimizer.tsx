@@ -7,6 +7,8 @@ import PaperForwardMonitor from "./PaperForwardMonitor";
 
 const pct=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?"N/A":value.toFixed(2)+"%";
 const dec=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?"N/A":value.toFixed(2);
+const money=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?"N/A":
+  new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(value);
 const name=(value:string)=>value.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
 
 function Plot({data,description}:{data:{time:number;value:number}[];description:string}){
@@ -262,6 +264,28 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           <td>{dec(f.out_of_sample_objectives.excess_sharpe)}</td>
           <td>{pct(f.out_of_sample_drawdown_pct)}</td>
         </tr>)}</tbody></table></div>
+        <details className="wfo-limit">
+          <summary>{l("Fold-by-fold benchmarks, execution and exposure",
+            "各验证期基准、执行成本及敞口")}</summary>
+          <p>{l("Each benchmark uses the identical basket and unseen fold dates, with independent capital resets. The cash comparison is a fixed-rate hypothetical hurdle, not actual historical cash returns.",
+            "每个基准使用完全相同的标的和未见验证区间，各区间独立重置本金。现金对照是固定利率假设，不代表真实历史现金收益。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Fold","验证期")}</th>
+            <th>{l("Selected return","所选策略收益")}</th>
+            <th>{l("Same-basket equal weight","相同资产等权")}</th>
+            <th>{l("Fixed-rate cash hurdle","固定现金利率门槛")}</th>
+            <th>{l("Gross invested","总投资敞口")}</th>
+            <th>{l("Turnover","交易换手")}</th>
+            <th>{l("Fees and financing","费用及融资")}</th>
+          </tr></thead><tbody>{study.folds.map(f=><tr key={f.fold}>
+            <td>{f.fold}</td><td>{pct(f.out_of_sample_return_pct)}</td>
+            <td>{pct(f.unseen_benchmark_comparison?.benchmarks.find(b=>b.id==="same_basket_equal_weight")?.return_pct)}</td>
+            <td>{pct(f.unseen_benchmark_comparison?.benchmarks.find(b=>b.id==="constant_cash_hurdle")?.return_pct)}</td>
+            <td>{pct(f.unseen_exposure_and_costs?.average_gross_invested_pct)}</td>
+            <td>{pct(f.unseen_exposure_and_costs?.turnover_pct_of_initial_capital)}</td>
+            <td>{money(f.unseen_exposure_and_costs?.explicit_fees_and_financing_usd)}</td>
+          </tr>)}</tbody></table></div>
+        </details>
         <h5>{l("Stitched normalized validation index","拼接后的标准化验证指数")}</h5>
         <Plot data={study.curve} description={l("Compound index of separate walk-forward fold returns",
           "分段滚动验证收益复合指数")}/>
@@ -285,6 +309,50 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
             <strong>{audit.observed_targets_met?l("Met historically","历史观察达标"):
               l("Not met","未达标")}</strong></div>
         </div>
+        {audit.benchmark_comparison&&<>
+          <h5>{l("Same-period baseline comparison","同区间基准比较")}</h5>
+          <p>{l("The same-basket equal-weight baseline is a separately simulated long-only portfolio with identical instruments and session dates. The cash hurdle compounds your assumed constant annual rate. Neither benchmark participates in model selection.",
+            "相同资产等权基准在同一标的和日期上独立模拟多头组合。现金门槛按假定的固定年利率复利计算。两者均不参与模型选择。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Portfolio / reference","组合或参考")}</th>
+            <th>{l("Total return","总收益")}</th><th>{l("CAGR","年复合增长")}</th>
+            <th>{l("Maximum drawdown","最大回撤")}</th>
+            <th>{l("Excess Sharpe","超额夏普")}</th>
+          </tr></thead><tbody>
+            <tr><td>{l("Selected portfolio","所选组合")}</td>
+              <td>{pct(audit.return_pct)}</td><td>{pct(audit.objectives.cagr_pct)}</td>
+              <td>{pct(audit.drawdown_pct)}</td><td>{dec(audit.objectives.excess_sharpe)}</td></tr>
+            {audit.benchmark_comparison.benchmarks.map(b=><tr key={b.id}>
+              <td>{b.id==="same_basket_equal_weight"?l("Same-basket equal weight","同资产等权"):l("Hypothetical fixed-rate cash","假设固定利率现金")}</td>
+              <td>{pct(b.return_pct)}</td><td>{pct(b.cagr_pct)}</td>
+              <td>{pct(b.drawdown_pct)}</td><td>{dec(b.excess_sharpe)}</td>
+            </tr>)}
+          </tbody></table></div>
+        </>}
+        {audit.exposure_and_costs&&<>
+          <h5>{l("Why did the portfolio earn this return?","组合收益表现归因")}</h5>
+          <p>{l("Exposure is calculated from the simulated ledger. Gross investment averages daily holdings; cash and asset classes are measured at rebalance snapshots. Turnover is total buy and sell notional divided by starting capital, not annualized.",
+            "敞口由模拟交易账本计算。总投资为每日持仓平均值；现金及资产类别按再平衡时点测算。换手率为总买卖金额除以初始本金，不是年化数值。")}</p>
+          <div className="wfo-headline">
+            <div><small>{l("Average gross investment","平均总投资敞口")}</small>
+              <strong>{pct(audit.exposure_and_costs.average_gross_invested_pct)}</strong></div>
+            <div><small>{l("Average net investment","平均净投资敞口")}</small>
+              <strong>{pct(audit.exposure_and_costs.average_net_exposure_pct)}</strong></div>
+            <div><small>{l("Cash at rebalances","再平衡时点平均现金")}</small>
+              <strong>{pct(audit.exposure_and_costs.average_rebalance_cash_pct)}</strong></div>
+            <div><small>{l("Turnover / starting capital","换手额 / 初始本金")}</small>
+              <strong>{pct(audit.exposure_and_costs.turnover_pct_of_initial_capital)}</strong></div>
+            <div><small>{l("Explicit costs and financing","显性费用及融资")}</small>
+              <strong>{money(audit.exposure_and_costs.explicit_fees_and_financing_usd)}</strong></div>
+            <div><small>{l("Trades executed","模拟成交笔数")}</small>
+              <strong>{audit.exposure_and_costs.trade_count}</strong></div>
+          </div>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Asset class","资产类别")}</th>
+            <th>{l("Average gross weight at rebalances","再平衡时平均总权重")}</th>
+          </tr></thead><tbody>{Object.entries(audit.exposure_and_costs.average_category_gross_pct).map(([group,value])=>
+            <tr key={group}><td>{name(group)}</td><td>{pct(value)}</td></tr>)}</tbody></table></div>
+        </>}
         {audit.selection_score_breakdown&&<details className="wfo-limit">
           <summary>{l("Pre-audit selection score contributions","审计前选择评分分解")}</summary>
           <p>{l("Only pre-audit training contributes to this score. Negative components are penalties, not realized losses.",
@@ -330,6 +398,47 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
             </article>)}
           </div>
         </>}
+        {result.model_search?.pre_audit_candidate_leaderboard&&<details className="wfo-limit">
+          <summary>{l("Why did this strategy win? Training-only candidate rankings",
+            "该策略为何胜出？仅训练期候选排名")}</summary>
+          <p>{l("These results are calculated before the audit. A higher return outside these dates cannot change the selected candidate.",
+            "这些结果只使用审计前的数据。审计期更高的收益不会改变已选模型。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Rank","名次")}</th><th>{l("Training model","训练期模型")}</th>
+            <th>{l("Score","得分")}</th><th>{l("Training CAGR","训练期年增长")}</th>
+            <th>{l("Excess Sharpe","超额夏普")}</th><th>{l("Drawdown","回撤")}</th>
+            <th>{l("Turnover","换手")}</th><th>{l("Invested","投资敞口")}</th>
+          </tr></thead><tbody>{result.model_search.pre_audit_candidate_leaderboard.best_by_training_score.map(x=>
+            <tr key={x.rank}><td>{x.rank}</td>
+              <td><Selection value={x.config} locale={locale}/></td>
+              <td>{dec(x.training_score)}</td><td>{pct(x.training_cagr_pct)}</td>
+              <td>{dec(x.training_excess_sharpe)}</td><td>{pct(x.training_drawdown_pct)}</td>
+              <td>{pct(x.training_turnover_pct)}</td><td>{pct(x.training_average_invested_pct)}</td>
+            </tr>)}</tbody></table></div>
+          <p>{l("Rejected candidate count","未通过筛选的候选数量")}:{" "}
+            {result.model_search.pre_audit_candidate_leaderboard.rejected_count}.
+            {" "}{Object.entries(result.model_search.pre_audit_candidate_leaderboard.rejection_reasons)
+              .map(([reason,count])=>name(reason)+": "+count).join(" · ")}</p>
+        </details>}
+        {result.model_search?.pre_audit_parameter_stability&&<details className="wfo-limit">
+          <summary>{l("Parameter stability, pre-audit only",
+            "参数稳定性，仅审计前")}</summary>
+          <p>{l("The selected position cap is perturbed by five percentage points without changing the audited model. This is a sensitivity check, not another unseen test. Do not choose new parameters based on the final audit.",
+            "在不改变已审计模型的前提下，单项仓位上限上下调整五个百分点。此处是敏感性分析，并非新的未见测试，不能根据最终审计调整模型。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Maximum asset weight","最大单项权重")}</th>
+            <th>{l("Prior-only CAGR","审计前年复合增长")}</th>
+            <th>{l("Excess Sharpe","超额夏普")}</th>
+            <th>{l("Drawdown","回撤")}</th>
+            <th>{l("Turnover","换手")}</th>
+          </tr></thead><tbody>{result.model_search.pre_audit_parameter_stability.variants.map(x=>
+            <tr key={x.max_position_pct}><td>{pct(x.max_position_pct)} {x.selected_setting?l("(selected)","（已选择）"):""}</td>
+              <td>{pct(x.cagr_pct)}</td><td>{dec(x.excess_sharpe)}</td>
+              <td>{pct(x.drawdown_pct)}</td><td>{pct(x.turnover_pct)}</td>
+            </tr>)}</tbody></table></div>
+          <p>{l("CAGR range across valid neighbors","有效相邻参数的年增长率跨度")}:{" "}
+            {pct(result.model_search.pre_audit_parameter_stability.cagr_range_pct_points)}.</p>
+        </details>}
         <h5>{l("Pre-audit selection-bias diagnostics","审计前选择偏差诊断")}</h5>
         {preAuditDiagnostics&&(()=>{
           const diagnostics=preAuditDiagnostics;
