@@ -16,6 +16,7 @@ import StochasticResearch from "./StochasticResearch";
 import MarketDesk from "./MarketDesk";
 import StrategyLibrary from "./StrategyLibrary";
 import {PORTFOLIO_PRESETS,portfolioPresetCode} from "./strategyPresets";
+import {modelDescription} from "./tournamentApi";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
@@ -388,6 +389,7 @@ export default function PortfolioArcade({onExit,initialRunId}: {onExit:()=>void;
               {t("Maximum position weight (%)")}: {season.model_strategy.max_position_pct}% ·
               {t("Rebalance every")} {season.model_strategy.rebalance_sessions} {t("shared sessions")} ·
               {season.model_strategy.delay_sessions} {t("session execution delay")}</p>
+            <p>{t(modelDescription(season.model_strategy.model))}</p>
             <p>{t("The simulator executes model target allocations at common session opens using previously completed candles. Editing and activating a rule script replaces this model.")}</p>
           </div>}
           <div className="arc-box-head"><div><Bot size={17}/><strong>{t("Cross-asset Strategy Editor")}</strong></div><span className="arc-tag">{t("Validated strategy syntax")}</span></div>
