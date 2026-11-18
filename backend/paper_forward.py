@@ -109,12 +109,12 @@ def _portfolio(symbols, at, loader=None, *, need_fx=False):
         # Exclude even a possibly completed current-day bar. That prevents
         # turning a still-forming provider candle into a hypothetical fill.
         completed = [b for b in bars
-                     if datetime.fromtimestamp(int(b["time"]), NY).date()
+                     if datetime.fromtimestamp(int(b["time"]),timezone.utc).date()
                      < at.astimezone(NY).date()]
         if not completed:
             raise ValueError("No completed observed daily bars.")
         histories[symbol] = {**response, "bars": completed}
-    latest = [datetime.fromtimestamp(int(histories[s]["bars"][-1]["time"]), NY)
+    latest = [datetime.fromtimestamp(int(histories[s]["bars"][-1]["time"]), timezone.utc)
               .date().isoformat() for s in symbols]
     if len(set(latest)) != 1:
         raise ValueError("Portfolio instruments do not share the latest completed session.")
@@ -123,7 +123,7 @@ def _portfolio(symbols, at, loader=None, *, need_fx=False):
         raise ValueError("Latest completed portfolio session is stale.")
     # For the recent observation window require synchronized member dates,
     # rather than silently treating a missing asset bar as a non-trading day.
-    recent = [set(datetime.fromtimestamp(int(b["time"]), NY).date().isoformat()
+    recent = [set(datetime.fromtimestamp(int(b["time"]), timezone.utc).date().isoformat()
                   for b in histories[s]["bars"][-35:]) for s in symbols]
     latest_common = set.intersection(*recent)
     if any((dates - latest_common) for dates in recent):
@@ -140,7 +140,7 @@ def _portfolio(symbols, at, loader=None, *, need_fx=False):
         observations=[]
         for point in fx["bars"]:
             try:
-                date=datetime.fromtimestamp(int(point["time"]),NY).date()
+                date=datetime.fromtimestamp(int(point["time"]),timezone.utc).date()
                 value=float(point["close"])
             except (ValueError,KeyError,TypeError):
                 raise ValueError("Invalid FX price observation.") from None
