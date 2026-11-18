@@ -5,6 +5,8 @@ import PortfolioArcade from "./PortfolioArcade";
 import CloudGateway from "./CloudGateway";
 import LiveOperations from "./LiveOperations";
 import StrategyDiscovery from "./StrategyDiscovery";
+import MarketDesk from "./MarketDesk";
+import UniverseResearch from "./UniverseResearch";
 import type {OperationsSection} from "./LiveOperations";
 import type {Signal} from "./liveMachineApi";
 import {cloudFrontend, disconnectPrivateEngine, hasPrivateConnection} from "./privateConnection";
@@ -34,8 +36,10 @@ function Simulator() {
     preload();
     return ()=>{cancelled=true;if(retry)clearTimeout(retry);};
   },[]);
-  const [mode, setMode] = useState<"single" | "portfolio">("single");
-  const [section,setSection]=useState<"research"|"discovery"|OperationsSection>(import.meta.env.VITE_PUBLIC_DEMO==="1"?"research":"dashboard");
+
+  const [section,setSection]=useState<"research"|"live">(import.meta.env.VITE_PUBLIC_DEMO==="1"?"research":"research");
+  const [researchSection,setResearchSection]=useState<"single"|"portfolio"|"discovery"|"tournament">("tournament");
+  const [liveSection,setLiveSection]=useState<OperationsSection|"market">("dashboard");
   const [privateConnected,setPrivateConnected] = useState(hasPrivateConnection());
   const [preparedSignal,setPreparedSignal] = useState<Signal|null>(null);
   if(cloudFrontend && !privateConnected) return <><CloudGateway onConnected={()=>setPrivateConnected(true)}/><LanguageSwitcher/></>;
@@ -52,27 +56,41 @@ function Simulator() {
       </div>}
     {import.meta.env.VITE_PUBLIC_DEMO !== "1" && <nav className="ops-main-tabs" aria-label={t("Application sections")}>
       <span className="ops-tab-brand">{t("Trading Simulator")}</span>
-      {([["dashboard","Dashboard"],["research","Strategy Lab & Backtesting"],["discovery","Strategy Discovery"],
-        ["machine","Live Strategy Machine"],["journal","Trade Journal"],["alerts","Alerts & Health"]] as const)
+      {([["research","Research Lab"],["live","Live Engine"]] as const)
         .map(([id,label])=><button type="button" key={id} className={section===id?"active":""}
           aria-current={section===id?"page":undefined} onClick={()=>setSection(id)}>{t(label)}</button>)}
     </nav>}
     {section==="research" || import.meta.env.VITE_PUBLIC_DEMO==="1" ? <>
-      <nav className="sim-mode-tabs" aria-label={t("Simulation mode")}>
+      {import.meta.env.VITE_PUBLIC_DEMO !== "1" && <nav className="sim-mode-tabs" aria-label={t("Research Workspaces")}>
         <span className="sim-mode-title">{t("Research Workspaces")}</span>
-        <button type="button" className={mode === "single" ? "selected" : ""}
-          aria-current={mode === "single" ? "page" : undefined}
-          onClick={() => setMode("single")}>{t("Single-asset research")}</button>
-        <button type="button" className={mode === "portfolio" ? "selected" : ""}
-          aria-current={mode === "portfolio" ? "page" : undefined}
-          onClick={() => setMode("portfolio")}>{t("Portfolio Simulator")}</button>
+        {([["tournament","Strategy Tournament"],["single","Single-asset Research"],
+          ["portfolio","Portfolio Research"],["discovery","Optimization & Discovery"]] as const)
+          .map(([id,label])=><button key={id} type="button"
+            className={researchSection===id?"selected":""}
+            aria-current={researchSection===id?"page":undefined}
+            onClick={()=>setResearchSection(id)}>{t(label)}</button>)}
+      </nav>}
+      {import.meta.env.VITE_PUBLIC_DEMO==="1" || researchSection==="single" ?
+        <TradingArcade onOpenPortfolio={()=>setResearchSection("portfolio")}/>:
+       researchSection==="portfolio"?
+        <PortfolioArcade onExit={()=>setResearchSection("single")}/>:
+       researchSection==="discovery"?<StrategyDiscovery/>:
+        <UniverseResearch onOpenDiscovery={()=>setResearchSection("discovery")}/>}
+    </> : <>
+      <nav className="sim-mode-tabs" aria-label={t("Live Engine sections")}>
+        <span className="sim-mode-title">{t("Live Engine")}</span>
+        {([["dashboard","Overview & Actions"],["market","Live Data & Coverage"],
+          ["machine","Strategy Engine"],["journal","Execution History"],
+          ["alerts","Alerts & Health"]] as const)
+          .map(([id,label])=><button key={id} type="button" className={liveSection===id?"selected":""}
+            aria-current={liveSection===id?"page":undefined}
+            onClick={()=>setLiveSection(id)}>{t(label)}</button>)}
       </nav>
-      {mode === "portfolio"
-        ? <PortfolioArcade onExit={() => setMode("single")} />
-        : <TradingArcade onOpenPortfolio={() => setMode("portfolio")} />}
-    </> : section==="discovery"?<StrategyDiscovery/>:<LiveOperations section={section} initialSignal={preparedSignal}
-      onRecordSignal={signal=>{setPreparedSignal(signal);setSection("journal");}}
-      onConsumed={()=>setPreparedSignal(null)}/>}
+      {liveSection==="market"?<main className="arc-page"><MarketDesk/></main>:
+       <LiveOperations section={liveSection} initialSignal={preparedSignal}
+        onRecordSignal={signal=>{setPreparedSignal(signal);setLiveSection("journal");}}
+        onConsumed={()=>setPreparedSignal(null)}/>}
+    </>}
 
     <LanguageSwitcher/>
   </>;
