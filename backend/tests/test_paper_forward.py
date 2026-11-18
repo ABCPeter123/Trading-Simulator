@@ -87,6 +87,53 @@ def test_new_session_only_fill_and_idempotent_restart(isolated):
     assert not (isolated/"live_machine.sqlite3").exists()
 
 
+def test_frozen_forward_benchmark_is_exact_session_and_restart_safe(isolated):
+    created=paper.create("synthetic-benchmark",now=asof(510),loader=provider(510))
+    assert created["frozen_strategy_fingerprint"]
+    fingerprint=created["frozen_strategy_fingerprint"]
+    benchmark=created["forward_benchmark"]
+    assert benchmark["status"]=="available"
+    assert benchmark["benchmark_used_to_select_strategy"] is False
+    assert benchmark["return_pct"]==0.
+    baseline=paper.get_study(created["id"])
+    assert baseline["marks"][0]["benchmark_value"]==baseline["marks"][0]["value"]
+    paper.process_one(created["id"],now=asof(511),loader=provider(511))
+    observed=paper.get_study(created["id"])
+    assert observed["frozen_strategy_fingerprint"]==fingerprint
+    assert observed["forward_benchmark"]["observed_sessions"]==1
+    assert len(observed["marks"])==2
+    assert observed["marks"][-1]["benchmark_value"]>0
+    assert observed["forward_benchmark"]["value_usd"]==round(
+        observed["marks"][-1]["benchmark_value"],2)
+    prior_value=observed["marks"][-1]["benchmark_value"]
+    paper.process_one(created["id"],now=asof(511),loader=provider(511))
+    again=paper.get_study(created["id"])
+    assert again["marks"][-1]["benchmark_value"]==prior_value
+    assert len(again["marks"])==2
+
+
+def test_pre_upgrade_forward_study_does_not_backfill_fake_reference(isolated):
+    import json
+    from contextlib import closing
+    created=paper.create("synthetic-legacy",now=asof(510),loader=provider(510))
+    with closing(paper._db()) as c:
+        state=json.loads(c.execute(
+            "SELECT state FROM paper_studies WHERE id=?",
+            (created["id"],)).fetchone()[0])
+        state.pop("forward_benchmark")
+        state.pop("frozen_strategy_fingerprint")
+        c.execute("UPDATE paper_studies SET state=? WHERE id=?",
+                  (paper._dump(state),created["id"]))
+        c.execute("UPDATE paper_marks SET benchmark_value=NULL WHERE study_id=?",
+                  (created["id"],))
+    existing=paper.get_study(created["id"])
+    assert existing["forward_benchmark"]["status"]=="not_recorded"
+    assert existing["frozen_strategy_fingerprint"] is None
+    paper.process_one(created["id"],now=asof(511),loader=provider(511))
+    later=paper.get_study(created["id"])
+    assert all(mark["benchmark_value"] is None for mark in later["marks"])
+
+
 def test_two_session_delay_is_not_a_same_day_fill(isolated,monkeypatch):
     monkeypatch.setattr(paper.walkforward_queue,"get_job",lambda uid:paper_job(2))
     created=paper.create("synthetic-2",now=asof(510),loader=provider(510))
