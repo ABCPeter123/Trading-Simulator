@@ -79,6 +79,8 @@ function Curves({chosen,benchmark}:{chosen:Point[];benchmark:Point[]}){
   </div>;
 }
 
+import {validatedPercent} from "./validatedPercent";
+
 export default function PortfolioDiscovery(){
   const {t}=useI18n();
   const [symbols,setSymbols]=useState("spy, qqq, ief, gld, eem, vnq");
@@ -125,9 +127,11 @@ export default function PortfolioDiscovery(){
     const basket=symbols.split(/[,;\s]+/).map(x=>x.trim().toLowerCase()).filter(Boolean);
     try{
       if(basket.length<2||basket.length>10)throw new Error("Enter between 2 and 10 instruments.");
+      const max_drawdown_pct=validatedPercent(drawdown,"Validation drawdown limit",1,50);
+      const max_position_pct=validatedPercent(maxPosition,"Maximum single position",5,50);
       const job=await request<ResearchJob>("/live/research/portfolio/jobs",{
         method:"POST",body:JSON.stringify({symbols:basket,
-          max_drawdown_pct:Number(drawdown),max_position_pct:Number(maxPosition)}),
+          max_drawdown_pct,max_position_pct}),
       });
       setRecentJob(job.id);
       setJobs(items=>[job,...items.filter(x=>x.id!==job.id)]);
