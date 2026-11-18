@@ -104,7 +104,6 @@ export interface MarketReconciliationJob {
   failures:number;error_code:string|null;verified_bars:number;
   verified_through:number|null;status:"pending"|"retry_pending"|"provider_checked";
 }
-}
 export const getMarketCollectorHealth=()=>request<MarketCollectorHealth>("/market-data/health");
 export const getMarketSubscriptions=()=>request<MarketSubscription[]>("/market-data/subscriptions");
 export const subscribeMarket=(assetId:string,resolution:string)=>
