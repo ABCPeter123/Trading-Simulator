@@ -9,6 +9,7 @@ from . import bridge_password
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -68,6 +69,45 @@ if PRIVATE_BRIDGE:
         raise RuntimeError("Private bridge requires exact HTTPS origins in TRADING_SIM_ALLOWED_ORIGINS.")
 
 app = FastAPI(title="Trading Simulator Local API", version="1.1.0")
+
+@app.exception_handler(RequestValidationError)
+async def explain_invalid_request(_request: Request, exc: RequestValidationError):
+    """Keep legacy Vercel clients actionable without returning submitted private values."""
+    descriptions = {
+        "missing": "is required",
+        "float_parsing": "must be a number",
+        "int_parsing": "must be a whole number",
+        "float_type": "must be a number",
+        "int_type": "must be a whole number",
+        "string_type": "must be text",
+        "literal_error": "must be one of the supported choices",
+        "string_pattern_mismatch": "contains unsupported characters",
+        "list_too_short": "has too few items",
+        "list_too_long": "has too many items",
+    }
+    issues = []
+    for error in exc.errors()[:3]:
+        location = error.get("loc", ())
+        field = ".".join(item for item in location[1:]
+                         if isinstance(item, str) and item.isidentifier())
+        kind = error.get("type", "")
+        context = error.get("ctx", {})
+        if not isinstance(context, dict):
+            context = {}
+        if kind == "greater_than_equal" and isinstance(context.get("ge"), (int, float)):
+            hint = f"must be at least {context['ge']}"
+        elif kind == "less_than_equal" and isinstance(context.get("le"), (int, float)):
+            hint = f"must be at most {context['le']}"
+        elif kind == "greater_than" and isinstance(context.get("gt"), (int, float)):
+            hint = f"must be greater than {context['gt']}"
+        elif kind == "less_than" and isinstance(context.get("lt"), (int, float)):
+            hint = f"must be less than {context['lt']}"
+        else:
+            hint = descriptions.get(kind, "has an invalid value")
+        issues.append(f"{field}: {hint}" if field else hint)
+    return JSONResponse({"detail": "Invalid request: " + "; ".join(issues)},
+                        status_code=422)
+
 
 # The live strategy machine is disabled for shared public demos. It is an
 # owner-only, durable private service, not a browser-based trading bot.
