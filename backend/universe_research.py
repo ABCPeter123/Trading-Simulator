@@ -100,7 +100,9 @@ def _public(row, detail=False):
 
 def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct=35,
             research_objective="balanced", target_cagr_pct=55.,
-            target_sharpe=2., risk_free_pct=3.):
+            target_sharpe=2., risk_free_pct=3.,
+            target_investment_pct=95., equity_class_cap_pct=70.,
+            redistribute_excess=False):
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
         raise HTTPException(403,detail="Owner research is unavailable in public demos.")
     if scope not in ("all","etfs","stocks") or delay_sessions not in (1,2):
@@ -114,6 +116,11 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
         or not 10<=target_cagr_pct<=100 or not .5<=target_sharpe<=5
         or not 0<=risk_free_pct<=15):
         raise HTTPException(422,detail="Invalid performance targets or risk-free assumption.")
+    if (not all(isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+                for x in (target_investment_pct,equity_class_cap_pct))
+        or not 5<=target_investment_pct<=100 or not 10<=equity_class_cap_pct<=100
+        or type(redistribute_excess) is not bool):
+        raise HTTPException(422,detail="Invalid investment or asset-class concentration settings.")
     with LOCK,closing(_connection()) as c:
         c.execute("BEGIN IMMEDIATE")
         if c.execute("SELECT count(*) FROM universe_jobs WHERE status IN ('queued','running')").fetchone()[0]>=MAX_QUEUE:
@@ -126,7 +133,10 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
               "research_objective":research_objective,
               "target_cagr_pct":float(target_cagr_pct),
               "target_sharpe":float(target_sharpe),
-              "risk_free_pct":float(risk_free_pct)}
+              "risk_free_pct":float(risk_free_pct),
+              "target_investment_pct":float(target_investment_pct),
+              "equity_class_cap_pct":float(equity_class_cap_pct),
+              "redistribute_excess":redistribute_excess}
         c.execute("""INSERT INTO universe_jobs
           (id,status,created_at,updated_at,progress,stage,params)
           VALUES (?,'queued',?,?,0,'Awaiting local research worker',?)""",
@@ -321,6 +331,13 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         or not 0<=risk_free<=15 or not 10<=target_cagr<=100
         or not .5<=target_sharpe<=5):
         raise ValueError("Invalid objective targets")
+    investment=float(params.get("target_investment_pct",95.))
+    equity_cap=float(params.get("equity_class_cap_pct",70.))
+    redistribute=params.get("redistribute_excess",False)
+    if (not all(math.isfinite(v) for v in (investment,equity_cap))
+        or not 5<=investment<=100 or not 10<=equity_cap<=100
+        or type(redistribute) is not bool):
+        raise ValueError("Invalid capital allocation settings")
     universe=_universe(params["scope"]);histories={};rejected={}
     for ix,sym in enumerate(universe):
         item=assets.get_instrument(sym)
@@ -363,6 +380,10 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                 evaluated+=1
                 broker={**COST_ASSUMPTIONS,
                         "delay_sessions":params["delay_sessions"]}
+                if mode=="high_performance" and model in pr.MODELS:
+                    broker.update(target_investment_pct=investment,
+                                  equity_class_cap_pct=equity_cap,
+                                  redistribute_excess=redistribute)
                 researcher=adv.segment if model in adv.MODELS else pr._segment
                 try:
                     train=researcher(model,symbols,market,metadata,pr.WARMUP,
@@ -446,6 +467,10 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
     leaders=[]
     for i,item in enumerate(chosen):
         broker={**COST_ASSUMPTIONS,"delay_sessions":params["delay_sessions"]}
+        if mode=="high_performance" and item["model"] in pr.MODELS:
+            broker.update(target_investment_pct=investment,
+                          equity_class_cap_pct=equity_cap,
+                          redistribute_excess=redistribute)
         slow={**broker,"delay_sessions":2,"slippage_bps":20}
         researcher=adv.segment if item["model"] in adv.MODELS else pr._segment
         test=researcher(item["model"],item["symbols"],item["_market"],
@@ -534,6 +559,9 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "global top ten. Held-out tests and future scenarios never determine selection."),
         "shortlist_is_global_top_ten":False,
         "execution_assumptions":{**COST_ASSUMPTIONS,"configured_delay_sessions":params["delay_sessions"],
+                                 "long_only_target_investment_pct":investment if mode=="high_performance" else 95.,
+                                 "long_only_equity_class_cap_pct":equity_cap if mode=="high_performance" else 70.,
+                                 "long_only_redistribute_excess":redistribute if mode=="high_performance" else False,
                                  "commission_note":"USD $0 listed-stock/ETF commission. FX 1.5% assumed on any cross-currency trade; this is conservative and account-dependent."},
         "test_used_for_selection":False,
         "limitations":[
