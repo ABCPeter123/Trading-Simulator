@@ -11,6 +11,37 @@ const money=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?
   new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(value);
 const name=(value:string)=>value.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
 
+const reviewLabels:Record<string,[string,string]>={
+  below_cash_hurdle:["Annual growth below assumed cash rate","年收益低于假设现金利率"],
+  nonpositive_excess_sharpe:["Nonpositive risk-adjusted excess return","风险调整后超额收益未转正"],
+  below_same_basket_baseline:["Underperformed same-basket equal weight","弱于同资产等权基准"],
+  below_spy_price_benchmark:["Underperformed SPY price benchmark","弱于 SPY 价格基准"],
+  low_invested_exposure:["Low invested capital","投资资本占比偏低"],
+  high_turnover_weak_growth:["High turnover with weak growth","高换手与低增长并存"],
+  same_model_all_folds:["Same allocation across all folds","所有验证期选择相同配置"],
+  unstable_position_cap:["Sensitive to position cap changes","对持仓上限变动敏感"],
+  weak_multiple_tested_sharpe:["Weak multiple-testing-adjusted Sharpe","多重检验调整后的夏普信号偏弱"],
+  few_eligible_training_models:["Too few eligible training candidates","训练期合格候选数量偏少"],
+};
+const reviewObservationZh:Record<string,string>={
+  below_cash_hurdle:"审计期年增长低于配置的固定现金收益门槛。",
+  nonpositive_excess_sharpe:"在假定现金利率下，审计期超额夏普不为正。",
+  below_same_basket_baseline:"在完全相同资产与日期上，选中组合表现弱于等权持有。",
+  below_spy_price_benchmark:"选中组合表现弱于同期 SPY 买入持有的仅价格基准。",
+  low_invested_exposure:"平均总投资敞口低于初始资本的 50%。",
+  high_turnover_weak_growth:"相对初始资本交易频繁，但年增长偏低。",
+  same_model_all_folds:"所有前推验证区间均独立选中了相同模型配置，候选多样性有限。",
+  unstable_position_cap:"小幅调整持仓上限会明显改变审计前的历史年增长。",
+  weak_multiple_tested_sharpe:"近似调整后夏普不足以支持可靠的风险调整后优势。",
+  few_eligible_training_models:"极少数配置通过审计前的风险或敞口筛选。",
+};
+const reviewMethodsZh:Record<string,string>={
+  compare_exposure_and_costs:"检查训练期现金、资产类别上限与交易成本，对照同资产等权组合。调整参数前先明确研究假设。",
+  benchmark_over_new_sessions:"冻结策略版本，继续收集新的模拟交易时段，并用完全相同日期的基准评价。",
+  audit_data_provenance:"增加模型复杂度前，核查复权价格、已退市标的、历史成分股、币种转换与数据来源。",
+};
+
+
 function Plot({data,description}:{data:{time:number;value:number}[];description:string}){
   const path=useMemo(()=>{
     if(data.length===0)return "";
@@ -471,8 +502,8 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
               <th>{l("Evidence period","证据时期")}</th>
             </tr></thead><tbody>{result.research_review.findings?.map(f=><tr key={f.code}>
               <td>{f.severity==="high"?l("High","高"):f.severity==="medium"?l("Medium","中"):l("Info","提示")}</td>
-              <td>{name(f.code)}
-                <p>{f.observation}</p>
+              <td>{(reviewLabels[f.code]??[name(f.code),name(f.code)])[zh?1:0]}
+                <p>{zh?(reviewObservationZh[f.code]??f.observation):f.observation}</p>
               </td><td>{f.basis==="sealed_audit"?l("Already opened audit","已查看的审计期"):
                 l("Pre-audit only","审计前")}</td>
             </tr>)}</tbody></table></div>:
@@ -484,7 +515,7 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
               <strong>{p.id==="compare_exposure_and_costs"?l("Audit cash and trading costs","检查现金配置及交易成本"):
                 p.id==="benchmark_over_new_sessions"?l("Collect fresh forward-paper evidence","收集新的前向模拟证据"):
                 l("Verify historical data provenance","核查历史数据来源")}</strong>
-              <p>{p.method}</p>
+              <p>{zh?(reviewMethodsZh[p.id]??p.method):p.method}</p>
             </article>)}
           </div>
           <p className="wfo-disclaimer">{l("The final audit has been seen and cannot be reused as untouched evidence for revisions. New tests need truly fresh sessions. All suggestions require deliberate action.",
