@@ -4,7 +4,7 @@ import {createCustomPeriodStudy,getCustomPeriodStudy,cancelCustomPeriodStudy} fr
 import type {CustomPeriodJob,CustomPeriodResult,TournamentSourceSpec} from "./tournamentApi";
 import "./customStrategyAnalysis.css";
 
-const standardModels=new Set(["equal_weight","inverse_volatility","trend_filter","relative_momentum","volatility_target"]);
+const standardModels=new Set(["equal_weight","inverse_volatility","trend_filter","relative_momentum","volatility_target","blended_portfolio"]);
 const money=(x:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(x);
 const pct=(x:number|null|undefined)=>x==null||!Number.isFinite(x)?"N/A":x.toFixed(2)+"%";
 const num=(x:number|null|undefined)=>x==null||!Number.isFinite(x)?"N/A":x.toFixed(2);
@@ -51,13 +51,14 @@ export default function CustomStrategyAnalysis({spec,initialJob=null}: {spec:Tou
   const {locale}=useI18n();
   const l=(english:string,chinese:string)=>locale==="zh-CN"?chinese:english;
   const key=JSON.stringify([spec.model,spec.symbols,spec.max_position_pct,
-    spec.delay_sessions,spec.rebalance_sessions,spec.version]);
+    spec.delay_sessions,spec.rebalance_sessions,spec.version,spec.sleeves,
+    spec.base_currency,spec.slippage_bps,spec.commission_usd,spec.fx_conversion_bps]);
   const standard=standardModels.has(spec.model);
   const [start,setStart]=useState("");
   const [end,setEnd]=useState("");
   const [position,setPosition]=useState(String(spec.max_position_pct));
   const [delay,setDelay]=useState<1|2>(spec.delay_sessions);
-  const [slippage,setSlippage]=useState("8");
+  const [slippage,setSlippage]=useState(String(spec.slippage_bps??8));
   const [investment,setInvestment]=useState(String(spec.target_investment_pct??95));
   const [equityCap,setEquityCap]=useState(String(spec.equity_class_cap_pct??70));
   const [redistribute,setRedistribute]=useState(Boolean(spec.redistribute_excess));
@@ -66,7 +67,8 @@ export default function CustomStrategyAnalysis({spec,initialJob=null}: {spec:Tou
   const [busy,setBusy]=useState(false);
   useEffect(()=>{
     setJob(null);setError("");setPosition(String(spec.max_position_pct));
-    setDelay(spec.delay_sessions);setInvestment(String(spec.target_investment_pct??95));
+    setDelay(spec.delay_sessions);setSlippage(String(spec.slippage_bps??8));
+    setInvestment(String(spec.target_investment_pct??95));
     setEquityCap(String(spec.equity_class_cap_pct??70));
     setRedistribute(Boolean(spec.redistribute_excess));
   },[key]);

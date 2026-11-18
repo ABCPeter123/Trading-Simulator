@@ -18,6 +18,7 @@ import sqlite3
 from fastapi import HTTPException
 
 from . import portfolio_research as pr, universe_research, advanced_portfolio_research as adv
+from . import blended_portfolio_research as blends
 
 DB_PATH = Path(os.environ.get("TRADING_SIM_TOURNAMENT_STRATEGIES_DB",
     Path(__file__).resolve().parents[1] / "data" / "tournament_strategies.sqlite3"))
@@ -42,12 +43,20 @@ def validate_spec(spec):
         if not isinstance(s, str) or not s or len(s) > 32 or not all(
                 c.isascii() and (c.isalnum() or c in "._-") for c in s):
             raise HTTPException(422, detail="Invalid tournament model instrument.")
-    advanced=spec.get("model") in adv.MODELS
+    blended=spec.get("model")=="blended_portfolio"
+    advanced=spec.get("model") in adv.MODELS or blended
     if spec.get("model") not in pr.MODELS and not advanced:
         raise HTTPException(422, detail="Unsupported portfolio allocation model.")
+    if blended:
+        try:
+            blends.validate_sleeves(spec.get("sleeves"))
+        except (ValueError,TypeError) as exc:
+            raise HTTPException(422,detail="Invalid blended portfolio sleeves.") from exc
+    elif "sleeves" in spec:
+        raise HTTPException(422,detail="Only blended portfolios may define sleeves.")
     if advanced != (spec["version"]==2):
         raise HTTPException(422, detail="Strategy model does not match its executable version.")
-    if bool(spec.get("research_only",False)) != (spec.get("model") in adv.RESEARCH_ONLY):
+    if bool(spec.get("research_only",False)) != (spec.get("model") in adv.RESEARCH_ONLY or blended):
         raise HTTPException(422, detail="Incorrect research-only capability setting.")
     weight = spec.get("max_position_pct")
     if type(weight) not in (float,int) or not math.isfinite(weight) or not 10 <= weight <= 50:
@@ -58,7 +67,7 @@ def validate_spec(spec):
         raise HTTPException(422, detail="Unsupported tournament rebalance cadence.")
     keys=("target_investment_pct","equity_class_cap_pct","redistribute_excess")
     if any(k in spec for k in keys):
-        if advanced:
+        if advanced and not blended:
             raise HTTPException(422,detail="Advanced allocation models use their own exposure budgets.")
         investment=spec.get("target_investment_pct",95.)
         equity=spec.get("equity_class_cap_pct",70.)
@@ -68,6 +77,17 @@ def validate_spec(spec):
             or not math.isfinite(equity) or not 10<=equity<=100
             or type(redistributed) is not bool):
             raise HTTPException(422,detail="Invalid custom tournament model exposure controls.")
+    # Optional settings are part of immutable historical provenance. They
+    # cannot bypass research-only deployment restrictions.
+    currency=spec.get("base_currency","USD")
+    if currency not in ("USD","CAD"):
+        raise HTTPException(422,detail="Invalid research funding currency.")
+    for key,upper in (("slippage_bps",100.),("commission_usd",30.),
+                      ("fx_conversion_bps",300.)):
+        value=spec.get(key)
+        if value is not None and (type(value) not in (int,float)
+                                  or not math.isfinite(value) or not 0<=value<=upper):
+            raise HTTPException(422,detail="Invalid immutable research execution setting.")
     return spec
 
 
@@ -89,6 +109,10 @@ def _public(row):
     return {**d, "mode": "portfolio_model", "version":spec["version"],
             "symbols": spec["symbols"],
             "model": spec["model"], "max_position_pct": spec["max_position_pct"],
+            "sleeves":spec.get("sleeves"),"base_currency":spec.get("base_currency","USD"),
+            "slippage_bps":spec.get("slippage_bps",8.),
+            "commission_usd":spec.get("commission_usd",0.),
+            "fx_conversion_bps":spec.get("fx_conversion_bps",150.),
             "delay_sessions": spec["delay_sessions"], "rebalance_sessions": spec["rebalance_sessions"],
             "restricted_research": spec.get("restricted_research", False),
             "short_proxy_research": spec.get("short_proxy_research", False),
@@ -111,20 +135,25 @@ def import_rank(job_id: str, rank: int):
     if winner is None:
         raise HTTPException(404, detail="This tournament does not have that ranked strategy.")
     spec = validate_spec({
-        "version": 2 if winner["model"] in adv.MODELS else 1,
+        "version": 2 if winner["model"] in adv.MODELS or winner["model"]=="blended_portfolio" else 1,
         "symbols": winner["symbols"],
         "model": winner["model"],
+        **({"sleeves":winner["sleeves"]} if winner["model"]=="blended_portfolio" else {}),
         "max_position_pct": float(study["params"]["max_position_pct"]),
         "delay_sessions": int(study["params"]["delay_sessions"]),
         "rebalance_sessions": pr.REBALANCE_SESSIONS,
         "restricted_research": bool(winner.get("restricted_research", False)),
         "short_proxy_research": bool(winner.get("short_proxy_research", False)),
         "research_only":bool(winner.get("research_only",False)),
+        "base_currency":study["params"].get("base_currency","USD"),
+        "slippage_bps":float(study["params"].get("slippage_bps",8.)),
+        "commission_usd":float(study["params"].get("commission_usd",0.)),
+        "fx_conversion_bps":float(study["params"].get("fx_conversion_bps",150.)),
         **({"target_investment_pct":float(study["params"].get("target_investment_pct",95.)),
             "equity_class_cap_pct":float(study["params"].get("equity_class_cap_pct",70.)),
             "redistribute_excess":bool(study["params"].get("redistribute_excess",False))}
            if study["params"].get("research_objective")=="high_performance"
-           and winner["model"] in pr.MODELS else {}),
+           and (winner["model"] in pr.MODELS or winner["model"]=="blended_portfolio") else {}),
     })
     with LOCK, closing(_connection()) as conn, conn:
         previous = conn.execute("SELECT * FROM tournament_strategies WHERE source_job_id=? "

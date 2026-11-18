@@ -55,21 +55,26 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
   const zh=locale==="zh-CN";
   const l=(en:string,cn:string)=>zh?cn:en;
   const [searchWidth,setSearchWidth]=useState<"focused"|"extended"|"comprehensive">("focused");
-  const [baseCurrency,setBaseCurrency]=useState<"USD"|"CAD">("USD");
-  const [commission,setCommission]=useState("0");
-  const [fxBps,setFxBps]=useState("150");
+  const [baseCurrency,setBaseCurrency]=useState<"USD"|"CAD">(spec.base_currency??"USD");
+  const [commission,setCommission]=useState(String(spec.commission_usd??0));
+  const [fxBps,setFxBps]=useState(String(spec.fx_conversion_bps??150));
   const [targetCagr,setTargetCagr]=useState("55");
   const [targetSharpe,setTargetSharpe]=useState("2");
   const [riskFree,setRiskFree]=useState("3");
   const [maxDrawdown,setMaxDrawdown]=useState("30");
-  const [slippage,setSlippage]=useState("8");
+  const [slippage,setSlippage]=useState(String(spec.slippage_bps??8));
   const [job,setJob]=useState<WalkForwardJob|null>(null);
   const [archive,setArchive]=useState<WalkForwardJob[]>([]);
   const [error,setError]=useState("");
   const [busy,setBusy]=useState(false);
   const specKey=JSON.stringify([spec.version,spec.model,spec.symbols,spec.max_position_pct,spec.delay_sessions,
-    spec.target_investment_pct,spec.equity_class_cap_pct,spec.redistribute_excess]);
-  useEffect(()=>{setJob(null);setError("");},[specKey]);
+    spec.target_investment_pct,spec.equity_class_cap_pct,spec.redistribute_excess,
+    spec.sleeves,spec.base_currency,spec.slippage_bps,spec.commission_usd,spec.fx_conversion_bps]);
+  useEffect(()=>{
+    setJob(null);setError("");
+    setBaseCurrency(spec.base_currency??"USD");setCommission(String(spec.commission_usd??0));
+    setFxBps(String(spec.fx_conversion_bps??150));setSlippage(String(spec.slippage_bps??8));
+  },[specKey]);
   useEffect(()=>{
     let live=true;
     void listWalkForward().then(rows=>{if(live)setArchive(rows);}).catch(()=>{});

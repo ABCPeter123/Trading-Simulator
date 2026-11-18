@@ -4,6 +4,7 @@ import type {PortfolioSeason} from "./portfolioApi";
 export interface TournamentVersion {
   id:string;name:string;mode:"portfolio_model";version:1|2;source_job_id:string;source_rank:number;
   symbols:string[];model:string;max_position_pct:number;delay_sessions:1|2;
+  sleeves?:{model:string;weight_pct:number}[]|null;
   research_only?:boolean;
   rebalance_sessions:number;restricted_research:boolean;short_proxy_research:boolean;
   code:string;created_at:string;
@@ -41,6 +42,8 @@ export interface TournamentSourceSpec {
   delay_sessions:1|2; rebalance_sessions:number;
   restricted_research?:boolean; short_proxy_research?:boolean; research_only?:boolean;
   target_investment_pct?:number;equity_class_cap_pct?:number;redistribute_excess?:boolean;
+  sleeves?:{model:string;weight_pct:number}[]|null;
+  base_currency?:"USD"|"CAD";slippage_bps?:number;commission_usd?:number;fx_conversion_bps?:number;
 }
 
 export interface PythonStrategySection {

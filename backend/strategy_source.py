@@ -10,8 +10,10 @@ import hashlib
 import inspect
 from pathlib import Path
 from typing import Any, Callable
+from fastapi import HTTPException
 
 from . import advanced_portfolio_research as advanced
+from . import blended_portfolio_research as blended
 from . import portfolio_research as portfolio
 from . import research_optimizer
 from . import tournament_strategies
@@ -68,9 +70,14 @@ def source_for_model(spec: dict, context: str = "research") -> dict:
     if context not in ("research", "simulation", "live"):
         raise ValueError("Unsupported strategy execution context.")
 
+    is_blend=config["model"]=="blended_portfolio"
+    if is_blend and context!="research":
+        raise HTTPException(422,"Blended portfolio has historical research support only.")
     advanced_model = config["model"] in advanced.MODELS
-    allocation = advanced.weights if advanced_model else portfolio._weights
-    backtest = advanced.segment if advanced_model else portfolio._segment
+    allocation=(blended.blend_weights if is_blend else
+                advanced.weights if advanced_model else portfolio._weights)
+    backtest=(blended.segment if is_blend else
+              advanced.segment if advanced_model else portfolio._segment)
 
     sections = [
         _section("Allocation decision (active Python function)", allocation),
@@ -79,7 +86,7 @@ def source_for_model(spec: dict, context: str = "research") -> dict:
         _section("Volatility calculation (shared helper)", portfolio._vol),
         _section("Performance metrics (shared helper)", research_optimizer._stats),
     ]
-    files = [allocation, portfolio._weights, research_optimizer._stats]
+    files = [allocation, backtest, portfolio._weights, research_optimizer._stats]
 
     if context == "research":
         sections.append(_section("Tournament runner and scoring (active Python function)",

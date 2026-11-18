@@ -192,9 +192,11 @@ Enable **shared-cash blended candidates** to test bounded two- or three-sleeve
 long-only combinations of momentum, trend, equal-weight and defensive models.
 Every sleeve generates its allocation using completed historical observations,
 then the allocation engine nets orders in one common cash ledger, with fees paid
-once. These blends are **historical research only**: do not import them into the
-cash replay or live machine until their runtime and versioning support has been
-implemented. Margin and short models remain separate signed-ledger research.
+once. These blends are **historical research only**. They now have immutable private
+saved versions, exact code-source inspection, date-scoped analysis, and
+walk-forward revalidation. They remain prohibited from interactive cash replay
+and live monitoring, which do not yet reproduce their sleeve-combination rules.
+Margin and short models remain separate signed-ledger research.
 
 The universe study reports a **validation-only score breakdown**. Growth, Sharpe,
 drawdown, turnover, subperiod consistency and other deductions appear separately.
@@ -219,8 +221,8 @@ sessions, **not a reliable 12-hour intraday execution guarantee**.
   corporate-action and data-source limitations.
 * A full broker order book or intraday executable quote reconstruction;
   estimates use daily next-session opens and indicative spreads.
-* Shared-ledger signed (margin/short) mixtures or automatic execution of blends
-  in the live monitor.
+* Shared-ledger signed (margin/short) mixtures, interactive cash replay, or
+  automatic execution of multi-sleeve blends in the live monitor.
 * Independently trained predictive ML features or broker-verified future
   projections. Scenario resampling is hypothetical, not a calibrated forecast.
 * Automatic selection using future or held-out audit results. Such selection
@@ -228,3 +230,21 @@ sessions, **not a reliable 12-hour intraday execution guarantee**.
 
 Actual owner study inputs, chosen configurations, rankings, outputs and trades
 remain in Git-ignored local private databases and must never enter public source.
+
+### Saved blended research lifecycle
+
+A qualifying multi-sleeve candidate can be imported from a completed private
+universe tournament into the private version library. Its exact sleeve models,
+weight percentages, position limits, execution delay, funding currency and cost
+assumptions are saved as immutable model specifications. Historical custom-period
+analysis uses `blended_portfolio_research.segment`, sharing cash and netting
+orders exactly once; its equal-weight benchmark and delay stress use the same
+instrument data and brokerage assumptions. Walk-forward optimization starts by
+evaluating the immutable blend before comparing other compatible candidates.
+Every run stores its output only in ignored private local databases.
+
+The source inspector returns the actual Python blend allocation/backtest
+functions. It refuses `simulation` and `live` contexts for these models
+rather than substituting a different portfolio strategy. Research-only
+versions cannot become paper or live deployments without a separate reviewed
+engine implementation and explicit owner approval.

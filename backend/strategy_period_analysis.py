@@ -13,6 +13,7 @@ from statistics import mean
 from fastapi import HTTPException
 
 from . import portfolio_research as pr, advanced_portfolio_research as adv
+from . import blended_portfolio_research as blended
 from . import tournament_strategies as tournament, universe_research as universe
 
 
@@ -43,21 +44,21 @@ def validate_request(payload):
     # These are temporary study overrides; the saved model remains immutable.
     cap = payload.get("max_position_pct", spec["max_position_pct"])
     delay = payload.get("delay_sessions", spec["delay_sessions"])
-    slippage = payload.get("slippage_bps", universe.COST_ASSUMPTIONS["slippage_bps"])
+    slippage = payload.get("slippage_bps",spec.get("slippage_bps",universe.COST_ASSUMPTIONS["slippage_bps"]))
     if type(cap) not in (int, float) or not math.isfinite(cap) or not 10 <= cap <= 50:
         raise HTTPException(422, "Maximum asset weight must be between 10% and 50%.")
     if type(delay) is not int or delay not in (1, 2):
         raise HTTPException(422, "Execution delay must be one or two shared sessions.")
     if type(slippage) not in (int, float) or not math.isfinite(slippage) or not 0 <= slippage <= 100:
         raise HTTPException(422, "Slippage must be between zero and 100 basis points.")
-    standard = spec["model"] in pr.MODELS
+    standard = spec["model"] in pr.MODELS or spec["model"]=="blended_portfolio"
     exposure_supplied = any(k in payload for k in
                             ("target_investment_pct","equity_class_cap_pct","redistribute_excess"))
     if exposure_supplied and not standard:
         raise HTTPException(422,"Custom investment and equity concentration targets currently apply to long-only standard models. Advanced models retain their own leverage and hedge budgets.")
-    target = payload.get("target_investment_pct",95.)
-    equity = payload.get("equity_class_cap_pct",70.)
-    redistribute = payload.get("redistribute_excess",False)
+    target = payload.get("target_investment_pct",spec.get("target_investment_pct",95.))
+    equity = payload.get("equity_class_cap_pct",spec.get("equity_class_cap_pct",70.))
+    redistribute = payload.get("redistribute_excess",spec.get("redistribute_excess",False))
     if standard:
         if type(target) not in (int,float) or not math.isfinite(target) or not 5<=target<=100:
             raise HTTPException(422,"Investment target must be between 5% and 100%.")
@@ -65,11 +66,21 @@ def validate_request(payload):
             raise HTTPException(422,"Equity category cap must be between 10% and 100%.")
         if type(redistribute) is not bool:
             raise HTTPException(422,"Redistribution setting must be a boolean.")
+    currency=payload.get("base_currency",spec.get("base_currency","USD"))
+    commission=payload.get("commission_usd",spec.get("commission_usd",0.))
+    conversion=payload.get("fx_conversion_bps",spec.get("fx_conversion_bps",150.))
+    if currency not in ("USD","CAD") or any(
+        type(x) not in (float,int) or not math.isfinite(x) or not 0<=x<=limit
+        for x,limit in ((commission,30.),(conversion,300.))
+    ):
+        raise HTTPException(422,"Invalid historical brokerage execution assumptions.")
     return {
         "spec": spec, "start_date": start_date.isoformat() if start_date else None,
         "end_date": end_date.isoformat() if end_date else None,
         "max_position_pct": float(cap), "delay_sessions": delay,
         "slippage_bps": float(slippage),
+        "base_currency":currency,"commission_usd":float(commission),
+        "fx_conversion_bps":float(conversion),
         **({"target_investment_pct":float(target),
             "equity_class_cap_pct":float(equity),
             "redistribute_excess":redistribute} if standard else {}),
@@ -169,13 +180,18 @@ def analyze(params, *, loader=None, report=None):
     report(60,"Executing strategy with historical opening prices")
     broker={**universe.COST_ASSUMPTIONS,
             "delay_sessions":params["delay_sessions"],
-            "slippage_bps":params["slippage_bps"]}
-    if spec["model"] in pr.MODELS:
+            "slippage_bps":params["slippage_bps"],
+            "base_currency":params["base_currency"],
+            "commission_usd":params["commission_usd"],
+            "fx_conversion_bps":params["fx_conversion_bps"]}
+    if spec["model"] in pr.MODELS or spec["model"]=="blended_portfolio":
         broker.update(target_investment_pct=params["target_investment_pct"],
                       equity_class_cap_pct=params["equity_class_cap_pct"],
                       redistribute_excess=params["redistribute_excess"])
-    segment=adv.segment if spec["model"] in adv.MODELS else pr._segment
-    metrics=segment(spec["model"],symbols,market,metadata,start,end,
+    segment=(blended.segment if spec["model"]=="blended_portfolio" else
+             adv.segment if spec["model"] in adv.MODELS else pr._segment)
+    argument=spec["sleeves"] if spec["model"]=="blended_portfolio" else spec["model"]
+    metrics=segment(argument,symbols,market,metadata,start,end,
                     params["max_position_pct"]/100,broker=broker)
     report(75,"Calculating historical risk and benchmark")
     basis=_period_metrics(metrics["equity_curve"],pr.STARTING_CAPITAL)
@@ -185,7 +201,7 @@ def analyze(params, *, loader=None, report=None):
     # Execution-delay stress always uses a slower setup and >= 20 bps slippage.
     stress_broker={**broker,"delay_sessions":2,
                    "slippage_bps":max(20.,params["slippage_bps"])}
-    stressed=segment(spec["model"],symbols,market,metadata,start,end,
+    stressed=segment(argument,symbols,market,metadata,start,end,
                      params["max_position_pct"]/100,broker=stress_broker)
     report(95,"Preparing private period report")
     compact_keys=("return_pct","max_drawdown_pct","annualized_volatility_pct",
@@ -198,7 +214,8 @@ def analyze(params, *, loader=None, report=None):
         "actual_window":{"start_date":dates[start],"end_date":dates[end-1],
                          "sessions":end-start,"warmup_sessions":pr.WARMUP,
                          "available_start":dates[0],"available_end":dates[-1]},
-        "model":spec["model"],"research_only":spec["model"] in adv.RESEARCH_ONLY,
+        "model":spec["model"],"sleeves":spec.get("sleeves"),
+        "research_only":spec["model"] in adv.RESEARCH_ONLY or spec["model"]=="blended_portfolio",
         "assumptions":{**broker,"max_position_pct":params["max_position_pct"],
                        "rebalance_sessions":pr.REBALANCE_SESSIONS,
                        "starting_capital":pr.STARTING_CAPITAL},
