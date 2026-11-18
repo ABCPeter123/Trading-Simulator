@@ -46,6 +46,7 @@ $payload = @{
     stream = $false
     temperature = 0
     max_tokens = $MaxTokens
+    cache_prompt = $true
     messages = @(
         @{role="system";content="Answer a general math question briefly. No private financial information."},
         @{role="user";content="What is the arithmetic mean of 2, 4, and 6? Answer in one sentence."}
@@ -103,6 +104,12 @@ try {
         Write-Host "[benchmark] Generated tokens: $($t.predicted_n)"
         if ($null -ne $t.prompt_per_second) {
             Write-Host "[benchmark] Prompt processing: $([Math]::Round([double]$t.prompt_per_second, 2)) tokens/sec"
+        }
+        if ($null -ne $t.cache_n) {
+            Write-Host "[benchmark] Reused prompt tokens (KV cache): $($t.cache_n)"
+        }
+        if ($null -ne $t.prompt_n) {
+            Write-Host "[benchmark] Newly processed prompt tokens: $($t.prompt_n)"
         }
     } elseif ($result.usage -and $null -ne $result.usage.completion_tokens) {
         $count = [int]$result.usage.completion_tokens
