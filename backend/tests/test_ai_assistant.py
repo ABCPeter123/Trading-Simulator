@@ -541,7 +541,7 @@ def test_router_unreachable_is_distinct_from_empty_models(monkeypatch):
     empty = client.get("/api/ai/status").json()
     assert empty["router_reachable"] is True
     assert empty["connection_state"] == "no_models"
-    monkeypatch.setattr(Client, "unreachable", True)
+    monkeypatch.setattr(Client, "unreachable", True, raising=False)
     down = client.get("/api/ai/status").json()
     assert down["router_reachable"] is False
     assert down["connection_state"] == "unreachable"
