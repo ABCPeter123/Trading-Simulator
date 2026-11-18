@@ -37,12 +37,20 @@ export default function AIAssistant({mode,runId,onDraft}: {
   const [error,setError]=useState("");
   const [retryQuestion,setRetryQuestion]=useState("");
   const activeRequest=useRef<AbortController|null>(null);
+  const currentSession=useRef(mode+"|"+runId);
+  currentSession.current=mode+"|"+runId;
   const [liveProgress,setLiveProgress]=useState<AIStreamProgress|null>(null);
   const [cancelled,setCancelled]=useState(false);
 
   // A session switch or unmount invalidates the previous AI request. Its
   // answer must never attach to a different portfolio/replay run.
-  useEffect(()=>()=>{activeRequest.current?.abort();},[mode,runId]);
+  useEffect(()=>{
+    // Never reuse chat history or attach a cancelled response from a prior
+    // replay/portfolio session to the next one.
+    setTurns([]);setAnswers([]);setMessage("");setRetryQuestion("");
+    setLiveProgress(null);setError("");setCancelled(false);
+    return ()=>{activeRequest.current?.abort();};
+  },[mode,runId]);
 
 
   useEffect(()=>{
@@ -73,6 +81,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
     const question=value.trim();
     if(!question||busy||activeRequest.current)return;
     const controller=new AbortController();
+    const requestSession=mode+"|"+runId;
     activeRequest.current=controller;
     const history=turns.slice(-6);
     setBusy(true);setElapsed(0);setError("");setRetryQuestion("");setMessage("");
@@ -82,13 +91,14 @@ export default function AIAssistant({mode,runId,onDraft}: {
       const result=status?.provider==="llama_cpp"
         ? await askAIStream(mode,runId,question,history,locale,model,
             controller.signal,progress=>{
-              if(!controller.signal.aborted)setLiveProgress(progress);
+              if(!controller.signal.aborted&&currentSession.current===requestSession)setLiveProgress(progress);
             })
         : await askAI(mode,runId,question,history,locale,model);
-      if(controller.signal.aborted)return;
+      if(controller.signal.aborted||currentSession.current!==requestSession)return;
       setTurns(prev=>[...prev,{role:"user",content:question},{role:"assistant",content:result.answer}]);
       setAnswers(prev=>[...prev,result]);
     } catch(e) {
+      if(currentSession.current!==requestSession)return;
       if(controller.signal.aborted){
         setMessage(previous=>previous.trim()?previous:question);
         setCancelled(true);
