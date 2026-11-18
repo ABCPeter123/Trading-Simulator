@@ -374,6 +374,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 [t("Ranked"),result.top10.length]].map(([name,n])=>
                 <div key={String(name)}><small>{name}</small><strong>{n}</strong></div>)}
             </div>
+            <details className="ur-result-method"><summary>{bilingual("Scan methodology and full statistics","扫描方法与完整统计")}</summary>
             {result.asset_screen&&<details className="ur-score-details">
               <summary>{bilingual("Asset-screen audit and leakage safeguards","资产筛选审计及防止未来数据泄露")}</summary>
               <div className="ur-kpis">
@@ -413,16 +414,19 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               <div className="ur-kpis">{Object.entries(result.candidate_model_counts).map(([name,count])=>
                 <div key={name}><small>{label(name)}</small><strong>{count}</strong></div>)}</div>
             </details>}
+            </details>
             <h2>{t("Top 10 research strategies")}</h2>
-            <button type="button" className="ur-secondary" disabled={busy||!result.top10.length}
-              onClick={()=>void importAll()}>{t("Save all top 10 strategy models")}</button>
+            <details className="ur-batch-actions"><summary>{bilingual("Save all ranked models","保存全部排名模型")}</summary>
+              <button type="button" className="ur-secondary" disabled={busy||!result.top10.length}
+                onClick={()=>void importAll()}>{t("Save all top 10 strategy models")}</button>
+            </details>
             {result.top10.length===0?<p>{t("No qualifying candidates. Inspect missing history or relax the validation constraints.")}</p>:
             <div className="ur-scroll"><table><thead><tr><th>{t("Rank")}</th>
               <th>{t("Basket / Model")}</th><th>{t("Validation")}</th>
               <th>{t("Drawdown")}</th><th>{t("Held-out")}</th><th>{t("Score")}</th>
             </tr></thead><tbody>{result.top10.map((row,i)=><tr key={row.rank} className={i===pick?"ur-active":""}>
-              <td><button className="ur-link" onClick={()=>setPick(i)}>#{row.rank}</button></td>
-              <td><button className="ur-link" onClick={()=>setPick(i)}>{label(row.basket_type)} · {label(row.model)}</button>
+              <td><button className="ur-link" aria-current={i===pick?"true":undefined} onClick={()=>{setPick(i);setDetailTab("overview");}}>#{row.rank}</button></td>
+              <td><button className="ur-link" onClick={()=>{setPick(i);setDetailTab("overview");}}>{label(row.basket_type)} · {label(row.model)}</button>
                 <small>{row.symbols.join(", ").toUpperCase()}</small>
                 {row.sleeves&&<small>{row.sleeves.map(x=>`${label(x.model)} ${x.weight_pct}%`).join(" + ")}</small>}
                 {row.research_only&&<small>{t("Synthetic short / margin research only")}</small>}</td>
@@ -434,6 +438,24 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               <p>{chosen.symbols.map(x=>x.toUpperCase()).join(" · ")}</p>
               {chosen.sleeves&&<p>{bilingual("Blended research sleeves","混合研究策略权重")}: {
                 chosen.sleeves.map(x=>label(x.model)+" "+x.weight_pct+"%").join(" + ")}</p>}
+                            <nav className="ur-detail-tabs" role="tablist" aria-label={bilingual("Strategy result sections","策略结果分区")}>
+                {([
+                  ["overview",bilingual("Overview","概览")],
+                  ["validation",bilingual("Performance","表现")],
+                  ["risk",bilingual("Risk & trades","风险与交易")],
+                  ["scenarios",bilingual("Scenarios","情景")],
+                  ["tools",bilingual("Walk-forward & tools","滚动验证与工具")],
+                ] as const).map(([id,title])=><button key={id} type="button" role="tab"
+                  aria-selected={detailTab===id} className={detailTab===id?"selected":""}
+                  onClick={()=>setDetailTab(id)}>{title}</button>)}
+              </nav>
+              {detailTab==="overview"&&<div className="ur-kpis ur-key-metrics">
+                <div><small>{bilingual("Training return","训练期收益")}</small><strong>{pct(chosen.training.return_pct)}</strong></div>
+                <div><small>{bilingual("Validation return","验证期收益")}</small><strong>{pct(chosen.validation.return_pct)}</strong></div>
+                <div><small>{bilingual("Unseen test return","未见测试期收益")}</small><strong>{pct(chosen.held_out.return_pct)}</strong></div>
+                <div><small>{bilingual("Test drawdown","测试期回撤")}</small><strong>{pct(chosen.held_out.max_drawdown_pct)}</strong></div>
+              </div>}
+              {detailTab==="validation"&&<>
               {chosen.validation_execution_stress&&<div className="ur-objective-results">
                 <h4>{bilingual("Validation execution robustness","验证期执行稳健性")}</h4>
                 <div className="ur-kpis">
@@ -458,6 +480,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                   <tfoot><tr><th>{bilingual("Total score","综合得分")}</th>
                     <th>{chosen.score_breakdown.total.toFixed(2)}</th></tr></tfoot></table></div>
               </details>}
+              </>}
+              {detailTab==="risk"&&<>
               {chosen.held_out_cost_audit&&<details className="ur-score-details">
                 <summary>{bilingual("Execution cost attribution, USD","执行成本分项（美元）")}</summary>
                 <div className="ur-kpis">
@@ -472,9 +496,13 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 </div><p>{bilingual("Spread and slippage are already embedded in fill prices. Do not add them to explicit charges as a second deduction.",
                   "买卖价差和滑点已计入模拟成交价，不应重复作为显性成本扣除。")}</p>
               </details>}
+              </>}
+              {detailTab==="overview"&&<>
               {chosen.model==="blended_portfolio"&&<p className="ur-warning">{bilingual(
                 "Blends support saved private versions and date-scoped or walk-forward research, but not interactive replay or live monitoring.",
                 "混合策略支持私人版本以及按日期或滚动验证研究，但不支持交互式回放或实时监控。")}</p>}
+              </>}
+              {detailTab==="tools"&&<>
               {selectedSpec&&<TournamentStrategyInspector key={`${active.id}-${chosen.rank}`} spec={selectedSpec}
                 researchStudy={researchJob?.selection===selectedKey?researchJob.job:null} costs={{
                 commission_usd:Number(result.execution_assumptions.commission_usd),
@@ -482,6 +510,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 fx_conversion_bps:Number(result.execution_assumptions.fx_conversion_bps),
                 base_currency:String(result.execution_assumptions.base_currency),
               }} />}
+              </>}
+              {detailTab==="overview"&&<>
               <p>{t(chosen.research_only?"Synthetic research model":"Executable allocation model")}: {label(chosen.model)} · {active?.params.max_position_pct}% {t("Maximum position weight (%)")} ·
                 {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
@@ -517,6 +547,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 customResearchExposure?
                   t("Custom investment and equity caps are preserved when saving and replaying this long-only strategy. Live monitoring is disabled until it can reproduce those research exposure rules."):
                   t("Supported cash-funded models can be loaded into simulation and paper monitoring. Leveraged and inverse ETFs are separately restricted for live monitoring.")}</p>
+              </>}
+              {detailTab==="validation"&&<>
               {result.research_objective==="high_performance"&&chosen.validation_objectives&&<div className="ur-objective-results">
                 <h4>{t("Return and risk objectives")}</h4>
                 <div className="ur-kpis">
@@ -568,6 +600,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                   [t("Margin calls"),chosen.held_out.margin_calls??0]].map(([name,value])=>
                   <div key={name}><small>{name}</small><strong>{value}</strong></div>)}
               </div>
+              </>}
+              {detailTab==="risk"&&<>
               {(chosen.restricted_research||chosen.short_proxy_research)&&
                 <p className="ur-warning">{t("Leveraged/inverse ETF exposure is research-only, not a share short or approved broker order.")}</p>}
               {chosen.coverage&&<p>{t("Actual common history")}: {chosen.coverage.first_session}
@@ -590,6 +624,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                   <td>{x.price.toFixed(2)}</td><td>{x.fee.toFixed(2)}</td></tr>)}</tbody></table></div>
               </details>}
               <p>{chosen.execution_model}</p>
+              </>}
+              {detailTab==="scenarios"&&<>
               {chosen.scenario_calibration&&<p>{chosen.scenario_calibration}</p>}
               <h4>{t("Hypothetical 10-120 session scenarios")}</h4>
               <div className="ur-scroll"><table><thead><tr><th>{t("Scenario")}</th>
@@ -612,6 +648,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                   </tbody></table></div>
                 </details>)}
               <p>{t("Scenario paths are hypothetical resamples, not forecasts or calibrated probabilities.")}</p>
+              </>}
             </article>}
             <details><summary>{t("Cost model and limitations")}</summary>
               <p>{result.selection_method}</p>
