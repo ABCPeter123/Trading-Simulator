@@ -12,6 +12,20 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Historical backfill": "历史数据补全",
+  "Provider data archived": "已归档提供商数据",
+  "Retry queued": "已排队重试",
+  "Backfill queued": "历史补全已排队",
+  "Backfill status pending": "历史补全状态待确认",
+  "verified provider bars": "条已核对的提供商K线",
+  "Backfill error": "历史补全错误",
+  "Hourly reconciliation": "每小时数据核对",
+  "Last provider comparison passed": "最近的提供商数据核对通过",
+  "Waiting for bootstrap": "等待首次历史补全",
+  "Reconciliation not scheduled": "尚未安排数据核对",
+  "Next verification": "下次核对",
+  "Reconciliation error": "数据核对错误",
+  "Provider comparison is not an exchange-data guarantee.": "提供商数据核对不构成交易所级别的数据完整性保证。",
   "Collector": "采集程序",
   "Collector heartbeat stale": "采集程序心跳超时",
   "Collector activity unverified": "尚未确认采集程序活动",
