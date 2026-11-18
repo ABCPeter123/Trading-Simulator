@@ -121,3 +121,70 @@ export const cancelCustomPeriodStudy=(id:string)=>
   request<CustomPeriodJob>("/live/research/strategy-period/jobs/"+encodeURIComponent(id)+"/cancel",{
     method:"POST",
   });
+
+export interface WalkForwardRequest {
+  spec:TournamentSourceSpec;
+  search_width:"focused"|"extended";
+  target_cagr_pct:number;
+  target_sharpe:number;
+  risk_free_pct:number;
+  max_drawdown_pct:number;
+  slippage_bps:number;
+}
+export interface WalkForwardQuality {
+  cagr_pct:number|null;excess_sharpe:number|null;
+  annualized_volatility_pct:number|null;sessions:number;
+}
+export interface WalkForwardSelection {
+  model:string;max_position_pct:number;delay_sessions:1|2;
+  target_investment_pct?:number;equity_class_cap_pct?:number;
+  redistribute_excess?:boolean;
+}
+export interface WalkForwardFold {
+  fold:number;training_end:string;out_of_sample_start:string;out_of_sample_end:string;
+  training_sessions:number;out_of_sample_sessions:number;trials_evaluated:number;
+  eligible_trials:number;selected:WalkForwardSelection;selection_score:number;
+  training_objectives:WalkForwardQuality;out_of_sample_objectives:WalkForwardQuality;
+  out_of_sample_return_pct:number;out_of_sample_drawdown_pct:number;
+  trades:number;fees:number;
+}
+export interface WalkForwardResult {
+  status:"completed"|"insufficient_history"|"no_eligible_candidate";
+  research_only:boolean;no_real_orders:boolean;
+  sessions_available?:number;minimum_requirements?:string;
+  reason?:string;fold_failed?:number|string;
+  coverage?:{first_date:string;last_date:string;shared_sessions:number;warmup_sessions:number};
+  targets?:{cagr_pct:number;excess_sharpe:number;max_drawdown_pct:number;risk_free_pct:number};
+  model_search?:{width:string;candidate_count:number;total_train_evaluations:number;candidate_scope:string};
+  walk_forward?:{
+    folds:WalkForwardFold[];positive_folds:number;fold_count:number;
+    stitch_method:string;aggregate_objectives:WalkForwardQuality;aggregate_drawdown_pct:number;
+    curve:{time:number;value:number}[];
+    multiplicity_approximation:{raw_approx_p:number|null;bonferroni_approx_p:number|null;assumed_trials:number};
+  };
+  final_audit?:{
+    selected:WalkForwardSelection;selection_score:number;trials_evaluated:number;eligible_trials:number;
+    start_date:string;end_date:string;sessions:number;objectives:WalkForwardQuality;
+    return_pct:number;drawdown_pct:number;stress_objectives:WalkForwardQuality;
+    stress_return_pct:number;observed_targets_met:boolean;trades:number;fees:number;
+    curve:{time:number;value:number}[];
+  };
+  limitations?:string[];
+}
+export interface WalkForwardJob {
+  id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";
+  created_at:string;updated_at:string;progress:number;stage:string;
+  error_code:string|null;result:WalkForwardResult|null;
+}
+export const submitWalkForward=(body:WalkForwardRequest)=>
+  request<WalkForwardJob>("/live/research/walkforward/jobs",{
+    method:"POST",body:JSON.stringify(body),
+  });
+export const getWalkForward=(id:string)=>
+  request<WalkForwardJob>("/live/research/walkforward/jobs/"+encodeURIComponent(id));
+export const listWalkForward=()=>
+  request<WalkForwardJob[]>("/live/research/walkforward/jobs");
+export const cancelWalkForward=(id:string)=>
+  request<WalkForwardJob>("/live/research/walkforward/jobs/"+encodeURIComponent(id)+"/cancel",{
+    method:"POST",
+  });
