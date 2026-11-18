@@ -131,7 +131,7 @@ def _save(db, run_id, state):
 
 def create_season(symbols, period="5Y", starting_point=0.3, start_date=None, resolution="1d"):
     if not isinstance(symbols, list) or not 2 <= len(symbols) <= MAX_SYMBOLS:
-        raise HTTPException(422, detail="Choose 2-10 assets for one shared-cash season.")
+        raise HTTPException(422, detail="Choose 2-16 assets for one shared-cash season.")
     if len(set(symbols)) != len(symbols):
         raise HTTPException(422, detail="Each instrument can appear only once.")
     validate_replay_window(period, resolution)
