@@ -254,6 +254,9 @@ class StrategyPeriodBody(BaseModel):
     max_position_pct: float | None = Field(default=None,ge=10,le=50)
     delay_sessions: Literal[1,2] | None = None
     slippage_bps: float = Field(default=8,ge=0,le=100)
+    target_investment_pct: float | None = Field(default=None,ge=5,le=100)
+    equity_class_cap_pct: float | None = Field(default=None,ge=10,le=100)
+    redistribute_excess: bool | None = None
 
 
 @router.post("/research/strategy-period/jobs",status_code=202)
