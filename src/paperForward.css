@@ -21,3 +21,5 @@
 .pf-scroll td,.pf-scroll th{padding:8px;border-bottom:1px solid #385668;text-align:left}
 .pf-error{border:1px solid #ab6f70;color:#ffe2d7!important;padding:9px;border-radius:6px}
 .pf-disclaimer{font-size:11px}
+
+.pf-plot{width:100%;height:auto;max-height:260px;background:#1a3140;border:1px solid #3b5b69;border-radius:7px;margin:8px 0}
