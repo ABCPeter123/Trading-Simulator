@@ -192,6 +192,8 @@ def _universe(scope):
 
 
 def _basket_candidates(histories, eligible):
+    if not eligible:
+        return []
     names=set(eligible)
     baskets=[]
     for label,seed in BASKET_SEEDS.items():
@@ -279,7 +281,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         if loader is None and ix<len(universe)-1 and sym not in histories:
             pause(.4)
     baskets=_basket_candidates(histories,list(histories))
-    ranked=[];discarded=[]
+    ranked=[];discarded=[];evaluated=0
     # Five reusable portfolio templates × every viable basket. All candidates
     # use training/validation only; the final 20% is untouched by scoring.
     for ix,(label,symbols) in enumerate(baskets):
@@ -296,6 +298,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             if train_end<=pr.WARMUP or test_start-train_end<50:
                 raise ValueError("Insufficient separate validation history")
             for model in CANDIDATE_MODELS:
+                evaluated+=1
                 broker={**COST_ASSUMPTIONS,
                         "delay_sessions":params["delay_sessions"]}
                 train=pr._segment(model,symbols,market,metadata,pr.WARMUP,
@@ -353,9 +356,9 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
            len(universe),len(histories))
     return {
         "universe_count":len(universe),"screened_count":len(universe),
-        "eligible_count":len(histories)-(1 if "usdcad" in histories and "usdcad" not in universe else 0),
+        "eligible_count":sum(1 for sym in universe if sym in histories and sym not in rejected),
         "excluded_count":len(rejected),"exclusions":rejected,
-        "basket_count":len(baskets),"candidates_evaluated":len(baskets)*len(CANDIDATE_MODELS),
+        "basket_count":len(baskets),"candidates_evaluated":evaluated,
         "qualified_candidates":len(ranked),"rejected_baskets":discarded,
         "top10":leaders,
         "selection_method":"Validation-only ranking; held-out results and simulated future scenarios are never selection criteria.",
