@@ -1249,6 +1249,11 @@ const zh: Record<string, string> = {
   "Tournament allocation models rebalance the full saved basket every 21 shared trading sessions. Live signals are indicative, calculated from confirmed fills and recent daily history. Verify all holdings and execution prices manually.": "竞赛资产配置模型每 21 个共同交易日对完整资产组合调仓。实时信号只供参考，依据已确认成交和最新日线历史计算。请人工核对全部持仓和成交价格。",
   "Basket": "资产组合",
   "Validation drawdown": "验证期回撤",
+  "Allocate equal starting weights, then enforce per-asset and asset-class risk caps.": "先为各资产分配相等权重，再应用单资产及资产类别的风险上限。",
+  "Allocate more to assets with lower trailing 60-session volatility, subject to risk caps.": "根据过去 60 个交易日的波动率倒数配置权重，低波动资产占比更高，同时遵守风险上限。",
+  "Hold assets above their 126-session average and size them by inverse volatility.": "仅持有价格高于过去 126 个交易日均价的资产，再按波动率倒数分配仓位。",
+  "Select the strongest positive blend of 64- and 127-session momentum, sized by inverse volatility.": "综合 64 和 127 个交易日动量，选取动量最强且为正的资产，并按波动率倒数确定仓位。",
+  "Use inverse-volatility weights and reduce total exposure toward a 12% annual risk target.": "先按波动率倒数分配资产权重，再调整整体敞口以接近年化 12% 的风险目标。",
 };
 
 const LocaleContext = createContext<{
