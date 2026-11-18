@@ -78,20 +78,26 @@ def _correlation(a,b):
     return max(-1.,min(1.,cross/scale)) if scale>1e-12 else 1.
 
 
-def _greedy(pool, target, style):
+def _greedy(pool, target, style, *, corr_cache=None, anchor=None):
     """Training-only greedy construction with per-class and correlation budgets."""
     groups=defaultdict(list)
     for x in pool:groups[x["group"]].append(x)
     if len(pool)<2:return []
-    chosen=[]
+    chosen=([next(x for x in pool if x["symbol"]==anchor)] if anchor is not None else [])
     group_count=defaultdict(int)
+    if chosen:group_count[chosen[0]["group"]]+=1
+    cache=corr_cache if corr_cache is not None else {}
+    def correlation(a,b):
+        key=tuple(sorted((a["symbol"],b["symbol"])))
+        if key not in cache:cache[key]=_correlation(a,b)
+        return cache[key]
     group_targets={
         "diversified":{"equity":.5,"bond":.30,"commodity":.15,"real_estate":.10},
         "defensive":{"equity":.3,"bond":.50,"commodity":.25,"real_estate":.15},
         "momentum":{"equity":.75,"bond":.2,"commodity":.15,"real_estate":.1},
         "decorrelated":{"equity":.55,"bond":.35,"commodity":.2,"real_estate":.15},
     }[style]
-    for _ in range(min(target,len(pool))):
+    for _ in range(max(0,min(target,len(pool))-len(chosen))):
         available=[]
         for item in pool:
             if item in chosen:continue
@@ -101,8 +107,8 @@ def _greedy(pool, target, style):
             # Correlation matters only after at least one candidate is chosen;
             # strong positive correlations are penalized, not prohibited.
             if chosen:
-                correlation=mean(_correlation(item,other) for other in chosen)
-                concentration=max(0.,correlation)
+                aligned=mean(correlation(item,other) for other in chosen)
+                concentration=max(0.,aligned)
             else:concentration=0.
             strength=item["strength"]
             inverse_vol=1./(1.+item["volatility"]*60)
@@ -138,12 +144,12 @@ def discover(histories, eligible, group_for_symbol, *, max_extra=MAX_EXTRA_BASKE
     if not isinstance(max_extra,int) or not 1<=max_extra<=MAX_EXTRA_BASKETS:
         raise ValueError("Invalid bounded basket-search budget.")
     cutoff,pool,scanned=_features(histories,eligible,group_for_symbol)
-    result=[];seen=set()
+    result=[];seen=set();corr_cache={}
     # Rotate styles first so even a small budget gets varied portfolio
     # structures, rather than exhausting its cap on one basket size.
     for size in SIZES:
         for style in ("diversified","decorrelated","defensive","momentum"):
-            basket=_greedy(pool,size,style)
+            basket=_greedy(pool,size,style,corr_cache=corr_cache)
             key=tuple(sorted(basket))
             if len(basket)<2 or key in seen:continue
             seen.add(key)
@@ -152,12 +158,13 @@ def discover(histories, eligible, group_for_symbol, *, max_extra=MAX_EXTRA_BASKE
         if len(result)>=max_extra:break
     # Use alternate deterministic rank slices to improve search breadth
     # without enumerating 2^N subsets or exceeding 16 instruments.
+    anchors=sorted(pool,key=lambda x:(-x["strength"],x["symbol"]))
     for offset in (2,4,6,8):
-        if len(result)>=max_extra:break
-        rotated=pool[offset:]+pool[:offset]
+        if len(result)>=max_extra or offset>=len(anchors):break
         for size in (8,12):
             if len(result)>=max_extra:break
-            basket=_greedy(rotated,size,"decorrelated")
+            basket=_greedy(pool,size,"decorrelated",corr_cache=corr_cache,
+                           anchor=anchors[offset]["symbol"])
             key=tuple(sorted(basket))
             if len(basket)>=2 and key not in seen:
                 seen.add(key)
