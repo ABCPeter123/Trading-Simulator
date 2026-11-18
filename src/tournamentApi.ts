@@ -40,6 +40,7 @@ export interface TournamentSourceSpec {
   version:1|2; model:string; symbols:string[]; max_position_pct:number;
   delay_sessions:1|2; rebalance_sessions:number;
   restricted_research?:boolean; short_proxy_research?:boolean; research_only?:boolean;
+  target_investment_pct?:number;equity_class_cap_pct?:number;redistribute_excess?:boolean;
 }
 
 export interface PythonStrategySection {
