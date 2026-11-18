@@ -19,6 +19,7 @@ from . import strategy_source
 from . import strategy_period_queue
 from . import walkforward_queue
 from . import paper_forward
+from . import execution_windows
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -111,6 +112,19 @@ def signals(status:str|None=None):
 def signal_state(signal_id:str,body:SignalBody):
     private()
     return engine.update_signal(signal_id,body.status)
+
+@router.get("/execution-windows")
+def execution_window_observations():
+    private()
+    return execution_windows.observations()
+
+@router.post("/execution-windows/check")
+def check_execution_windows():
+    private()
+    reports=execution_windows.process_all()
+    return {"evaluated_signals":len(reports),
+            "data_unavailable":sum(x["status"]=="data_unavailable" for x in reports)}
+
 
 @router.get("/journal")
 def journal():

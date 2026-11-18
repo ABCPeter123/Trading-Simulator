@@ -97,6 +97,50 @@ The browser may close while monitoring continues. A Windows or
 Internet outage stops evaluation. Your scheduled job must run for the
 engine to work; Vercel itself only hosts the website.
 
+## Twelve-hour intraday execution evidence
+
+The **Live Strategy Machine** and **Portfolio & Trade Journal** now provide
+a read-only execution-window observation panel for recently generated USD
+stock/ETF signals. The independent local worker samples the same provider's
+five-minute OHLCV feed as the chart service. A private SQLite database
+`data/execution_windows.sqlite3` records bounded, restart-safe snapshots.
+
+- Three diagnostic scenarios wait at least **5, 30 or 60 minutes after the
+  signal creation timestamp**. A candle qualifies only when its full
+  five-minute interval has completed and it falls inside both the
+  recommendation expiry and a strict **12-hour** time horizon.
+- Only regular U.S. market candles between **9:30 AM and 4 PM New York
+  time** are included. Overnight, pre-market and after-hours trading are
+  excluded. Exchange holidays, halts and broker product restrictions are
+  not validated by these five-minute candles.
+- The model uses the **first eligible completed candle** after each
+  latency threshold. It estimates a buy/sell price from that candle's
+  **opening price**, an indicative half-spread and 8 basis points of
+  assumed slippage. These are not broker quotes or execution reports.
+- Illustrative liquidity is capped at **1% of that single candle's
+  recorded volume**. A partially sufficient candle is reported as
+  partial capacity; it is never turned into a confirmed trade. A missing
+  or zero-volume candle cannot establish executable capacity.
+- A worker that reads a candle more than ten minutes after its completion
+  labels it **retrospective**, to distinguish later historical inspection
+  from near-real-time observation.
+- If no completed eligible candle was seen within the window, the result
+  reports exactly that. It does **not** claim the broker was unable to fill.
+  Stale/demo/offline feeds, invalid timestamps or malformed OHLCV do not
+  overwrite earlier valid observations.
+- The original strategy code, actual broker journal and confirmed fills
+  stay separate. The monitoring UI may display manual trade execution
+  alongside the calculated scenarios, but no calculation edits those fills.
+- The public demo cannot call the observation endpoints. Automatic
+  observation is restricted to at most 20 recent signals per worker pass,
+  within 96 hours of their creation.
+
+An end-of-day U.S. signal at 4 PM cannot meet the following day's 9:30 AM
+regular open in 12 hours, since the normal opening is 17.5 hours later.
+The observer will not invent an overnight market fill. Its results are
+research diagnostics, not broker short-locate checks, verified trade
+capacity, or guarantees that a manual trade could execute.
+
 ## Notification setup
 
 The worker loads **only allowlisted keys** from your private, Git-ignored
