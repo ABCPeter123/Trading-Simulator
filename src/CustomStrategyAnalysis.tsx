@@ -58,15 +58,17 @@ export default function CustomStrategyAnalysis({spec,initialJob=null}: {spec:Tou
   const [position,setPosition]=useState(String(spec.max_position_pct));
   const [delay,setDelay]=useState<1|2>(spec.delay_sessions);
   const [slippage,setSlippage]=useState("8");
-  const [investment,setInvestment]=useState("95");
-  const [equityCap,setEquityCap]=useState("70");
-  const [redistribute,setRedistribute]=useState(false);
+  const [investment,setInvestment]=useState(String(spec.target_investment_pct??95));
+  const [equityCap,setEquityCap]=useState(String(spec.equity_class_cap_pct??70));
+  const [redistribute,setRedistribute]=useState(Boolean(spec.redistribute_excess));
   const [job,setJob]=useState<CustomPeriodJob|null>(null);
   const [error,setError]=useState("");
   const [busy,setBusy]=useState(false);
   useEffect(()=>{
     setJob(null);setError("");setPosition(String(spec.max_position_pct));
-    setDelay(spec.delay_sessions);setInvestment("95");setEquityCap("70");setRedistribute(false);
+    setDelay(spec.delay_sessions);setInvestment(String(spec.target_investment_pct??95));
+    setEquityCap(String(spec.equity_class_cap_pct??70));
+    setRedistribute(Boolean(spec.redistribute_excess));
   },[key]);
   useEffect(()=>{
     if(initialJob)setJob(initialJob);
