@@ -48,6 +48,7 @@ def normalize(settings=None):
         "borrow_policy":data.get("borrow_policy","block_unverified"),
         "fill_timing":data.get("fill_timing","next_open"),
         "rate_snapshot_date":ASSUMPTION_DATE,
+        "manual_margin_override":"margin_rate_pct" in data,
     }
     for key in ("margin_rate_pct","short_borrow_rate_pct","slippage_bps","fx_spread_bps"):
         fallback=0. if key=="fx_spread_bps" else defaults[key]
@@ -120,7 +121,8 @@ def order_fee_usd(profile, quantity, notional):
 def margin_rate_pct(profile, negative_cash_usd, fx_rate=1.):
     """Research margin rate, Wealthsimple USD tiered loan assumption."""
     if profile["account_type"]=="cash":return 0.
-    if profile["broker"]!="wealthsimple":return profile["margin_rate_pct"]
+    if profile["broker"]!="wealthsimple" or profile.get("manual_margin_override"):
+        return profile["margin_rate_pct"]
     # Use amount borrowed in CAD across accounts to establish tier, but we
     # cannot observe other Wealthsimple margin balances, so this is a proxy.
     cad=abs(negative_cash_usd)*fx_rate
