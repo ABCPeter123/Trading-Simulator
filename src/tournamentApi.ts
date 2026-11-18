@@ -177,6 +177,12 @@ export interface WalkForwardResult {
     selected:WalkForwardSelection;selection_score:number;trials_evaluated:number;eligible_trials:number;
     start_date:string;end_date:string;sessions:number;objectives:WalkForwardQuality;
     consistency?:WalkForwardConsistency;
+    prior_selected_comparison?:{
+      objective:"highest_growth"|"highest_sharpe"|"balanced";
+      selected:WalkForwardSelection;training_objectives:WalkForwardQuality;
+      audit_objectives:WalkForwardQuality;audit_return_pct:number;
+      audit_drawdown_pct:number;audit_trades:number;
+    }[];
     return_pct:number;drawdown_pct:number;stress_objectives:WalkForwardQuality;
     stress_return_pct:number;observed_targets_met:boolean;trades:number;fees:number;
     curve:{time:number;value:number}[];
