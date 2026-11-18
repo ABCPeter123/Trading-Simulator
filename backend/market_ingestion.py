@@ -21,7 +21,7 @@ from . import market, intraday
 DB_PATH = Path(os.environ.get("TRADING_SIM_INGEST_DB",
                              Path(__file__).resolve().parents[1]/"data"/"market_ingestion.sqlite3"))
 LOCK=RLock()
-MAX_SUBSCRIPTIONS=25
+MAX_SUBSCRIPTIONS=100
 INTERVAL_SECONDS={"1m":60,"5m":300,"15m":900,"1h":3600,"1d":86400}
 MIN_POLL={"1m":60,"5m":120,"15m":300,"1h":600,"1d":3600}
 SEED_WINDOW={"1m":"7D","5m":"30D","15m":"30D","1h":"6M","1d":"1Y"}
@@ -65,7 +65,7 @@ def subscribe(asset_id:str,resolution:str="5m"):
                               (asset_id,resolution)).fetchone()
         if current>=MAX_SUBSCRIPTIONS and (not existing or not existing["active"]):
             conn.rollback()
-            raise HTTPException(409,detail="Maximum 25 active ingestion subscriptions. Disable an existing subscription.")
+            raise HTTPException(409,detail="Maximum 100 active ingestion subscriptions. Disable an existing subscription.")
         conn.execute("""INSERT INTO subscriptions(asset_id,resolution,created_at,updated_at)
             VALUES(?,?,?,?)
             ON CONFLICT(asset_id,resolution) DO UPDATE SET active=1,updated_at=excluded.updated_at""",
@@ -146,8 +146,8 @@ def ingest_once(asset_id:str,resolution:str,now:datetime|None=None):
     # the latest provider observations. Do not create missing long archives.
     if bars:
         windows={
-            "1d":("2Y","5Y","10Y","MAX"),
-            "1h":("7D","30D","60D","6M","1Y"),
+            "1d":("2Y","5Y","10Y","15Y","20Y","MAX"),
+            "1h":("7D","30D","60D","6M","1Y","2Y"),
             "15m":("7D","30D","60D"),
             "5m":("7D","30D","60D"),
             "1m":("7D",),
