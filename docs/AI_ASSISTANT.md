@@ -65,6 +65,25 @@ stay private under `.local-state/logs/`. The backend must restart after
 changing local `.env` because a Vite refresh cannot change server environment
 variables.
 
+When status reports `connection_state: unreachable`, the models may be
+installed but **llama-server is not reachable on port 8081**. The launcher now
+checks that a freshly started router responds and shows the last lines of its
+local logs if startup fails. The AI panel retries its status while offline.
+
+To diagnose without printing environment variables or private trading data:
+
+```powershell
+.\scripts\diagnose-local-ai.ps1
+Get-Content .\.local-state\logs\ai.err.log -Tail 30
+```
+
+If there is no listening server and the launcher cannot find the executable,
+check `Get-Command llama-server`, open a fresh terminal after installing
+llama.cpp, or reinstall its executable. If you started the router manually,
+keep that process open or rerun `.\start-local.ps1 -NoBrowser` to let the
+launcher start it quietly. Neither step requires restarting the FastAPI
+backend if its `.env` already selects `llama_cpp`.
+
 From a saved simulation, click the AI button in the lower-right corner to
 expand or collapse the chat. Select TwIL or Qwen directly in the panel. The
 assistant is still read-only and generates draft DSL for separate review.
