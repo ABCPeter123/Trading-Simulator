@@ -184,6 +184,12 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   }
   const result=active?.result;
   const chosen=result?.top10[pick];
+  const standardModel=Boolean(chosen&&["equal_weight","inverse_volatility",
+    "trend_filter","relative_momentum","volatility_target"].includes(chosen.model));
+  const customResearchExposure=Boolean(standardModel&&active?.params.research_objective==="high_performance"&&(
+    (active.params.target_investment_pct??95)!==95||
+    (active.params.equity_class_cap_pct??70)!==70||
+    Boolean(active.params.redistribute_excess)));
   const selectedKey=active&&chosen?`${active.id}:${chosen.rank}`:"";
   const selectedSpec:TournamentModelSpec|null=active&&chosen?{
     version:(["leveraged_trend","long_short_momentum","market_neutral",
@@ -194,6 +200,10 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     restricted_research:chosen.restricted_research,
     short_proxy_research:chosen.short_proxy_research,
     research_only:chosen.research_only,
+    ...(standardModel&&active.params.research_objective==="high_performance"?{
+      target_investment_pct:active.params.target_investment_pct??95,
+      equity_class_cap_pct:active.params.equity_class_cap_pct??70,
+      redistribute_excess:Boolean(active.params.redistribute_excess)}:{}),
   }:null;
   return <main className="ur-shell">
     <header className="ur-header"><div>
@@ -353,10 +363,11 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                       t("Load this strategy into simulation")}
                   </button>}
                 <button type="button" className="ur-secondary"
-                  disabled={busy||chosen.research_only||chosen.restricted_research||chosen.short_proxy_research}
+                  disabled={busy||chosen.research_only||chosen.restricted_research||chosen.short_proxy_research||customResearchExposure}
                   aria-busy={busy&&promotionTarget==="live"}
                   onClick={()=>void promote("live")}>
                   {chosen.research_only?t("Live engine unavailable for short or margin models"):
+                    customResearchExposure?t("Live engine unavailable for custom research exposure"):
                     (chosen.restricted_research||chosen.short_proxy_research)?
                       t("Live engine unavailable for restricted ETFs"):
                     (busy&&promotionTarget==="live")?t("Opening Live Engine..."):
@@ -365,7 +376,9 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               </div>
               <p>{chosen.research_only?
                 t("Short and margin strategies can run in the historical signed-position research engine. Click Run this strategy in historical research to see simulated fills, equity changes and risk. Cash-only replay and live broker monitoring do not support these exposures."):
-                t("Supported cash-funded models can be loaded into simulation and paper monitoring. Leveraged and inverse ETFs are separately restricted for live monitoring.")}</p>
+                customResearchExposure?
+                  t("Custom investment and equity caps are preserved when saving and replaying this long-only strategy. Live monitoring is disabled until it can reproduce those research exposure rules."):
+                  t("Supported cash-funded models can be loaded into simulation and paper monitoring. Leveraged and inverse ETFs are separately restricted for live monitoring.")}</p>
               {result.research_objective==="high_performance"&&chosen.validation_objectives&&<div className="ur-objective-results">
                 <h4>{t("Return and risk objectives")}</h4>
                 <div className="ur-kpis">
