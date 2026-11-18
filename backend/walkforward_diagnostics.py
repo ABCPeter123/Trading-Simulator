@@ -195,3 +195,83 @@ def parameter_sensitivity(selected_config, symbols, market, metadata, end,
             "cagr_range_pct_points":round(max(numeric)-min(numeric),4)
                                      if len(numeric)>=2 else None,
             "interpretation":"Prior-only local parameter neighborhood; informational, never used to reselect the audited portfolio."}
+
+
+
+def spy_price_reference(raw, market, symbols, start, stop, settings, *,
+                        spread_bps=2.):
+    """Independent SPY share price benchmark on exact strategy sessions.
+
+    A single USD-funded buy at the first observed open, then mark holdings at
+    each daily close. A provider's raw or adjusted price convention is NOT
+    assumed to reinvest dividends. If any strategy session is missing from
+    SPY's data, mark unavailable rather than forward-fill or cherry-pick dates.
+
+    No market reference is passed to model fitting, training scoring, ranking,
+    final selection or the selection-bias diagnostics.
+    """
+    from datetime import datetime, timezone
+    unavailable={"status":"unavailable","symbol":"SPY",
+                 "reason":"No complete valid SPY observations for these exact sessions."}
+    if not isinstance(raw,dict) or raw.get("is_demo"):
+        return unavailable
+    bars=raw.get("bars")
+    if not isinstance(bars,list) or len(bars)<2:
+        return unavailable
+    observed={}
+    last=-1
+    for bar in bars:
+        try:
+            timestamp=int(bar["time"])
+            op,close=float(bar["open"]),float(bar["close"])
+            if (timestamp<=last or not isfinite(op) or not isfinite(close)
+                or min(op,close)<=0):
+                return unavailable
+            key=datetime.fromtimestamp(timestamp,timezone.utc).date().isoformat()
+            if key in observed:return unavailable
+            observed[key]=(op,close)
+            last=timestamp
+        except (ValueError,TypeError,KeyError,OverflowError):
+            return unavailable
+    sessions=market[symbols[0]][start:stop]
+    if not sessions:return unavailable
+    aligned=[]
+    for day in sessions:
+        key=datetime.fromtimestamp(day["time"],timezone.utc).date().isoformat()
+        prices=observed.get(key)
+        if prices is None:return unavailable
+        aligned.append((day["time"],prices[0],prices[1]))
+    commission=settings["commission_usd"]
+    slip=settings["slippage_bps"]
+    fx=(settings["fx_conversion_bps"] if settings["base_currency"]!="USD" else 0.)
+    if (not all(isinstance(v,(int,float)) and isfinite(v) and v>=0
+                for v in (commission,slip,fx,spread_bps))):
+        return unavailable
+    buy_price=aligned[0][1]*(1+(spread_bps/2+slip)/10000)
+    # One buy at the first open, no automatic reinvestment, no final liquidation.
+    per_share=buy_price*(1+fx/10000)
+    shares=max(0,int((portfolio.STARTING_CAPITAL-commission)//per_share))
+    if shares<1:return unavailable
+    fee=commission+shares*buy_price*fx/10000
+    cash=portfolio.STARTING_CAPITAL-shares*buy_price-fee
+    if cash<-.0001:return unavailable
+    curve=[{"time":stamp,"value":round(cash+shares*close,4)}
+           for stamp,_,close in aligned]
+    quality=objectives.performance(curve,risk_free_pct=settings["risk_free_pct"])
+    return {
+        "status":"available","symbol":"SPY","method":"single_buy_hold_price_only",
+        "source":str(raw.get("source") or "unknown observed market archive")[:120],
+        "first_session":datetime.fromtimestamp(aligned[0][0],timezone.utc).date().isoformat(),
+        "last_session":datetime.fromtimestamp(aligned[-1][0],timezone.utc).date().isoformat(),
+        "matched_sessions":len(aligned),
+        "return_pct":round((curve[-1]["value"]/portfolio.STARTING_CAPITAL-1)*100,4),
+        "cagr_pct":quality["cagr_pct"],
+        "excess_sharpe":quality["excess_sharpe"],
+        "drawdown_pct":_max_drawdown(curve),
+        "commission_usd":commission,
+        "fx_bps_on_buy":fx,
+        "spread_bps":spread_bps,
+        "slippage_bps_on_buy":slip,
+        "income_treatment":"Price-only benchmark. Dividends and distributions are not explicitly reinvested or credited; provider price adjustment may vary.",
+        "selection_used_this_reference":False
+    }
