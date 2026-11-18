@@ -310,7 +310,17 @@ try {
       await page.locator(".sim-mode-tabs").getByRole("button",{name:section,exact:true}).click();
       await visible(page,target,width+" "+main+" / "+section);
       const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
-      if(overflow>3)throw new Error(width+" "+main+" / "+section+" overflows by "+overflow+"px");
+      if(overflow>3){
+        const offenders=await page.evaluate(()=>[...document.querySelectorAll("*")].flatMap(el=>{
+          const box=el.getBoundingClientRect();
+          if(box.right<=innerWidth+3||box.width===0)return [];
+          return [{tag:el.tagName,cls:String(el.className).slice(0,90),
+            right:Math.round(box.right),left:Math.round(box.left),
+            width:Math.round(box.width),scroll:el.scrollWidth}];
+        }).sort((a,b)=>b.right-a.right).slice(0,10));
+        throw new Error(width+" "+main+" / "+section+" overflows by "+overflow+
+          "px. Elements: "+JSON.stringify(offenders));
+      }
     }
     await page.locator(".ops-main-tabs").getByRole("button",{name:"Research Lab",exact:true}).click();
     await page.locator(".sim-mode-tabs").getByRole("button",{name:"Single-asset Research",exact:true}).click();
