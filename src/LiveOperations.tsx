@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useState} from "react";
+import {useCallback,useEffect,useRef,useState} from "react";
 import {Activity,AlertTriangle,Bell,Check,Clock3,PlayCircle,RefreshCw,Save,ShieldCheck,Wallet} from "lucide-react";
 import {useI18n} from "./i18n";
 import {request} from "./api";
@@ -48,6 +48,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
   const [notification,setNotification]=useState<NotificationStatus|null>(null);
   const [library,setLibrary]=useState<(SavedStrategy|TournamentVersion)[]>([]);
   const [selectedStrategy,setSelectedStrategy]=useState("");
+  const appliedPreferred=useRef<string|undefined>(undefined);
   const [capital,setCapital]=useState("100000");
   const [monitorResolution,setMonitorResolution]=useState<"1d"|"1h"|"15m">("1d");
   const [allocation,setAllocation]=useState("10");
@@ -100,8 +101,10 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
     if(rejected?.status==="rejected")throw rejected.reason;
   },[]);
   useEffect(()=>{
+    if(!preferredStrategyId||appliedPreferred.current===preferredStrategyId)return;
     const selected=library.find(item=>item.id===preferredStrategyId);
     if(selected){
+      appliedPreferred.current=preferredStrategyId;
       setSelectedStrategy(selected.id);
       if("model" in selected){
         setAllocation(String(selected.max_position_pct));
@@ -118,6 +121,9 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
       setAllocation(String(item.max_position_pct));
       setDailyLimit("20");
       setMonitorResolution("1d");
+    }else{
+      setAllocation("10");
+      setDailyLimit("4");
     }
   };
   useEffect(()=>{
