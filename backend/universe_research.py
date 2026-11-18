@@ -186,10 +186,9 @@ def _universe(scope):
     # Deterministic catalog order. Research-only references, not broker-approved
     # tradability, are still screened and separately marked as ineligible.
     names=assets.list_instruments(limit=2000)
-    wanted={"stocks":{"Stocks"},"etfs":{"ETFs"},"all":{"Stocks","ETFs"}}[scope]
-    return [x["id"] for x in names if assets.get_instrument(x["id"]).kind in wanted
-            and assets.get_instrument(x["id"]).currency in ("CAD","USD")
-            and assets.get_instrument(x["id"]).ticker]
+    wanted={"stocks":{"Stocks"},"etfs":{"ETFs"}}.get(scope)
+    return [x["id"] for x in names if wanted is None
+            or assets.get_instrument(x["id"]).kind in wanted]
 
 
 def _basket_candidates(histories, eligible):
@@ -202,15 +201,17 @@ def _basket_candidates(histories, eligible):
     # Group-screen every instrument. These baskets are formed from training
     # and validation only. Do not screen using held-out returns.
     by_group=defaultdict(list)
+    latest=min(int(histories[s]["bars"][-1]["time"]) for s in eligible)
+    # Fixed absolute training cutoff shared by every asset. Selection of
+    # basket membership cannot use the validation or test calendar years.
+    training_cutoff=latest-2*365*86400
     for sym in eligible:
         item=assets.get_instrument(sym)
         group=pr._group(sym,item.kind)
         bars=histories[sym]["bars"]
-        cutoff=int(len(bars)*.8)
-        prior=max(0,cutoff-126)
-        sample=bars[:cutoff]
-        if prior>=len(sample) or not sample[prior]["close"]:continue
-        strength=sample[-1]["close"]/sample[prior]["close"]-1
+        sample=[bar for bar in bars if int(bar["time"])<=training_cutoff]
+        if len(sample)<180:continue
+        strength=sample[-1]["close"]/sample[-127]["close"]-1
         by_group[group].append((float(strength),sym))
     for g in by_group:by_group[g].sort(reverse=True)
     # Evaluate sector/instrument breadth without trying 10^338 combinations.
@@ -259,7 +260,11 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
     report=report or (lambda *args:None)
     universe=_universe(params["scope"]);histories={};rejected={}
     for ix,sym in enumerate(universe):
+        item=assets.get_instrument(sym)
         try:
+            if item.kind not in ("Stocks","ETFs") or item.currency not in ("USD","CAD") or not item.ticker:
+                rejected[sym]="unsupported_broker_product_or_currency"
+                continue
             response=_read(sym,load=loader)
             if response.get("is_demo") or not _quality(response.get("bars")):
                 raise ValueError("Insufficient or invalid real daily OHLCV")
@@ -356,7 +361,9 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         "selection_method":"Validation-only ranking; held-out results and simulated future scenarios are never selection criteria.",
         "execution_assumptions":{**COST_ASSUMPTIONS,"configured_delay_sessions":params["delay_sessions"],
                                  "commission_note":"USD $0 listed-stock/ETF commission. FX 1.5% assumed on any cross-currency trade; this is conservative and account-dependent."},
+        "test_used_for_selection":False,
         "limitations":[
+            "The entire reference catalog is checked; only USD/CAD stocks and ETFs with sufficient actual daily history enter the present cash-account optimizer. Futures, currencies, crypto, options and unsupported contract types are explicitly excluded, not falsely treated as executable.",
             "Only symbols with sufficient actual valid historical daily data are evaluated. Exclusions are reported, not backfilled with synthetic observations.",
             "Broker eligibility varies by account and instrument. Shorting shares is not supported by Wealthsimple; inverse/leveraged ETFs are separate risky research products, never automatic shorts.",
             "No direct Wealthsimple broker-price API, order routing, options margin engine, cash settlement, borrowing, taxes or dividend-adjusted total returns.",
