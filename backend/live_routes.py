@@ -16,6 +16,7 @@ from . import research_queue
 from . import universe_research
 from . import tournament_strategies
 from . import strategy_source
+from . import strategy_period_queue
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -244,6 +245,33 @@ class TournamentSourceBody(BaseModel):
 def tournament_strategy_source(body: TournamentSourceBody):
     private()
     return strategy_source.source_for_model(body.spec, body.context)
+
+
+class StrategyPeriodBody(BaseModel):
+    spec: dict
+    start_date: str | None = Field(default=None,max_length=10)
+    end_date: str | None = Field(default=None,max_length=10)
+    max_position_pct: float | None = Field(default=None,ge=10,le=50)
+    delay_sessions: Literal[1,2] | None = None
+    slippage_bps: float = Field(default=8,ge=0,le=100)
+
+
+@router.post("/research/strategy-period/jobs",status_code=202)
+def create_strategy_period_study(body:StrategyPeriodBody):
+    private()
+    return strategy_period_queue.enqueue(body.model_dump(exclude_none=True))
+
+
+@router.get("/research/strategy-period/jobs/{job_id}")
+def get_strategy_period_study(job_id:str):
+    private()
+    return strategy_period_queue.get_job(job_id)
+
+
+@router.post("/research/strategy-period/jobs/{job_id}/cancel")
+def cancel_strategy_period_study(job_id:str):
+    private()
+    return strategy_period_queue.cancel(job_id)
 
 
 @router.get("/research/universe/strategies")
