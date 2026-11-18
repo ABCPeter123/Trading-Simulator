@@ -13,7 +13,7 @@ from math import isfinite, sqrt
 from statistics import mean, stdev
 
 SIZES=(6,8,12,16)
-MAX_EXTRA_BASKETS=24
+MAX_EXTRA_BASKETS=16
 POOL_PER_GROUP=14
 _MIN_SCREEN=180
 _MOMENTUM_LOOKBACK=126
