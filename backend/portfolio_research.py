@@ -235,8 +235,24 @@ def _weights(model, symbols, closes, i, metadata, max_weight):
     return targets
 
 
-def _segment(model, symbols, market, metadata, start, stop, max_weight):
-    """One shared cash ledger and next-open fills, never prior-close fills."""
+def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
+             broker=None):
+    """One cash ledger; optional broker stress assumptions for research only.
+
+    Default arguments preserve every existing experiment. A delayed signal
+    reads older observations, and no fill can occur before the next open.
+    broker commission and FX costs are explicit, not vendor quotes.
+    """
+    broker = broker or {}
+    delay_sessions = int(broker.get("delay_sessions", 1))
+    if delay_sessions not in (1, 2):
+        raise ValueError("Supported research delay is one or two common sessions.")
+    slip_bps = float(broker.get("slippage_bps", 2))
+    commission = float(broker.get("commission_usd", 1))
+    fx_bps = float(broker.get("fx_conversion_bps", 0))
+    base_currency = str(broker.get("base_currency", "USD"))
+    if min(slip_bps, commission, fx_bps) < 0 or base_currency not in ("USD","CAD"):
+        raise ValueError("Invalid broker cost assumptions.")
     cash = STARTING_CAPITAL
     holdings = {s:0. for s in symbols}
     closes = {s:[b["close"] for b in market[s]] for s in symbols}
@@ -246,13 +262,14 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight):
     for i in range(start, stop):
         opens = {s:market[s][i]["open"] for s in symbols}
         if (i-start)%REBALANCE_SESSIONS==0:
-            targets = _weights(model,symbols,closes,i,metadata,max_weight)
+            signal_index=max(1,i-(delay_sessions-1))
+            targets = _weights(model,symbols,closes,signal_index,metadata,max_weight)
             total_equity = cash+sum(holdings[s]*opens[s] for s in symbols)
             # Sell first, freeing cash for reallocations.
             for side in ("sell","buy"):
                 for s in symbols:
                     px = opens[s]*(1+(1 if side=="buy" else -1)*
-                                   (metadata[s]["spread_bps"]/2+2)/10000)
+                                   (metadata[s]["spread_bps"]/2+slip_bps)/10000)
                     desired = (total_equity*targets[s])/px
                     # Fractional crypto; integer equity/ETF shares.
                     if metadata[s]["kind"]!="Crypto":
@@ -270,11 +287,13 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight):
                             qty = math.floor(qty+1e-9)
                     if qty*px<1 or qty<=1e-9:
                         continue
-                    fee=max(1.,qty*.005)
+                    fee=commission+(qty*px*fx_bps/10000
+                        if metadata[s]["currency"]!=base_currency else 0.)
                     if side=="buy":
                         while qty>0 and qty*px+fee>cash+1e-6:
                             qty = qty*.999 if metadata[s]["kind"]=="Crypto" else qty-1
-                            fee=max(1.,qty*.005)
+                            fee=commission+(qty*px*fx_bps/10000
+                        if metadata[s]["currency"]!=base_currency else 0.)
                         if qty<=0:continue
                         cash-=qty*px+fee
                         holdings[s]+=qty
@@ -287,7 +306,7 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight):
                                    "side":side,"quantity":round(qty,8),
                                    "price":round(px,6),"fee":round(fee,6),
                                    "notional":round(qty*px,2),
-                                   "execution":"next_session_open"})
+                                   "execution":"next_session_open" if delay_sessions==1 else "second_session_open"})
             equity_open = cash+sum(holdings[s]*opens[s] for s in symbols)
             current = {s:holdings[s]*opens[s]/equity_open for s in symbols}
             rebalance_samples.append({"time":market[symbols[0]][i]["time"],
