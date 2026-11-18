@@ -325,7 +325,7 @@ def add_instrument(request: ImportTicker):
 from . import portfolio_arcade as portfolio
 
 class PortfolioSeasonStart(BaseModel):
-    asset_ids: list[str] = Field(min_length=2, max_length=5)
+    asset_ids: list[str] = Field(min_length=2, max_length=10)
     period: Literal["7D", "30D", "60D", "6M", "1Y", "2Y", "5Y", "10Y", "MAX"] = "5Y"
     resolution: Literal["1m", "5m", "15m", "1h", "1d"] = "1d"
     starting_point: float = Field(default=0.3, ge=0.15, le=0.75)
@@ -347,6 +347,22 @@ def portfolio_runs():
 def portfolio_new(request: PortfolioSeasonStart):
     return portfolio.create_season(request.asset_ids, request.period,
                                     request.starting_point, request.start_date, request.resolution)
+
+class TournamentReplayStart(BaseModel):
+    strategy_id: str = Field(min_length=1, max_length=100)
+    period: Literal["2Y", "5Y", "10Y", "MAX"] = "MAX"
+    starting_point: float = Field(default=0.30, ge=0.15, le=0.75)
+    start_date: str | None = Field(default=None, max_length=10)
+
+
+@app.post("/api/portfolio-seasons/from-tournament")
+def portfolio_from_tournament(body: TournamentReplayStart):
+    from . import tournament_strategies
+    # The private strategy lookup rejects public-demo access before loading data.
+    tournament_strategies.get(body.strategy_id)
+    return portfolio.create_tournament_season(
+        body.strategy_id, body.period, body.starting_point, body.start_date)
+
 
 @app.get("/api/portfolio-seasons/{run_id}")
 def portfolio_get(run_id: str):
