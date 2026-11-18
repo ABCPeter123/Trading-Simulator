@@ -31,10 +31,12 @@ def test_catalog_includes_diversified_us_canadian_and_reference_instruments():
         ("vxus", "ETFs", "USD", True),
         ("sgov", "ETFs", "USD", True),
         ("spx", "Indices", "USD", False),
-        ("tsx", "Indices", "USD", False),
+        ("tsx", "Indices", "CAD", False),
         ("hg", "Futures", "USD", False),
         ("usdcny", "Forex", "CNY", False),
         ("cm", "Stocks", "CAD", False),
+        ("csu", "Stocks", "CAD", False),
+        ("spym", "ETFs", "USD", True),
     ]:
         asset = assets.get_instrument(asset_id)
         assert (asset.kind, asset.currency, asset.tradable) == (
