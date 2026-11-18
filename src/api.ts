@@ -48,7 +48,7 @@ export function apiErrorMessage(status: number, payload: unknown): string {
   for (const issue of detail.slice(0, 3)) {
     if (!issue || typeof issue !== "object") continue;
     const location = "loc" in issue && Array.isArray(issue.loc) ? issue.loc : [];
-    const field = location.filter((item): item is string =>
+    const field = location.filter((item: unknown): item is string =>
       typeof item === "string" && item !== "body" && item !== "query" &&
       /^[A-Za-z_][A-Za-z0-9_]*$/.test(item)).slice(0, 2).join(".");
     const message = "msg" in issue && typeof issue.msg === "string"
