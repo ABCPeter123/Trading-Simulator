@@ -233,7 +233,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     </div></header>
     <div className="ur-steps">{[
       ["1",t("Collect history"),t("Screen actual daily OHLCV, exclude unavailable assets.")],
-      ["2",t("Compare methods"),t("Try diversified baskets and five cash-backed portfolio models.")],
+      ["2",t("Compare methods"),bilingual("Test diversified baskets, advanced research models and shared-cash blends.","测试多元资产组合、进阶研究模型及共享现金的混合策略。")],
       ["3",t("Rank validation"),t("The held-out final 20% never determines the ranking.")],
       ["4",t("Stress test"),t("Inspect execution costs, extra delay and hypothetical paths.")],
     ].map(([n,title,desc])=><article key={n}><b>{n}. {title}</b><p>{desc}</p></article>)}</div>
@@ -418,10 +418,12 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
                 {chosen.research_only?
-                  <button type="button" className="ur-primary" disabled={busy}
+                  <button type="button" className="ur-primary" disabled={busy||chosen.model==="blended_portfolio"}
                     aria-busy={busy&&promotionTarget==="research"}
                     onClick={()=>void promote("research")}>
-                    {busy&&promotionTarget==="research"?t("Starting historical study..."):
+                    {chosen.model==="blended_portfolio"?
+                      bilingual("Blend saved in report, standalone replay not yet supported","混合策略已保存在报告中，尚不支持单独回放"):
+                      busy&&promotionTarget==="research"?t("Starting historical study..."):
                       t("Run this strategy in historical research")}
                   </button>:
                   <button type="button" className="ur-primary" disabled={busy}
@@ -442,7 +444,9 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                       t("Open in Live Engine (paper first)")}
                 </button>
               </div>
-              <p>{chosen.research_only?
+              <p>{chosen.model==="blended_portfolio"?
+                bilingual("Shared-cash blends use one backtest ledger and are retained in this private study. Live and custom-period execution are disabled until the importer supports their model sleeves.","共享现金混合策略在同一个回测账本运行并保存在私人研究中。在导入器支持策略权重之前，不提供实时运行和自定义区间执行。"):
+                chosen.research_only?
                 t("Short and margin strategies can run in the historical signed-position research engine. Click Run this strategy in historical research to see simulated fills, equity changes and risk. Cash-only replay and live broker monitoring do not support these exposures."):
                 customResearchExposure?
                   t("Custom investment and equity caps are preserved when saving and replaying this long-only strategy. Live monitoring is disabled until it can reproduce those research exposure rules."):
