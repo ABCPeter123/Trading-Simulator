@@ -150,6 +150,10 @@ def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
             raise HTTPException(422, detail="Tournament models support daily monitoring only.")
         if spec.get("research_only"):
             raise HTTPException(422, detail="Synthetic short-share and margin strategies are historical research only, not deployable to the current live machine.")
+        if (float(spec.get("target_investment_pct",95.))!=95.
+            or float(spec.get("equity_class_cap_pct",70.))!=70.
+            or bool(spec.get("redistribute_excess",False))):
+            raise HTTPException(422,detail="Custom research exposure controls are not yet supported in live monitoring. Historical replay retains these settings.")
         if spec.get("restricted_research") or spec.get("short_proxy_research"):
             raise HTTPException(422, detail="Leveraged and inverse ETF research is not approved for live signal monitoring.")
         if max_allocation_pct < spec["max_position_pct"]:
