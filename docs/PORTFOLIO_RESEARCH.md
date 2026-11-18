@@ -177,3 +177,54 @@ overlapping real sessions, all validation rankings, a selected
 held-out-test equity curve, the equal-weight comparison, weights,
 trades, risk statistics and correlation matrix. The file is Git-
 ignored and stays on your desktop. Preserve an encrypted backup.
+
+
+## Research robustness extension (local only)
+
+Universe-wide studies now accept explicit **account funding currency (USD by default)**,
+per-order commission, slippage in basis points, and cross-currency conversion bps.
+USD-funded USD instruments do not incur a synthetic CAD conversion. A conversion
+assumption applies only when an instrument's recorded currency differs from the
+funding currency. The settings are stored with each private job so old studies
+retain their original parameters; rerun a study to compare new assumptions.
+
+Enable **shared-cash blended candidates** to test bounded two- or three-sleeve
+long-only combinations of momentum, trend, equal-weight and defensive models.
+Every sleeve generates its allocation using completed historical observations,
+then the allocation engine nets orders in one common cash ledger, with fees paid
+once. These blends are **historical research only**: do not import them into the
+cash replay or live machine until their runtime and versioning support has been
+implemented. Margin and short models remain separate signed-ledger research.
+
+The universe study reports a **validation-only score breakdown**. Growth, Sharpe,
+drawdown, turnover, subperiod consistency and other deductions appear separately.
+Held-out results do not influence ranking. The score is a heuristic, not a
+probability of profitability. It also reports separate explicit charges and
+estimated spread/slippage implicit in historical fill prices; do not add implicit
+costs to the equity curve again.
+
+Walk-forward research supports a **comprehensive bounded candidate grid** of up
+to 48 configurations, including a subset of shared-ledger blends. Each training
+window is chosen from already-completed historical data. Three chronological
+unseen folds and a final sealed audit remain separate, and observed audit returns
+are not used to rerank. Audit-only execution scenarios apply configured trading
+assumptions, a two-session delay with at least 20 bps slippage, and a more
+conservative two-session delay with at least 35 bps. Delays are in common market
+sessions, **not a reliable 12-hour intraday execution guarantee**.
+
+### Still not implemented
+
+* Exhaustive combinatorial instrument optimization or point-in-time delisted
+  stock coverage. Current historical prices can be affected by survivorship,
+  corporate-action and data-source limitations.
+* A full broker order book or intraday executable quote reconstruction;
+  estimates use daily next-session opens and indicative spreads.
+* Shared-ledger signed (margin/short) mixtures or automatic execution of blends
+  in the live monitor.
+* Independently trained predictive ML features or broker-verified future
+  projections. Scenario resampling is hypothetical, not a calibrated forecast.
+* Automatic selection using future or held-out audit results. Such selection
+  would contaminate the audit and is intentionally prohibited.
+
+Actual owner study inputs, chosen configurations, rankings, outputs and trades
+remain in Git-ignored local private databases and must never enter public source.

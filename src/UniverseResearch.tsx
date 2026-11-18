@@ -23,7 +23,12 @@ type ValidationWindow={start:number;end:number;sessions:number;return_pct:number
 type ValidationStability={windows:ValidationWindow[];positive_windows:number;
   window_count:number;worst_window_return_pct:number|null;
   all_windows_positive:boolean;sufficient_history:boolean};
+type ScoreBreakdown={total:number;definition:string;components:Record<string,number>;eligible:boolean};
+type CostAudit={explicit_total_usd:number;transaction_and_fx_usd:number;margin_interest_usd:number;
+  short_borrow_usd:number;estimated_spread_usd:number;estimated_slippage_usd:number};
 type Winner={rank:number;basket_type:string;symbols:string[];model:string;validation_score:number;training:Metric;
+  sleeves?:{model:string;weight_pct:number}[]|null;
+  score_breakdown?:ScoreBreakdown;held_out_cost_audit?:CostAudit;
   validation_objectives?:ObjectiveMetrics;held_out_objectives?:ObjectiveMetrics;
   delayed_stress_objectives?:ObjectiveMetrics;
   validation_stability?:ValidationStability;pareto_optimal_validation?:boolean;
@@ -50,7 +55,8 @@ type Job={id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";c
     research_objective?:"balanced"|"high_performance";target_cagr_pct?:number;
     target_sharpe?:number;risk_free_pct?:number;
     target_investment_pct?:number;equity_class_cap_pct?:number;
-    redistribute_excess?:boolean};result:Outcome|null};
+    redistribute_excess?:boolean;base_currency?:"USD"|"CAD";slippage_bps?:number;
+    commission_usd?:number;fx_conversion_bps?:number;include_blends?:boolean};result:Outcome|null};
 import {validatedPercent} from "./validatedPercent";
 
 const pct=(x:number)=>Number.isFinite(x)?x.toFixed(2)+"%":"N/A";
@@ -58,9 +64,15 @@ const label=(x:string)=>x.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase()
 export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpenLive}:{
   onOpenDiscovery:()=>void;onOpenSimulation:(runId:string)=>void;onOpenLive:(strategyId:string)=>void;
 }){
-  const {t}=useI18n();
+  const {t,locale}=useI18n();
+  const bilingual=(en:string,cn:string)=>locale==="zh-CN"?cn:en;
   const [scope,setScope]=useState<"all"|"etfs"|"stocks">("all");
   const [delay,setDelay]=useState<1|2>(1);
+  const [baseCurrency,setBaseCurrency]=useState<"USD"|"CAD">("USD");
+  const [slippage,setSlippage]=useState("8");
+  const [commission,setCommission]=useState("0");
+  const [fxBps,setFxBps]=useState("150");
+  const [includeBlends,setIncludeBlends]=useState(true);
   const [drawdown,setDrawdown]=useState("30");
   const [weight,setWeight]=useState("35");
   const [objective,setObjective]=useState<"balanced"|"high_performance">("high_performance");
@@ -115,9 +127,14 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
       const risk_free_pct=validatedPercent(riskFree,"Risk-free annual return assumption",0,15);
       const target_investment_pct=validatedPercent(targetInvestment,"Target invested percentage",5,100);
       const equity_class_cap_pct=validatedPercent(equityLimit,"Equity class exposure limit",10,100);
+      const slippage_bps=validatedPercent(slippage,"Slippage in basis points",0,100);
+      const commission_usd=validatedPercent(commission,"Commission in USD",0,30);
+      const fx_conversion_bps=validatedPercent(fxBps,"FX conversion in basis points",0,300);
       const job=await request<Job>("/live/research/universe/jobs",{method:"POST",
         body:JSON.stringify({scope,delay_sessions:delay,
           max_drawdown_pct,max_position_pct,research_objective:objective,
+          base_currency:baseCurrency,slippage_bps,commission_usd,fx_conversion_bps,
+          include_blends:includeBlends,
           target_cagr_pct,target_sharpe,risk_free_pct,
           target_investment_pct:objective==="high_performance"?target_investment_pct:95,
           equity_class_cap_pct:objective==="high_performance"?equity_class_cap_pct:70,
@@ -175,10 +192,13 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     if(!active||!result?.top10.length)return;
     setBusy(true);setError("");setNotice("");
     try{
+      let saved=0;
       for(const winner of result.top10){
-        await importTournamentRank(active.id,winner.rank);
+        if(winner.model==="blended_portfolio")continue;
+        await importTournamentRank(active.id,winner.rank);saved++;
       }
-      setNotice(t("All ranked portfolio models saved privately. Open the Live Engine to select a paper strategy."));
+      setNotice(bilingual(`${saved} compatible models saved privately. Research-only blends remain in the saved research report.`,
+        `已私下保存 ${saved} 个兼容模型。混合策略仅保留于研究报告。`));
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);}
   }
@@ -191,7 +211,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     (active.params.equity_class_cap_pct??70)!==70||
     Boolean(active.params.redistribute_excess)));
   const selectedKey=active&&chosen?`${active.id}:${chosen.rank}`:"";
-  const selectedSpec:TournamentModelSpec|null=active&&chosen?{
+  const selectedSpec:TournamentModelSpec|null=active&&chosen&&chosen.model!=="blended_portfolio"?{
     version:(["leveraged_trend","long_short_momentum","market_neutral",
       "defensive_rotation","diversified_risk_parity","equity_hedge"].includes(chosen.model)?2:1),
     model:chosen.model,symbols:chosen.symbols,
@@ -213,7 +233,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     </div></header>
     <div className="ur-steps">{[
       ["1",t("Collect history"),t("Screen actual daily OHLCV, exclude unavailable assets.")],
-      ["2",t("Compare methods"),t("Try diversified baskets and five cash-backed portfolio models.")],
+      ["2",t("Compare methods"),bilingual("Test diversified baskets, advanced research models and shared-cash blends.","测试多元资产组合、进阶研究模型及共享现金的混合策略。")],
       ["3",t("Rank validation"),t("The held-out final 20% never determines the ranking.")],
       ["4",t("Stress test"),t("Inspect execution costs, extra delay and hypothetical paths.")],
     ].map(([n,title,desc])=><article key={n}><b>{n}. {title}</b><p>{desc}</p></article>)}</div>
@@ -232,6 +252,24 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             <option value={1}>{t("Next session open")}</option>
             <option value={2}>{t("Second session open")}</option>
           </select></label>
+        <div className="ur-objective-panel">
+          <strong>{bilingual("Broker execution assumptions","经纪商执行成本假设")}</strong>
+          <label>{bilingual("Funding currency","账户资金币种")}
+            <select value={baseCurrency} onChange={e=>setBaseCurrency(e.target.value as "USD"|"CAD")}>
+              <option value="USD">USD</option><option value="CAD">CAD</option>
+            </select></label>
+          <label>{bilingual("Slippage (bps per side)","单边滑点（基点）")}
+            <input type="number" min="0" max="100" value={slippage} onChange={e=>setSlippage(e.target.value)}/></label>
+          <label>{bilingual("Commission per trade (USD)","每笔佣金（美元）")}
+            <input type="number" min="0" max="30" step="0.1" value={commission} onChange={e=>setCommission(e.target.value)}/></label>
+          <label>{bilingual("FX conversion (bps on cross-currency orders)","跨币种交易换汇费（基点）")}
+            <input type="number" min="0" max="300" value={fxBps} onChange={e=>setFxBps(e.target.value)}/></label>
+          <label className="ur-checkbox-label"><input type="checkbox" checked={includeBlends}
+            onChange={e=>setIncludeBlends(e.target.checked)}/>
+            {bilingual("Search shared-cash multi-strategy blends","搜索共享现金账本的混合策略")}</label>
+          <p>{bilingual("USD funding avoids simulated USD-to-CAD conversion on USD orders. Models still use estimated spreads, delayed opens and financing, not broker fills.",
+            "美元账户不对美元交易模拟加元换汇。价格仍基于估算价差、延迟开盘及融资成本，并非真实成交。")}</p>
+        </div>
         <label>{t("Maximum validation drawdown (%)")}
           <input type="number" min="5" max="60" value={drawdown} onChange={e=>setDrawdown(e.target.value)}/></label>
         <label>{t("Research objective")}
@@ -332,6 +370,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               <td><button className="ur-link" onClick={()=>setPick(i)}>#{row.rank}</button></td>
               <td><button className="ur-link" onClick={()=>setPick(i)}>{label(row.basket_type)} · {label(row.model)}</button>
                 <small>{row.symbols.join(", ").toUpperCase()}</small>
+                {row.sleeves&&<small>{row.sleeves.map(x=>`${label(x.model)} ${x.weight_pct}%`).join(" + ")}</small>}
                 {row.research_only&&<small>{t("Synthetic short / margin research only")}</small>}</td>
               <td>{pct(row.validation.return_pct)}</td><td>{pct(row.validation.max_drawdown_pct)}</td>
               <td>{pct(row.held_out.return_pct)}</td><td>{row.validation_score.toFixed(2)}</td>
@@ -339,6 +378,35 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             {chosen&&<article className="ur-detail">
               <h3>#{chosen.rank} {label(chosen.basket_type)} · {label(chosen.model)}</h3>
               <p>{chosen.symbols.map(x=>x.toUpperCase()).join(" · ")}</p>
+              {chosen.sleeves&&<p>{bilingual("Blended research sleeves","混合研究策略权重")}: {
+                chosen.sleeves.map(x=>label(x.model)+" "+x.weight_pct+"%").join(" + ")}</p>}
+              {chosen.score_breakdown&&<details open className="ur-score-details">
+                <summary>{bilingual("Why this score? Validation-only breakdown","评分依据：仅验证期的分项得分")}</summary>
+                <p>{bilingual("These are ranking points, not expected returns. Negative points are penalties. Held-out results never enter the ranking.",
+                  "这些数字是排名分值，而非预期收益。负数表示扣分，留出测试期收益不参与排名。")}</p>
+                <div className="ur-scroll"><table><thead><tr><th>{bilingual("Component","评分项")}</th><th>{bilingual("Points","分值")}</th></tr></thead>
+                  <tbody>{Object.entries(chosen.score_breakdown.components).map(([key,value])=><tr key={key}>
+                    <td>{label(key.replace(/_points$/,""))}</td><td>{value.toFixed(2)}</td></tr>)}</tbody>
+                  <tfoot><tr><th>{bilingual("Total score","综合得分")}</th>
+                    <th>{chosen.score_breakdown.total.toFixed(2)}</th></tr></tfoot></table></div>
+              </details>}
+              {chosen.held_out_cost_audit&&<details className="ur-score-details">
+                <summary>{bilingual("Execution cost attribution, USD","执行成本分项（美元）")}</summary>
+                <div className="ur-kpis">
+                  {[
+                    [bilingual("Explicit fees and financing","显性费用与融资"),chosen.held_out_cost_audit.explicit_total_usd],
+                    [bilingual("Commission and FX","佣金及换汇"),chosen.held_out_cost_audit.transaction_and_fx_usd],
+                    [bilingual("Margin interest","融资利息"),chosen.held_out_cost_audit.margin_interest_usd],
+                    [bilingual("Short borrow","融券借贷"),chosen.held_out_cost_audit.short_borrow_usd],
+                    [bilingual("Estimated spread","估算买卖价差"),chosen.held_out_cost_audit.estimated_spread_usd],
+                    [bilingual("Estimated slippage","估算滑点"),chosen.held_out_cost_audit.estimated_slippage_usd],
+                  ].map(([key,value])=><div key={String(key)}><small>{key}</small><strong>{"$"+Number(value).toFixed(2)}</strong></div>)}
+                </div><p>{bilingual("Spread and slippage are already embedded in fill prices. Do not add them to explicit charges as a second deduction.",
+                  "买卖价差和滑点已计入模拟成交价，不应重复作为显性成本扣除。")}</p>
+              </details>}
+              {chosen.model==="blended_portfolio"&&<p className="ur-warning">{bilingual(
+                "Blends are evaluated and saved privately with this study, but cannot yet be imported into cash-only simulation or live monitoring.",
+                "混合策略随研究结果私下保存，但目前不能导入现金模拟或实时监控。")}</p>}
               {selectedSpec&&<TournamentStrategyInspector key={`${active.id}-${chosen.rank}`} spec={selectedSpec}
                 researchStudy={researchJob?.selection===selectedKey?researchJob.job:null} costs={{
                 commission_usd:Number(result.execution_assumptions.commission_usd),
@@ -350,10 +418,12 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
                 {chosen.research_only?
-                  <button type="button" className="ur-primary" disabled={busy}
+                  <button type="button" className="ur-primary" disabled={busy||chosen.model==="blended_portfolio"}
                     aria-busy={busy&&promotionTarget==="research"}
                     onClick={()=>void promote("research")}>
-                    {busy&&promotionTarget==="research"?t("Starting historical study..."):
+                    {chosen.model==="blended_portfolio"?
+                      bilingual("Blend saved in report, standalone replay not yet supported","混合策略已保存在报告中，尚不支持单独回放"):
+                      busy&&promotionTarget==="research"?t("Starting historical study..."):
                       t("Run this strategy in historical research")}
                   </button>:
                   <button type="button" className="ur-primary" disabled={busy}
@@ -374,7 +444,9 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                       t("Open in Live Engine (paper first)")}
                 </button>
               </div>
-              <p>{chosen.research_only?
+              <p>{chosen.model==="blended_portfolio"?
+                bilingual("Shared-cash blends use one backtest ledger and are retained in this private study. Live and custom-period execution are disabled until the importer supports their model sleeves.","共享现金混合策略在同一个回测账本运行并保存在私人研究中。在导入器支持策略权重之前，不提供实时运行和自定义区间执行。"):
+                chosen.research_only?
                 t("Short and margin strategies can run in the historical signed-position research engine. Click Run this strategy in historical research to see simulated fills, equity changes and risk. Cash-only replay and live broker monitoring do not support these exposures."):
                 customResearchExposure?
                   t("Custom investment and equity caps are preserved when saving and replaying this long-only strategy. Live monitoring is disabled until it can reproduce those research exposure rules."):

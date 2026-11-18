@@ -81,36 +81,61 @@ def validation_windows(curve, risk_free_pct=3., windows=3, capital=100000.):
             "sufficient_history":True}
 
 
-def score(validation, curve, risk_free_pct=3., *, drawdown_limit=30.,
-          target_cagr_pct=TARGET_CAGR_PCT,target_sharpe=TARGET_SHARPE):
-    """Multi-objective heuristic scored exclusively on validation outcomes.
+def score_breakdown(validation, curve, risk_free_pct=3., *,
+                    drawdown_limit=30., target_cagr_pct=TARGET_CAGR_PCT,
+                    target_sharpe=TARGET_SHARPE):
+    """Auditable validation-only points. No held-out prices enter these terms.
 
-    A target is an aspiration, never a pass/fail guarantee. Both objectives
-    are capped in the ranking so a single extreme backtest cannot completely
-    swamp drawdown, execution turnover and window consistency.
+    This is an intentionally heuristic ranking, NOT an expected-return estimate.
+    Each debit is recorded separately so turnover is never an invisible penalty.
     """
     metrics=performance(curve,risk_free_pct=risk_free_pct)
     stability=validation_windows(curve,risk_free_pct=risk_free_pct)
     cagr=metrics["cagr_pct"]
     sharpe=metrics["excess_sharpe"]
-    if cagr is None:
-        return -1e6,metrics,stability
-    if not stability["sufficient_history"]:
-        return -1e6,metrics,stability
-    sharpe_score=max(-1.,min(1.5, (sharpe if sharpe is not None else -2.)/target_sharpe))
-    growth_score=max(-1.,min(1.5, cagr/target_cagr_pct))
+    if cagr is None or not stability["sufficient_history"]:
+        return {"eligible":False,"total":-1e6,
+                "reason":"insufficient_validation_history",
+                "components":{}},metrics,stability
+    growth=max(-1.,min(1.5,cagr/target_cagr_pct))
+    quality=max(-1.,min(1.5,(sharpe if sharpe is not None else -2.)/target_sharpe))
     drawdown=abs(float(validation.get("max_drawdown_pct",0)))
     turnover=max(0.,float(validation.get("turnover_pct",0)))
-    losing_windows=stability["window_count"]-stability["positive_windows"]
-    # Mild extra penalty for violating the user's explicit research max DD;
-    # qualified candidates are already gated on this limit outside this scorer.
-    overlimit=max(0.,drawdown-drawdown_limit)
-    value=(100*(.50*growth_score+.50*sharpe_score)
-           -.8*drawdown -.02*turnover
-           -12*losing_windows -2*overlimit
-           -(5 if int(validation.get("trades",0))<2 else 0))
-    return round(value,4),metrics,stability
+    missing=stability["window_count"]-stability["positive_windows"]
+    components={
+        "cagr_points":round(50*growth,6),
+        "sharpe_points":round(50*quality,6),
+        "drawdown_points":round(-.8*drawdown,6),
+        "turnover_points":round(-.02*turnover,6),
+        "losing_windows_points":round(-12*missing,6),
+        "excess_drawdown_points":round(-2*max(0.,drawdown-drawdown_limit),6),
+        "few_trades_points":-5. if int(validation.get("trades",0))<2 else 0.,
+    }
+    raw=(50*growth+50*quality-.8*drawdown-.02*turnover
+         -12*missing-2*max(0.,drawdown-drawdown_limit)
+         -(5 if int(validation.get("trades",0))<2 else 0))
+    return {
+        "eligible":True,"total":round(raw,4),
+        "components":components,
+        "inputs":{"validation_cagr_pct":cagr,
+                  "validation_excess_sharpe":sharpe,
+                  "max_drawdown_pct":float(validation.get("max_drawdown_pct",0)),
+                  "turnover_pct":turnover,
+                  "losing_validation_windows":missing,
+                  "trades":int(validation.get("trades",0))},
+        "target_cagr_pct":target_cagr_pct,"target_sharpe":target_sharpe,
+        "drawdown_limit_pct":drawdown_limit,
+        "definition":"Heuristic validation points, not return, probability or forecast.",
+    },metrics,stability
 
+
+def score(validation, curve, risk_free_pct=3., *, drawdown_limit=30.,
+          target_cagr_pct=TARGET_CAGR_PCT,target_sharpe=TARGET_SHARPE):
+    """Backward-compatible ranking tuple with a separate auditable breakdown."""
+    details,metrics,stability=score_breakdown(
+        validation,curve,risk_free_pct,drawdown_limit=drawdown_limit,
+        target_cagr_pct=target_cagr_pct,target_sharpe=target_sharpe)
+    return details["total"],metrics,stability
 
 def consistency(curve,*,capital=100000.,target_cagr_pct=55.,year_sessions=252):
     """Observed rolling 252-session and sufficiently complete calendar-year returns.

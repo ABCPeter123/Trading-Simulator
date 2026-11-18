@@ -21,7 +21,7 @@ from . import tournament_strategies as tournament
 from . import universe_research as universe
 
 SELECTION_FRACTIONS=(.50,.60,.70,.80,1.)
-MAX_CANDIDATES={"focused":12,"extended":24}
+MAX_CANDIDATES={"focused":12,"extended":24,"comprehensive":48}
 
 
 def validate_request(payload):
@@ -30,20 +30,26 @@ def validate_request(payload):
     spec=tournament.validate_spec(payload.get("spec"))
     width=payload.get("search_width","focused")
     if width not in MAX_CANDIDATES:
-        raise HTTPException(422,"Search width must be focused or extended.")
+        raise HTTPException(422,"Search width must be focused, extended or comprehensive.")
     params={"target_cagr_pct":payload.get("target_cagr_pct",55.),
             "target_sharpe":payload.get("target_sharpe",2.),
             "risk_free_pct":payload.get("risk_free_pct",3.),
             "max_drawdown_pct":payload.get("max_drawdown_pct",30.),
-            "slippage_bps":payload.get("slippage_bps",8.)}
+            "slippage_bps":payload.get("slippage_bps",8.),
+            "commission_usd":payload.get("commission_usd",0.),
+            "fx_conversion_bps":payload.get("fx_conversion_bps",150.)}
     limits={"target_cagr_pct":(10,100),"target_sharpe":(.5,5),
             "risk_free_pct":(0,15),"max_drawdown_pct":(5,60),
-            "slippage_bps":(0,100)}
+            "slippage_bps":(0,100),"commission_usd":(0,30),
+            "fx_conversion_bps":(0,300)}
     for name,value in params.items():
         lo,hi=limits[name]
         if type(value) not in (int,float) or not isfinite(value) or not lo<=value<=hi:
             raise HTTPException(422,f"Invalid {name} research parameter.")
-    return {"spec":spec,"search_width":width,
+    currency=payload.get("base_currency","USD")
+    if currency not in ("USD","CAD"):
+        raise HTTPException(422,"Invalid base currency.")
+    return {"spec":spec,"search_width":width,"base_currency":currency,
             **{k:float(v) for k,v in params.items()}}
 
 
@@ -110,8 +116,10 @@ def candidates(spec, width="focused"):
                 if len(seen)>=MAX_CANDIDATES[width]:return
 
 
-def _execute(config,symbols,market,metadata,start,end,slippage):
+def _execute(config,symbols,market,metadata,start,end,slippage,settings=None):
     broker={**universe.COST_ASSUMPTIONS,
+            **{key:settings[key] for key in ("base_currency","commission_usd","fx_conversion_bps")
+               if settings is not None and key in settings},
             "delay_sessions":config["delay_sessions"],
             "slippage_bps":slippage}
     if config["model"] in pr.MODELS or config["model"]=="blended_portfolio":
@@ -134,19 +142,20 @@ def _choose(configs,symbols,market,metadata,train_end,settings):
         attempted+=1
         try:
             train=_execute(config,symbols,market,metadata,pr.WARMUP,train_end,
-                           settings["slippage_bps"])
-            score,quality,_=objectives.score(
+                           settings["slippage_bps"],settings)
+            score_details,quality,_=objectives.score_breakdown(
                 train,train["equity_curve"],settings["risk_free_pct"],
                 drawdown_limit=settings["max_drawdown_pct"],
                 target_cagr_pct=settings["target_cagr_pct"],
                 target_sharpe=settings["target_sharpe"])
+            score=score_details["total"]
         except (ValueError,ArithmeticError,ZeroDivisionError):
             continue
         if (score<=-1e5 or train["trades"]<1 or train["average_invested_pct"]<5
             or abs(train["max_drawdown_pct"])>settings["max_drawdown_pct"]
             or train.get("margin_calls",0)):
             continue
-        valid.append((score,config,quality))
+        valid.append((score,config,quality,score_details))
     if not valid:
         return None,attempted,0
     # Stable ties: the fixed trial order is the deterministic tiebreaker.
@@ -160,6 +169,7 @@ def _choose(configs,symbols,market,metadata,train_end,settings):
                                 ("highest_sharpe",high_sharpe),
                                 ("balanced",best))}
     return {"score":best[0],"config":best[1],"training":best[2],
+            "score_breakdown":best[3],
             "training_leaders":leaders},attempted,len(valid)
 
 
@@ -249,7 +259,7 @@ def analyze(payload, *, loader=None, report=None):
                     "no_real_orders":True,
                     "reason":"No candidate passed prior-period drawdown, trading and exposure checks."}
         result=_execute(selected["config"],symbols,market,metadata,
-                        train_end,out_end,settings["slippage_bps"])
+                        train_end,out_end,settings["slippage_bps"],settings)
         realized.append(result)
         fold_metrics=objectives.performance(result["equity_curve"],
                                              risk_free_pct=settings["risk_free_pct"])
@@ -262,6 +272,7 @@ def analyze(payload, *, loader=None, report=None):
                       "trials_evaluated":attempted,"eligible_trials":eligible,
                       "selected":selected["config"],
                       "selection_score":selected["score"],
+                      "selection_score_breakdown":selected["score_breakdown"],
                       "training_objectives":selected["training"],
                       "out_of_sample_objectives":fold_metrics,
                       "out_of_sample_return_pct":result["return_pct"],
@@ -289,28 +300,31 @@ def analyze(payload, *, loader=None, report=None):
     for config in configs:
         try:
             historical=_execute(config,symbols,market,metadata,
-                                pr.WARMUP,test_start,settings["slippage_bps"])
+                                pr.WARMUP,test_start,settings["slippage_bps"],settings)
             pre_audit_curves.append(historical["equity_curve"])
         except (ValueError,ArithmeticError,ZeroDivisionError):
             continue
     selected_training=_execute(final_choice["config"],symbols,market,metadata,
-                               pr.WARMUP,test_start,settings["slippage_bps"])
+                               pr.WARMUP,test_start,settings["slippage_bps"],settings)
     selection_diagnostics=selection_bias.diagnose(
         selected_training["equity_curve"],pre_audit_curves,
         risk_free_pct=settings["risk_free_pct"],
         attempted_trials=len(configs))
     report(91,"Evaluating sealed final audit")
     final=_execute(final_choice["config"],symbols,market,metadata,
-                   test_start,n,settings["slippage_bps"])
+                   test_start,n,settings["slippage_bps"],settings)
     stress_config={**final_choice["config"],"delay_sessions":2}
     stress=_execute(stress_config,symbols,market,metadata,
-                    test_start,n,max(20.,settings["slippage_bps"]))
+                    test_start,n,max(20.,settings["slippage_bps"]),settings)
     audit=objectives.performance(final["equity_curve"],
                                    risk_free_pct=settings["risk_free_pct"])
     stress_quality=objectives.performance(stress["equity_curve"],
                                             risk_free_pct=settings["risk_free_pct"])
     audit_consistency=objectives.consistency(final["equity_curve"],
                                               target_cagr_pct=settings["target_cagr_pct"])
+    # This secondary stress is reported ONLY after the selection is locked.
+    severe=_execute(stress_config,symbols,market,metadata,test_start,n,
+                    max(35.,settings["slippage_bps"]),settings)
     # Compare three PRIOR-SELECTED research objectives on the same sealed
     # historical audit. No one is re-ranked or promoted using audit outcomes.
     comparison=[]
@@ -319,7 +333,7 @@ def analyze(payload, *, loader=None, report=None):
         config=leader["config"];key=json.dumps(config,sort_keys=True)
         if key not in audit_cache:
             audit_cache[key]=_execute(config,symbols,market,metadata,
-                                      test_start,n,settings["slippage_bps"])
+                                      test_start,n,settings["slippage_bps"],settings)
         observed=audit_cache[key]
         comparison.append({
             "objective":objective_name,"selected":config,
@@ -342,6 +356,8 @@ def analyze(payload, *, loader=None, report=None):
         "symbols":symbols,
         "coverage":{"first_date":days[0],"last_date":days[-1],
                     "shared_sessions":n,"warmup_sessions":pr.WARMUP},
+        "execution_assumptions":{key:settings[key] for key in
+              ("base_currency","commission_usd","fx_conversion_bps","slippage_bps")},
         "targets":{"cagr_pct":settings["target_cagr_pct"],
                    "excess_sharpe":settings["target_sharpe"],
                    "max_drawdown_pct":settings["max_drawdown_pct"],
@@ -365,6 +381,7 @@ def analyze(payload, *, loader=None, report=None):
         },
         "final_audit":{
             "selected":final_choice["config"],
+            "selection_score_breakdown":final_choice["score_breakdown"],
             "prior_selected_comparison":comparison,
             "selection_score":final_choice["score"],
             "trials_evaluated":attempted,"eligible_trials":eligible,
@@ -375,6 +392,16 @@ def analyze(payload, *, loader=None, report=None):
             "stress_objectives":stress_quality,
             "consistency":audit_consistency,
             "stress_return_pct":stress["return_pct"],
+            "severe_stress_return_pct":severe["return_pct"],
+            "execution_stress_scenarios":[
+                {"name":"configured_next_open","delay_sessions":final_choice["config"]["delay_sessions"],
+                 "slippage_bps":settings["slippage_bps"],"return_pct":final["return_pct"]},
+                {"name":"two_session_20bps_floor","delay_sessions":2,
+                 "slippage_bps":max(20.,settings["slippage_bps"]),
+                 "return_pct":stress["return_pct"]},
+                {"name":"two_session_35bps_floor","delay_sessions":2,
+                 "slippage_bps":max(35.,settings["slippage_bps"]),
+                 "return_pct":severe["return_pct"]}],
             "observed_targets_met":bool(targets),
             "trades":final["trades"],"fees":final["fees"],
             "curve":final["equity_curve"],
@@ -384,6 +411,7 @@ def analyze(payload, *, loader=None, report=None):
             "Three objective leaders (highest training growth, highest training Sharpe and balanced) are all chosen exclusively before the audit. Their final audit outcomes are comparison diagnostics, never a held-out selection mechanism.",
             "The final audit is never used to rank, select or retune candidates; do not manually retune based on this audit and still call it unseen.",
             "Long-only candidates include 2-3 strategy sleeves mixed before netted trades in a single shared-cash ledger. This is not a portfolio of independently realized strategy returns. Short and margin sleeves are excluded from these blends.",
+            "Comprehensive search expands the bounded model and sleeve grid, not the universe of all possible asset combinations; held-out periods cannot be used to retune.",
             "A fixed public grid of compatible models and bounded capital/position parameters is searched; no unlimited parameter fitting, learned indicators or multi-basket model synthesis is implemented.",
             "Bonferroni-adjusted p is an illustrative Gaussian-i.i.d. approximation conditional on the tested grid, not robust statistical significance.",
             "The separate estimated Deflated Sharpe uses an independent-normal expected maximum and i.i.d. skew/kurtosis correction. The CSCV PBO uses nonchronological splits of pre-audit candidate returns; both are approximations, not proof of performance or substitutes for real walk-forward evidence.",

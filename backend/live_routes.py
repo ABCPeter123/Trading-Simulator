@@ -269,6 +269,11 @@ class UniverseStudyBody(BaseModel):
     target_investment_pct:float=Field(default=95,ge=5,le=100)
     equity_class_cap_pct:float=Field(default=70,ge=10,le=100)
     redistribute_excess:bool=False
+    base_currency:Literal["USD","CAD"]="USD"
+    slippage_bps:float=Field(default=8,ge=0,le=100)
+    commission_usd:float=Field(default=0,ge=0,le=30)
+    fx_conversion_bps:float=Field(default=150,ge=0,le=300)
+    include_blends:bool=True
 
 
 class TournamentSourceBody(BaseModel):
@@ -314,12 +319,15 @@ def cancel_strategy_period_study(job_id:str):
 
 class WalkForwardBody(BaseModel):
     spec:dict
-    search_width:Literal["focused","extended"]="focused"
+    search_width:Literal["focused","extended","comprehensive"]="focused"
     target_cagr_pct:float=Field(default=55,ge=10,le=100)
     target_sharpe:float=Field(default=2,ge=.5,le=5)
     risk_free_pct:float=Field(default=3,ge=0,le=15)
     max_drawdown_pct:float=Field(default=30,ge=5,le=60)
     slippage_bps:float=Field(default=8,ge=0,le=100)
+    base_currency:Literal["USD","CAD"]="USD"
+    commission_usd:float=Field(default=0,ge=0,le=30)
+    fx_conversion_bps:float=Field(default=150,ge=0,le=300)
 
 
 @router.post("/research/walkforward/jobs",status_code=202)

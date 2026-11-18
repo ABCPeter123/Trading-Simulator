@@ -124,12 +124,13 @@ export const cancelCustomPeriodStudy=(id:string)=>
 
 export interface WalkForwardRequest {
   spec:TournamentSourceSpec;
-  search_width:"focused"|"extended";
+  search_width:"focused"|"extended"|"comprehensive";
   target_cagr_pct:number;
   target_sharpe:number;
   risk_free_pct:number;
   max_drawdown_pct:number;
   slippage_bps:number;
+  base_currency?:"USD"|"CAD";commission_usd?:number;fx_conversion_bps?:number;
 }
 export interface WalkForwardQuality {
   cagr_pct:number|null;excess_sharpe:number|null;
@@ -148,6 +149,7 @@ export interface WalkForwardFold {
   training_objectives:WalkForwardQuality;out_of_sample_objectives:WalkForwardQuality;
   out_of_sample_return_pct:number;out_of_sample_drawdown_pct:number;
   trades:number;fees:number;
+  selection_score_breakdown?:{total:number;components:Record<string,number>};
 }
 export interface WalkForwardConsistency {
   rolling_window_sessions:number;rolling_windows:number;
@@ -165,6 +167,7 @@ export interface WalkForwardResult {
   reason?:string;fold_failed?:number|string;
   coverage?:{first_date:string;last_date:string;shared_sessions:number;warmup_sessions:number};
   targets?:{cagr_pct:number;excess_sharpe:number;max_drawdown_pct:number;risk_free_pct:number};
+  execution_assumptions?:{base_currency:string;commission_usd:number;fx_conversion_bps:number;slippage_bps:number};
   model_search?:{width:string;candidate_count:number;total_train_evaluations:number;
     candidate_scope:string;
     pre_audit_selection_diagnostics?:{
@@ -186,6 +189,7 @@ export interface WalkForwardResult {
   };
   final_audit?:{
     selected:WalkForwardSelection;selection_score:number;trials_evaluated:number;eligible_trials:number;
+    selection_score_breakdown?:{total:number;components:Record<string,number>};
     start_date:string;end_date:string;sessions:number;objectives:WalkForwardQuality;
     consistency?:WalkForwardConsistency;
     prior_selected_comparison?:{
@@ -195,7 +199,9 @@ export interface WalkForwardResult {
       audit_drawdown_pct:number;audit_trades:number;
     }[];
     return_pct:number;drawdown_pct:number;stress_objectives:WalkForwardQuality;
-    stress_return_pct:number;observed_targets_met:boolean;trades:number;fees:number;
+    stress_return_pct:number;severe_stress_return_pct?:number;
+    execution_stress_scenarios?:{name:string;delay_sessions:number;slippage_bps:number;return_pct:number}[];
+    observed_targets_met:boolean;trades:number;fees:number;
     curve:{time:number;value:number}[];
   };
   limitations?:string[];
