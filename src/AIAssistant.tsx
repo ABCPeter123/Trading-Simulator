@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bot, Check, Copy, LoaderCircle, RefreshCcw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
-import { askAI, getAIStatus } from "./aiAssistantApi";
-import type { AIAnswer, AIMode, AIMessage, AIStatus } from "./aiAssistantApi";
+import { Bot, Check, Copy, LoaderCircle, RefreshCcw, Send, ShieldCheck, Sparkles, Square, X } from "lucide-react";
+import { askAI, askAIStream, getAIStatus } from "./aiAssistantApi";
+import type { AIAnswer, AIMode, AIMessage, AIStatus, AIStreamProgress } from "./aiAssistantApi";
 import { useI18n } from "./i18n";
 import "./aiAssistant.css";
 
@@ -36,6 +36,14 @@ export default function AIAssistant({mode,runId,onDraft}: {
   const [elapsed,setElapsed]=useState(0);
   const [error,setError]=useState("");
   const [retryQuestion,setRetryQuestion]=useState("");
+  const activeRequest=useRef<AbortController|null>(null);
+  const [liveProgress,setLiveProgress]=useState<AIStreamProgress|null>(null);
+  const [cancelled,setCancelled]=useState(false);
+
+  // A session switch or unmount invalidates the previous AI request. Its
+  // answer must never attach to a different portfolio/replay run.
+  useEffect(()=>()=>{activeRequest.current?.abort();},[mode,runId]);
+
 
   useEffect(()=>{
     let alive=true;
@@ -63,21 +71,40 @@ export default function AIAssistant({mode,runId,onDraft}: {
 
   async function send(value:string) {
     const question=value.trim();
-    if(!question||busy)return;
+    if(!question||busy||activeRequest.current)return;
+    const controller=new AbortController();
+    activeRequest.current=controller;
     const history=turns.slice(-6);
     setBusy(true);setElapsed(0);setError("");setRetryQuestion("");setMessage("");
+    setLiveProgress(null);setCancelled(false);
     try {
-      const result=await askAI(mode,runId,question,history,locale,
-        status?.provider==="llama_cpp" ? selectedModel : undefined);
+      const model=status?.provider==="llama_cpp" ? selectedModel : undefined;
+      const result=status?.provider==="llama_cpp"
+        ? await askAIStream(mode,runId,question,history,locale,model,
+            controller.signal,progress=>{
+              if(!controller.signal.aborted)setLiveProgress(progress);
+            })
+        : await askAI(mode,runId,question,history,locale,model);
+      if(controller.signal.aborted)return;
       setTurns(prev=>[...prev,{role:"user",content:question},{role:"assistant",content:result.answer}]);
       setAnswers(prev=>[...prev,result]);
     } catch(e) {
-      setMessage(previous=>previous.trim()?previous:question);
-      setRetryQuestion(question);
-      setError(e instanceof Error?e.message:"AI request failed.");
+      if(controller.signal.aborted){
+        setMessage(previous=>previous.trim()?previous:question);
+        setCancelled(true);
+      } else {
+        setMessage(previous=>previous.trim()?previous:question);
+        setRetryQuestion(question);
+        setError(e instanceof Error?e.message:"AI request failed.");
+      }
     } finally {
-      setBusy(false);
+      if(activeRequest.current===controller)activeRequest.current=null;
+      setBusy(false);setLiveProgress(null);
     }
+  }
+
+  function cancelRequest(){
+    activeRequest.current?.abort();
   }
 
   useEffect(()=>{
@@ -158,6 +185,13 @@ export default function AIAssistant({mode,runId,onDraft}: {
       {turns.map((turn,i)=><div className={"ai-turn "+turn.role} key={i}>
         <span>{turn.role==="user"?t("You"):t("Research assistant")}</span>
         <p>{turn.content}</p>
+        {turn.role==="assistant"&&answers[Math.floor(i/2)]?.metrics&&
+          <small className="ai-metrics">{t("Total")}: {(answers[Math.floor(i/2)].metrics!.total_ms/1000).toFixed(1)}s
+            {answers[Math.floor(i/2)].metrics!.first_output_ms!==null&&
+              <> · {t("First output")}: {(answers[Math.floor(i/2)].metrics!.first_output_ms!/1000).toFixed(1)}s</>}
+            {typeof answers[Math.floor(i/2)].metrics!.completion_tokens==="number"&&
+              <> · {answers[Math.floor(i/2)].metrics!.completion_tokens} {t("output tokens")}</>}
+          </small>}
         {turn.role==="assistant"&&answers[Math.floor(i/2)]?.warning&&
           <p className="ai-warning">{t(answers[Math.floor(i/2)].warning ?? "")}</p>}
         {turn.role==="assistant"&&answers[Math.floor(i/2)]?.proposed_strategy&&
@@ -174,7 +208,23 @@ export default function AIAssistant({mode,runId,onDraft}: {
           </div>}
       </div>)}
     </div>}
-    {busy&&<p className="ai-processing" role="status">{t("Local AI is processing your request.")} {elapsed}s · {status?.provider==="llama_cpp" ? (locale==="zh-CN"?"模型加载和推理可能需要更长时间。":"Loading and reasoning may take longer on the first request.") : t("First response may take longer while Ollama loads the model.")}</p>}
+    {busy&&<div className="ai-progress-area" role="status" aria-live="polite">
+      <p className="ai-processing">{t("Local AI is processing your request.")} {elapsed}s ·
+        {liveProgress?.phase==="generating"
+          ? <> {t("Generating answer")}
+            {typeof liveProgress.first_output_ms==="number"
+              ? <> · {t("First output")}: {(liveProgress.first_output_ms/1000).toFixed(1)}s</>:null}
+          </>
+          : t("Waiting for model output")}</p>
+      {liveProgress?.preview&&<div className="ai-live-answer">
+        <strong>{t("Live preview")}</strong><p>{liveProgress.preview}</p>
+        <small>{t("Preview is incomplete. Strategy proposals are validated only after completion.")}</small>
+      </div>}
+      <button className="ai-cancel" type="button" onClick={cancelRequest}>
+        <Square size={12}/>{t("Stop generation")}
+      </button>
+    </div>}
+    {cancelled&&!busy&&<p className="ai-cancelled" role="status">{t("Generation stopped. Your draft question was restored.")}</p>}
     {error&&<div role="alert" className="ai-error">{t(error)}{retryQuestion&&<button type="button" disabled={busy||!status?.ready} onClick={()=>void send(retryQuestion)}><RefreshCcw size={14}/>{t("Retry question")}</button>}</div>}
     <form className="ai-form" onSubmit={e=>{e.preventDefault();void send(message);}}>
       <textarea ref={chatInput} rows={2} maxLength={1200} value={message} onChange={e=>setMessage(e.target.value)}
