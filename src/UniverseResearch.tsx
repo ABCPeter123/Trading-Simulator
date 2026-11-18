@@ -14,7 +14,8 @@ type Outcome={universe_count:number;eligible_count:number;excluded_count:number;
   basket_count:number;candidates_evaluated:number;top10:Winner[];limitations:string[];
   selection_method:string;execution_assumptions:Record<string,string|number>};
 type Job={id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";created_at:string;
-  progress:number;stage:string;scanned:number;eligible:number;error_code:string|null;result:Outcome|null};
+  progress:number;stage:string;scanned:number;eligible:number;error_code:string|null;
+  params:{scope:string;delay_sessions:1|2;max_drawdown_pct:number;max_position_pct:number};result:Outcome|null};
 import {validatedPercent} from "./validatedPercent";
 
 const pct=(x:number)=>Number.isFinite(x)?x.toFixed(2)+"%":"N/A";
