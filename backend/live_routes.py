@@ -20,6 +20,7 @@ from . import strategy_period_queue
 from . import walkforward_queue
 from . import paper_forward
 from . import execution_windows
+from . import broker_reconciliation
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -130,6 +131,17 @@ def check_execution_windows():
 def journal():
     private()
     return engine.journal()
+
+class ReconcileStatementBody(BaseModel):
+    rows:list[dict]=Field(min_length=1,max_length=1000)
+
+@router.post("/journal/reconcile")
+def reconcile_statement(body:ReconcileStatementBody):
+    private()
+    # No raw file uploads or server persistence; normalized trades only.
+    # Confirmed trades remain immutable unless manually edited elsewhere.
+    return broker_reconciliation.reconcile(body.rows,engine.journal()["fills"])
+
 
 @router.post("/journal")
 def add_fill(body:FillBody):

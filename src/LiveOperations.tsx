@@ -16,6 +16,7 @@ import type {Alert,ConfirmedFill,Deployment,DeploymentSource,FillDraft,Journal,M
 import "./liveOperations.css";
 import PaperForwardMonitor from "./PaperForwardMonitor";
 import ExecutionWindowMonitor from "./ExecutionWindowMonitor";
+import BrokerReconciliation from "./BrokerReconciliation";
 
 interface ResearchShortlist {
   id:string;status:string;created_at:string;result?:{
@@ -365,6 +366,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
           </tr>)}</tbody></table></div>
       </section>
     </div>}
+    {section==="journal"&&<BrokerReconciliation/>}
     {section==="journal"&&<ExecutionWindowMonitor actualReviews={journal?.execution_reviews}/>}
     {section==="journal"&&<div className="ops-grid">
       <section className="ops-card">

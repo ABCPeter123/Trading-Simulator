@@ -1,0 +1,14 @@
+.rc-panel{border:1px solid var(--border,#546a78);border-radius:9px;padding:16px;margin:15px 0}
+.rc-panel h2{font-size:16px;margin:0 0 9px}.rc-panel h3{font-size:14px;margin-top:14px}
+.rc-panel p{font-size:12px;line-height:1.6}.rc-file{display:flex;flex-direction:column;gap:8px;font-size:12px;max-width:420px}
+.rc-maps{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:9px;margin:12px 0}
+.rc-maps label{font-size:12px;display:flex;flex-direction:column;gap:5px}
+.rc-maps select{width:100%;padding:8px;border:1px solid var(--border,#637985);border-radius:6px;color:inherit;background:var(--surface,#17303e)}
+.rc-panel button{border:1px solid var(--border,#546a78);padding:9px;border-radius:7px;cursor:pointer}
+.rc-panel button:disabled{cursor:not-allowed;opacity:.5}.rc-error{color:#df857e}
+.rc-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px}
+.rc-stats div{border:1px solid var(--border,#546a78);padding:11px;border-radius:6px}
+.rc-stats small{display:block;font-size:11px;line-height:1.5}.rc-stats strong{font-size:18px}
+.rc-scroll{max-width:100%;overflow-x:auto}.rc-scroll table{min-width:800px;width:100%;border-collapse:collapse;font-size:11px}
+.rc-scroll th,.rc-scroll td{border-bottom:1px solid var(--border,#546a78);padding:9px;text-align:left;vertical-align:top}
+.rc-scroll td small{display:block}
