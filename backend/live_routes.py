@@ -177,7 +177,7 @@ def save_selected(run_id:str,body:NameRequest):
 
 
 class PortfolioCompareBody(BaseModel):
-    symbols:list[str]=Field(min_length=2,max_length=10)
+    symbols:list[str]=Field(min_length=2,max_length=16)
     max_drawdown_pct:float=Field(default=25,ge=1,le=50)
     max_position_pct:float=Field(default=35,ge=5,le=50)
 
