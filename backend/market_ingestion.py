@@ -22,6 +22,7 @@ DB_PATH = Path(os.environ.get("TRADING_SIM_INGEST_DB",
                              Path(__file__).resolve().parents[1]/"data"/"market_ingestion.sqlite3"))
 LOCK=RLock()
 MAX_SUBSCRIPTIONS=100
+MAX_DUE_PER_CYCLE=10
 INTERVAL_SECONDS={"1m":60,"5m":300,"15m":900,"1h":3600,"1d":86400}
 MIN_POLL={"1m":60,"5m":120,"15m":300,"1h":600,"1d":3600}
 SEED_WINDOW={"1m":"7D","5m":"30D","15m":"30D","1h":"6M","1d":"1Y"}
@@ -44,7 +45,7 @@ def _db():
 def list_subscriptions():
     with LOCK,closing(_db()) as conn:
         return [dict(row) for row in conn.execute(
-            "SELECT * FROM subscriptions ORDER BY updated_at DESC LIMIT ?",(MAX_SUBSCRIPTIONS,))]
+            "SELECT * FROM subscriptions ORDER BY active DESC, COALESCE(last_attempt, created_at) ASC LIMIT ?",(MAX_SUBSCRIPTIONS*5,))]
 
 
 def subscribe(asset_id:str,resolution:str="5m"):
@@ -170,6 +171,10 @@ def run_due(now:datetime|None=None):
     now=now or datetime.now(timezone.utc)
     completed=[]
     for item in list_subscriptions():
+        # A wider universe must not saturate Yahoo/Coinbase in one worker tick.
+        # The oldest last_attempt is first, so later watches are not starved.
+        if len(completed) >= MAX_DUE_PER_CYCLE:
+            break
         if not item["active"]:continue
         resolution=item["resolution"]
         last=item["last_attempt"]
