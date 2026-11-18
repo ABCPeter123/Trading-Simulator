@@ -74,7 +74,8 @@ def _connection():
 def _public(row):
     d = dict(row)
     spec = validate_spec(json.loads(d.pop("spec")))
-    return {**d, "mode": "portfolio_model", "symbols": spec["symbols"],
+    return {**d, "mode": "portfolio_model", "version":spec["version"],
+            "symbols": spec["symbols"],
             "model": spec["model"], "max_position_pct": spec["max_position_pct"],
             "delay_sessions": spec["delay_sessions"], "rebalance_sessions": spec["rebalance_sessions"],
             "restricted_research": spec.get("restricted_research", False),
