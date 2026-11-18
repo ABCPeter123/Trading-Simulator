@@ -32,6 +32,51 @@ not dividend-adjusted total-return prices. Continuous futures may require
 roll adjustment before robust multi-year studies. Real-time executable
 quotes are not implied.
 
+## Subscription-first: durable bootstrap and hourly verification
+
+Recommended option is to **select a symbol and interval in Market Desk**, then
+click the local collection toggle. The backend now records two durable jobs in
+the private SQLite ingestion database:
+
+1. Historical bootstrap, due immediately. This requests the widest supported
+   provider window for the selected bar size: daily MAX, hourly 2Y, 5m and
+   15m for 60D, and 1m for 7D. Availability is provider-dependent and
+   an unsupported/empty response remains unresolved. Existing subscription
+   records are automatically added to this queue when the worker starts.
+2. A rolling reconciliation job, eligible after bootstrap succeeds. It checks
+   short overlapping provider windows at least once per hour when processing
+   capacity and the provider permit: daily 21D, hourly 7D, 5/15m 7D, and
+   1m 2D. It compares every returned OHLCV timestamp/value against the
+   final archived Parquet after deduplication, correcting changed bars and
+   filling provider-returned gaps. It does not assume that provider omissions
+   mean no trades occurred.
+
+The bootstrap only runs once successfully. Both stages remain in SQLite and
+survive restarts. A failed fetch, malformed/conflicting candle or unverified
+archive write records an error and an unresolved state. Failures retry at
+1, 2, 4, 8 and progressively up to 60 minutes, with no finite attempt
+limit and no busy looping. A recent successful check is labelled
+provider_checked, never guaranteed_complete. After every successful
+reconciliation, its next check is due one hour later. The actual check can
+be delayed by queue congestion or throttling.
+
+Fresh incremental polling and slower reconciliation now run in separate
+threads of the same local worker process. A slow historical download does
+not block the next normal feed-poll iteration. Each reconciliation cycle
+handles only one due job to limit provider pressure.
+
+The authenticated /api/market-data/health endpoint and Market Desk show
+the initial backfill state, latest verification outcome, recorded bar count,
+retry errors, and next due time. You can leave a failing job in the queue
+without treating it as clean market data.
+
+This is *provider-observation verification*, not end-to-end delivery
+certification. It cannot prove that Yahoo or Coinbase themselves supplied
+every possible traded bar or transaction, that missing bars are still
+available for retry, or that adjusted prices/corporate actions are complete.
+For research that requires 100% exchange-level completeness, those
+questions must remain unresolved until a licensed, auditable feed is used.
+
 ## Ongoing collection and delivery limits
 
 The Trading Simulator does not guarantee complete live delivery for all
