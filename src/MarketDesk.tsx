@@ -463,6 +463,7 @@ export default function MarketDesk() {
                 <div className="market-data-health-line">
                   <strong>{t("Local data coverage")}</strong>
                   <span>{coverage?.bars??0} {t("recorded bars")}</span>
+                  {coverage?.first_bar&&<span>{t("First archived")} {new Date(coverage.first_bar*1000).toISOString().slice(0,10)}</span>}
                   <span>{coverage?.coverage_pct==null?t("Coverage varies by session"):`${coverage.coverage_pct}% ${t("weekday coverage estimate")}`}</span>
                   <span>{coverage?.gaps?.length??0} {t("possible observed gaps")}</span>
                   <span>{coverage?.last_bar?t("Latest archived")+" "+dt(coverage.last_bar):t("No archived candles")}</span>
@@ -477,7 +478,7 @@ export default function MarketDesk() {
                 </div>
                 {marketOpsError&&<small role="alert">{marketOpsError}</small>}
               </div>
-              <span>{history ? `${history.source} · ${t("latest bar")} ${dt(history.bars.at(-1)!.time)}` : t("Connect local API for market history")}</span>
+              <span>{history && history.bars.length ? `${history.source} · ${t("Observed history")}: ${history.bars.length.toLocaleString()} ${t("bars")} · ${new Date(history.bars[0].time*1000).toISOString().slice(0,10)} ${t("to")} ${new Date(history.bars[history.bars.length-1].time*1000).toISOString().slice(0,10)}` : t("Connect local API for market history")}</span>
             </div>
             <div className="chart-body">
               {visibleBars.length ? <PriceChart asset={selectedAsset} range="1Y" style={chartStyle} bars={visibleBars}/> :
