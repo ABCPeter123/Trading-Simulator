@@ -73,7 +73,8 @@ def test_diagnostics_reject_invalid_curve_alignment_and_excludes_raw_paths():
     result = diagnostics.diagnose(a, [a, b, c], attempted_trials=7)
     assert result["attempted_candidates"] == 7
     assert "selected" not in result
-    assert "curves" not in str(result).lower()
+    assert "equity_curve" not in result
+    assert "return_paths" not in result
     assert result["deflated_sharpe"]["assumed_trials"] == 7
     with pytest.raises(ValueError, match="exact pre-audit"):
         diagnostics.diagnose(a, [b[:-1]])
