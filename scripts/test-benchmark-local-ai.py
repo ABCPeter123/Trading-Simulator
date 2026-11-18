@@ -15,15 +15,21 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class LocalStub(BaseHTTPRequestHandler):
+    single_model = False
+
     def log_message(self, format, *args):
         pass
 
     def do_GET(self):
-        if self.path != "/models":
+        if self.single_model and self.path != "/v1/models":
             self.send_error(404)
             return
+        if not self.single_model and self.path != "/models":
+            self.send_error(404)
+            return
+        name = "Qwen3.5-4B-Q4_K_M" if self.single_model else "Qwen3.5-9B-Q4_K_M"
         self.send_json({
-            "data": [{"id": "Qwen3.5-9B-Q4_K_M", "status": {"value": "unloaded"}}]
+            "data": [{"id": name, "status": {"value": "loaded"}}]
         })
 
     def do_POST(self):
@@ -32,7 +38,7 @@ class LocalStub(BaseHTTPRequestHandler):
             return
         body = self.rfile.read(int(self.headers["Content-Length"]))
         request = json.loads(body)
-        assert request["model"] == "Qwen3.5-9B-Q4_K_M"
+        assert request["model"] == ("Qwen3.5-4B-Q4_K_M" if self.single_model else "Qwen3.5-9B-Q4_K_M")
         assert request["max_tokens"] == 32
         assert request["stream"] is False
         assert "arithmetic mean" in request["messages"][-1]["content"]
@@ -69,14 +75,23 @@ def main():
             "-TimeoutSeconds", "30",
             "-Port", str(server.server_address[1]),
         ]
-        run = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
-        assert run.returncode == 0, (
-            "PowerShell benchmark failed:\n" + run.stdout + "\n" + run.stderr
-        )
-        assert "Generation: 12.5 tokens/sec" in run.stdout, run.stdout
-        assert "Prompt processing: 150 tokens/sec" in run.stdout, run.stdout
-        assert "Request completed in " in run.stdout, run.stdout
-        print("Synthetic local benchmark HTTP test passed.")
+        for single_mode in (False, True):
+            LocalStub.single_model = single_mode
+            cmd[cmd.index("-Model") + 1] = (
+                "Qwen3.5-4B-Q4_K_M" if single_mode else "Qwen3.5-9B-Q4_K_M"
+            )
+            run = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
+            assert run.returncode == 0, (
+                "PowerShell benchmark failed:\n" + run.stdout + "\n" + run.stderr
+            )
+            assert "Generation: 12.5 tokens/sec" in run.stdout, run.stdout
+            assert "Prompt processing: 150 tokens/sec" in run.stdout, run.stdout
+            assert "Request completed in " in run.stdout, run.stdout
+            if single_mode:
+                assert "Inventory endpoint: /v1/models" in run.stdout, run.stdout
+            else:
+                assert "Inventory endpoint: /models" in run.stdout, run.stdout
+        print("Synthetic router-mode and single-model benchmark tests passed.")
     finally:
         server.shutdown()
         server.server_close()
