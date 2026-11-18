@@ -54,7 +54,10 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
   const {locale}=useI18n();
   const zh=locale==="zh-CN";
   const l=(en:string,cn:string)=>zh?cn:en;
-  const [searchWidth,setSearchWidth]=useState<"focused"|"extended">("focused");
+  const [searchWidth,setSearchWidth]=useState<"focused"|"extended"|"comprehensive">("focused");
+  const [baseCurrency,setBaseCurrency]=useState<"USD"|"CAD">("USD");
+  const [commission,setCommission]=useState("0");
+  const [fxBps,setFxBps]=useState("150");
   const [targetCagr,setTargetCagr]=useState("55");
   const [targetSharpe,setTargetSharpe]=useState("2");
   const [riskFree,setRiskFree]=useState("3");
@@ -103,6 +106,9 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
         risk_free_pct:parse(riskFree,0,15),
         max_drawdown_pct:parse(maxDrawdown,5,60),
         slippage_bps:parse(slippage,0,100),
+        base_currency:baseCurrency,
+        commission_usd:parse(commission,0,30),
+        fx_conversion_bps:parse(fxBps,0,300),
       };
     }catch(e){setError(String(e));return;}
     setBusy(true);
@@ -140,6 +146,7 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           <select value={searchWidth} onChange={e=>setSearchWidth(e.target.value as typeof searchWidth)}>
             <option value="focused">{l("Focused · up to 12 configurations","精简 · 最多12组配置")}</option>
             <option value="extended">{l("Extended · up to 24 configurations","扩展 · 最多24组配置")}</option>
+            <option value="comprehensive">{l("Comprehensive · up to 48 configurations","全面 · 最多48组配置")}</option>
           </select></label>
         <label>{l("Target annual CAGR (%)","目标年复合增长率（%）")}
           <input type="number" min="10" max="100" step="1" value={targetCagr}
@@ -153,6 +160,16 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
         <label>{l("Max training drawdown (%)","训练期最大回撤（%）")}
           <input type="number" min="5" max="60" step="1" value={maxDrawdown}
             onChange={e=>setMaxDrawdown(e.target.value)}/></label>
+        <label>{l("Account funding currency","账户资金币种")}
+          <select value={baseCurrency} onChange={e=>setBaseCurrency(e.target.value as "USD"|"CAD")}>
+            <option value="USD">USD</option><option value="CAD">CAD</option>
+          </select></label>
+        <label>{l("Commission per order (USD)","每笔佣金（美元）")}
+          <input type="number" min="0" max="30" step="0.1" value={commission}
+            onChange={e=>setCommission(e.target.value)}/></label>
+        <label>{l("Cross-currency conversion (bps)","跨币种换汇（基点）")}
+          <input type="number" min="0" max="300" value={fxBps}
+            onChange={e=>setFxBps(e.target.value)}/></label>
         <label>{l("Assumed slippage (bps)","假设滑点（基点）")}
           <input type="number" min="0" max="100" step="1" value={slippage}
             onChange={e=>setSlippage(e.target.value)}/></label>
@@ -245,6 +262,12 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           "分段滚动验证收益复合指数")}/>
         <p className="wfo-disclaimer">{l("Each fold resets to virtual starting capital and zero positions. The index chains percentage returns; it is not a continuous executable position ledger.",
           "每折均重新以虚拟本金和零持仓开始。图表按收益率拼接，并非连续可执行的真实持仓账本。")}</p>
+        {result.execution_assumptions&&<p className="wfo-disclaimer">
+          {l("Execution model","执行成本模型")}: {result.execution_assumptions.base_currency} ·
+          {" "}{l("Commission","佣金")} {"$"}{result.execution_assumptions.commission_usd} ·
+          {" "}{l("FX","换汇")} {result.execution_assumptions.fx_conversion_bps} bps ·
+          {" "}{l("Slippage","滑点")} {result.execution_assumptions.slippage_bps} bps.
+        </p>}
         <h5>{l("Sealed final audit","封存的最终审计")}</h5>
         <p>{audit.start_date} – {audit.end_date} · {audit.sessions} {l("sessions","交易日")}.{" "}
           {l("Selected using only pre-audit observations:","仅使用审计前数据确定的配置：")}{" "}
@@ -257,6 +280,27 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
             <strong>{audit.observed_targets_met?l("Met historically","历史观察达标"):
               l("Not met","未达标")}</strong></div>
         </div>
+        {audit.selection_score_breakdown&&<details className="wfo-limit">
+          <summary>{l("Pre-audit selection score contributions","审计前选择评分分解")}</summary>
+          <p>{l("Only pre-audit training contributes to this score. Negative components are penalties, not realized losses.",
+            "此评分只使用审计前训练数据。负值是评分扣分，不是已实现损失。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Component","评分项")}</th><th>{l("Points","分值")}</th>
+          </tr></thead><tbody>{Object.entries(audit.selection_score_breakdown.components).map(([key,value])=>
+            <tr key={key}><td>{name(key.replace(/_points$/,""))}</td><td>{dec(value)}</td></tr>)}
+          </tbody></table></div>
+        </details>}
+        {(audit.execution_stress_scenarios?.length??0)>0&&<div>
+          <h5>{l("Execution robustness on the sealed audit","最终审计中的执行稳健性")}</h5>
+          <p>{l("Stress outcomes are diagnostics only. They do not reselect the portfolio.",
+            "压力测试仅用于诊断，不会重新选择组合。")}</p>
+          <div className="wfo-scroll"><table><thead><tr><th>{l("Scenario","情景")}</th>
+            <th>{l("Delay, sessions","延迟交易日")}</th><th>{l("Slippage, bps","滑点基点")}</th>
+            <th>{l("Return","收益率")}</th></tr></thead>
+            <tbody>{audit.execution_stress_scenarios?.map(x=><tr key={x.name}>
+              <td>{name(x.name)}</td><td>{x.delay_sessions}</td>
+              <td>{x.slippage_bps.toFixed(1)}</td><td>{pct(x.return_pct)}</td>
+            </tr>)}</tbody></table></div></div>}
         <Plot data={audit.curve} description={l("Untouched final audit equity curve","独立最终审计净值曲线")}/>
         {(audit.prior_selected_comparison?.length??0)>0&&<>
           <h5>{l("Three portfolios selected before the final audit","在最终审计前选定的三类组合")}</h5>
