@@ -50,6 +50,8 @@ export default function MarketDesk() {
   const [marketOpsBusy,setMarketOpsBusy]=useState(false);
   const [marketOpsError,setMarketOpsError]=useState("");
   const tracking=subscriptions.find(x=>x.asset_id===selectedId&&x.resolution===resolution&&x.active);
+  const trackedHealth=collectorHealth?.last_updates.find(x=>
+    x.asset_id===selectedId&&x.resolution===resolution);
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [lastQuotes, setLastQuotes] = useState<Record<string, QuoteResponse>>({});
   const [account, setAccount] = useState<AccountResponse | null>(null);
@@ -489,6 +491,31 @@ export default function MarketDesk() {
                     <span>{t("Last worker heartbeat")}: {collectorHealth.collector.heartbeat_age_seconds}s</span>}
                   {tracking?.last_success&&<span>{t("Last successful sync")} {dt(tracking.last_success)}</span>}
                   {tracking?.failure_code&&<span role="alert">{t("Provider status")} {tracking.failure_code}</span>}
+                  {tracking&&<div className="market-data-health-line">
+                    <strong>{t("Historical backfill")}</strong>
+                    <span>{trackedHealth?.bootstrap
+                      ? t(trackedHealth.bootstrap.status==="provider_checked"
+                        ? "Provider data archived" : trackedHealth.bootstrap.status==="retry_pending"
+                        ? "Retry queued" : "Backfill queued")
+                      : t("Backfill status pending")}</span>
+                    {trackedHealth?.bootstrap?.verified_bars>0&&
+                      <span>{trackedHealth.bootstrap.verified_bars} {t("verified provider bars")}</span>}
+                    {trackedHealth?.bootstrap?.error_code&&
+                      <span role="alert">{t("Backfill error")}: {trackedHealth.bootstrap.error_code}</span>}
+                  </div>}
+                  {tracking&&<div className="market-data-health-line">
+                    <strong>{t("Hourly reconciliation")}</strong>
+                    <span>{trackedHealth?.reconciliation
+                      ? t(trackedHealth.reconciliation.status==="provider_checked"
+                        ? "Last provider comparison passed" : trackedHealth.reconciliation.status==="retry_pending"
+                        ? "Retry queued" : "Waiting for bootstrap")
+                      : t("Reconciliation not scheduled")}</span>
+                    {trackedHealth?.reconciliation?.due_at&&
+                      <span>{t("Next verification")}: {dt(trackedHealth.reconciliation.due_at)}</span>}
+                    {trackedHealth?.reconciliation?.error_code&&
+                      <span role="alert">{t("Reconciliation error")}: {trackedHealth.reconciliation.error_code}</span>}
+                  </div>}
+                  {tracking&&<small>{t("Provider comparison is not an exchange-data guarantee.")}</small>}
                   <button type="button" disabled={marketOpsBusy}
                     onClick={()=>void setTracking()}>{t(tracking?"Stop collecting":"Collect new bars locally")}</button>
                 </div>
