@@ -595,7 +595,7 @@ def validate_proposal(proposal, mode, symbols):
     return cleaned, None
 
 
-def advise(mode: str, run_id: str, question: str, history=None, language="en", model=None):
+def _prepare_advice(mode: str, run_id: str, question: str, history=None, language="en", model=None):
     question = question.strip()
     if not question or len(question) > MAX_QUESTION:
         raise HTTPException(422, detail="Question must be 1-1200 characters.")
@@ -621,6 +621,13 @@ def advise(mode: str, run_id: str, question: str, history=None, language="en", m
     }, ensure_ascii=False, separators=(",", ":"))
     instructions = (COMPACT_SYSTEM_PROMPT + (COMPACT_STRATEGY_INSTRUCTIONS if "strategy" in _fast_question_topics(question, history) else "")
                     if compact else SYSTEM_PROMPT)
+    return context, user, instructions, selected
+
+
+def advise(mode: str, run_id: str, question: str, history=None, language="en", model=None):
+    context, user, instructions, selected = _prepare_advice(
+        mode, run_id, question, history, language, model
+    )
     answer, candidate = parse_answer(call_model(instructions, user, selected) if selected is not None
                                      else call_model(instructions, user))
     strategy, warning = validate_proposal(candidate, mode, context["symbols"])
@@ -631,3 +638,149 @@ def advise(mode: str, run_id: str, question: str, history=None, language="en", m
         "provider": config["provider"], "model": selected or config["model"],
         "applied": False, "scope": "revealed_historical_data_only",
     }
+
+
+def _visible_answer_preview(raw: str) -> str:
+    """Only preview the JSON answer string, never raw model tokens or DSL.
+
+    Incomplete JSON can safely yield a partial, valid prefix of the answer
+    string. Malformed outputs never expose arbitrary reasoning or the
+    strategy field while a model is still generating.
+    """
+    match = re.search(r'"answer"\s*:\s*"', raw[:MAX_ANSWER * 4])
+    if not match:
+        return ""
+    escaped = False
+    segment = []
+    for character in raw[match.end():]:
+        if not escaped and character == '"':
+            break
+        if not escaped and character == "\\":
+            escaped = True
+            segment.append(character)
+            continue
+        escaped = False
+        segment.append(character)
+        if len(segment) >= MAX_ANSWER * 2:
+            break
+    encoded = "".join(segment)
+    if encoded.endswith("\\"):
+        encoded = encoded[:-1]
+    # Partial Unicode escape sequences and surrogates might fail JSON decode.
+    # Withhold that suffix instead of leaking raw syntax to the UI.
+    for _ in range(8):
+        try:
+            return str(json.loads('"' + encoded + '"'))[:MAX_ANSWER]
+        except (ValueError, TypeError):
+            encoded = encoded[:-1]
+            if not encoded:
+                return ""
+    return ""
+
+
+def _sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
+
+
+async def stream_advice(mode: str, run_id: str, question: str,
+                        history=None, language="en", model=None):
+    """Server-sent progress and validated completion, localhost llama.cpp only.
+
+    The websocket-free HTTP stream is cancelled when the browser disconnects.
+    Before finalization only a safe preview of the JSON *answer* field is sent.
+    The model's raw stream or unvalidated strategy is never sent to the UI.
+    No prompts, model outputs, saved strategies or trades are logged.
+    """
+    from time import monotonic
+    config = configuration()
+    if config["provider"] != "llama_cpp":
+        raise HTTPException(422, detail="Streaming requires local llama.cpp.")
+    context, user, system, selected = _prepare_advice(
+        mode, run_id, question, history, language, model)
+    resolved = selected or selected_local_model()
+    payload = {
+        "model": resolved, "stream": True, "temperature": 0.2,
+        "max_tokens": local_output_token_limit(), "cache_prompt": True,
+        "stream_options": {"include_usage": True},
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+    }
+    if resolved.startswith("Qwen3.5-4B-"):
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
+    start = monotonic()
+    first_output_ms = None
+    raw = ""
+    preview = ""
+    chunks = 0
+    prompt_tokens = None
+    completion_tokens = None
+    try:
+        yield _sse("status", {"phase": "waiting", "model": resolved})
+        timeout = httpx.Timeout(connect=5.0, read=ollama_timeout_seconds(),
+                                write=15.0, pool=5.0)
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            async with client.stream("POST", LLAMA_CPP_CHAT_URL, json=payload) as response:
+                if response.status_code != 200:
+                    # Never surface upstream error bodies which can contain
+                    # prompts, model internals, or private financial data.
+                    raise HTTPException(503, detail=f"Local AI provider HTTP {response.status_code}")
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    serialized = line[5:].strip()
+                    if serialized == "[DONE]":
+                        break
+                    try:
+                        part = json.loads(serialized)
+                    except (ValueError, TypeError):
+                        continue
+                    if not isinstance(part, dict):
+                        continue
+                    usage = part.get("usage")
+                    if isinstance(usage, dict):
+                        if isinstance(usage.get("prompt_tokens"), int):
+                            prompt_tokens = usage["prompt_tokens"]
+                        if isinstance(usage.get("completion_tokens"), int):
+                            completion_tokens = usage["completion_tokens"]
+                    choices = part.get("choices") or []
+                    if not isinstance(choices, list) or not choices:
+                        continue
+                    delta = choices[0].get("delta") or {}
+                    text = delta.get("content") if isinstance(delta, dict) else None
+                    if not isinstance(text, str) or not text:
+                        continue
+                    if first_output_ms is None:
+                        first_output_ms = round((monotonic() - start) * 1000)
+                    chunks += 1
+                    raw += text
+                    if len(raw) > 100000:
+                        raise HTTPException(502, detail="Local AI output exceeded its safe limit.")
+                    shown = _visible_answer_preview(raw)
+                    # Avoid flooding the UI every time one token arrives.
+                    if shown != preview and (len(shown) - len(preview) >= 12 or chunks % 8 == 0):
+                        preview = shown
+                        yield _sse("progress", {
+                            "phase": "generating",
+                            "preview": shown,
+                            "output_characters": len(raw),
+                            "first_output_ms": first_output_ms,
+                        })
+        answer, proposed = parse_answer(raw)
+        strategy, warning = validate_proposal(proposed, mode, context["symbols"])
+        yield _sse("done", {
+            "answer": answer, "proposed_strategy": strategy,
+            "proposal_validated": bool(strategy), "warning": warning,
+            "provider": "llama_cpp", "model": resolved,
+            "applied": False, "scope": "revealed_historical_data_only",
+            "metrics": {
+                "total_ms": round((monotonic() - start) * 1000),
+                "first_output_ms": first_output_ms,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+            },
+        })
+    except (httpx.HTTPError, HTTPException, ValueError, TypeError, KeyError):
+        # Only a fixed diagnostic is surfaced, no provider responses or
+        # exception content. Browser cancellation closes the upstream stream.
+        yield _sse("error", {"message":
+            "Local AI generation failed. Check the llama.cpp server and retry."})
