@@ -1355,6 +1355,9 @@ const zh: Record<string, string> = {
   "Rank equity momentum using previously completed 64/127-session returns.": "使用之前已完成的64／127日收益率计算股票动量排名。",
   "Long the strongest third and short the weakest third with about 65% notional on each side.": "做多动量最强的三分之一，做空最弱的三分之一，两侧名义仓位各约65%。",
   "Include short borrow fees and a maintenance-margin liquidation trigger. This is a synthetic research position, not an executable Wealthsimple share short.": "计算融券费用和维持保证金强平条件。这是合成研究仓位，不是 Wealthsimple 可执行的股票卖空。",
+  "Save all top 10 strategy models": "保存前十名策略模型",
+  "Synthetic research model": "合成仓位研究模型",
+  "Executable allocation model": "可运行的资产配置模型",
 };
 
 const LocaleContext = createContext<{
