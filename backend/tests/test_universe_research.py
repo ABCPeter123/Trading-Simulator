@@ -72,8 +72,11 @@ def test_run_study_uses_validation_and_reports_unavailable_assets(isolated,monke
     assert result["screened_count"]==10
     assert result["excluded_count"]==1
     assert result["exclusions"]["vnq"]=="missing_or_invalid_ohlcv"
-    assert len(result["top10"])<=10
-    assert result["test_used_for_selection"] is False if "test_used_for_selection" in result else True
+    assert 1<=len(result["top10"])<=10
+    assert result["test_used_for_selection"] is False
+    assert result["qualified_candidates"] >= len(result["top10"])
+    assert all(x["validation_score"]>=y["validation_score"]
+               for x,y in zip(result["top10"],result["top10"][1:]))
     for pick in result["top10"]:
         assert pick["no_real_order"] is True
         assert pick["rank"]>=1
