@@ -37,7 +37,7 @@ try {
     if(requests.length){
       failures.push("Local dev tried to use private bridge authentication: "+requests.join(", "));
     }
-    await page.getByRole("button",{name:"Strategy Discovery"}).first().click();
+    await page.getByRole("navigation",{name:"Research Workspaces"}).getByRole("button",{name:"Optimization & Discovery"}).click();
     await page.getByText("Portfolio research, multi-asset").first().waitFor({timeout:15000});
     await context.close();
     console.log("Local passwordless development smoke passed at "+width+"px");
