@@ -23,3 +23,8 @@
 .pf-disclaimer{font-size:11px}
 
 .pf-plot{width:100%;height:auto;max-height:260px;background:#1a3140;border:1px solid #3b5b69;border-radius:7px;margin:8px 0}
+
+.pf-controls select{background:#203c4d;color:#f2f8fc;border:1px solid #526c7f;padding:9px;border-radius:7px;max-width:240px;font:inherit}
+.pf-controls .pf-borrow{display:flex;flex-direction:row;align-items:center;max-width:360px;line-height:1.5}
+.pf-controls .pf-borrow input{width:auto;min-width:18px;flex-shrink:0}
+.pf-monitor select:focus-visible{outline:2px solid #78dace;outline-offset:2px}
