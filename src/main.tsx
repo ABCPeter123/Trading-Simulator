@@ -88,6 +88,7 @@ function Simulator() {
       </nav>
       {liveSection==="market"?<main className="arc-page"><MarketDesk/></main>:
        <LiveOperations section={liveSection} initialSignal={preparedSignal}
+        onOpenResearch={()=>{setSection("research");setResearchSection("tournament");}}
         onRecordSignal={signal=>{setPreparedSignal(signal);setLiveSection("journal");}}
         onConsumed={()=>setPreparedSignal(null)}/>}
     </>}
