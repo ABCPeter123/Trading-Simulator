@@ -1,0 +1,10 @@
+.ew-monitor{border:1px solid var(--border,#536875);border-radius:9px;padding:15px;margin:16px 0;background:rgba(90,120,135,.05)}
+.ew-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.ew-heading h2{font-size:16px;margin:3px 0}.ew-heading button{padding:8px 12px;border-radius:6px;cursor:pointer}
+.ew-monitor p{line-height:1.6;font-size:12px}.ew-stack{display:flex;flex-direction:column;gap:10px}
+.ew-entry{border:1px solid var(--border,#536875);padding:12px;border-radius:7px}
+.ew-top{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.ew-top small,.ew-entry small{font-size:11px}.ew-scroll{overflow-x:auto}
+.ew-scroll table{width:100%;min-width:660px;border-collapse:collapse;font-size:11px}
+.ew-scroll th,.ew-scroll td{text-align:left;padding:8px;vertical-align:top;border-bottom:1px solid var(--border,#536875)}
+.ew-scroll td small{display:block;margin-top:4px}.ew-error{color:#f29b99}.ew-note{opacity:.85}
