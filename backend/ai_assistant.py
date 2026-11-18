@@ -647,7 +647,10 @@ def _visible_answer_preview(raw: str) -> str:
     string. Malformed outputs never expose arbitrary reasoning or the
     strategy field while a model is still generating.
     """
-    match = re.search(r'"answer"\s*:\s*"', raw[:MAX_ANSWER * 4])
+    # Only preview when answer is the FIRST top-level JSON key. Scanning for
+    # the word answer anywhere could leak nested text in an unvalidated
+    # strategy field, so all other structures stay hidden until validation.
+    match = re.match(r'^\s*\{\s*"answer"\s*:\s*"', raw[:MAX_ANSWER * 4])
     if not match:
         return ""
     escaped = False
@@ -695,8 +698,12 @@ async def stream_advice(mode: str, run_id: str, question: str,
     config = configuration()
     if config["provider"] != "llama_cpp":
         raise HTTPException(422, detail="Streaming requires local llama.cpp.")
-    context, user, system, selected = _prepare_advice(
-        mode, run_id, question, history, language, model)
+    try:
+        context, user, system, selected = _prepare_advice(
+            mode, run_id, question, history, language, model)
+    except HTTPException:
+        yield _sse("error", {"message": "Unable to load this replay for local AI analysis."})
+        return
     resolved = selected or selected_local_model()
     payload = {
         "model": resolved, "stream": True, "temperature": 0.2,
