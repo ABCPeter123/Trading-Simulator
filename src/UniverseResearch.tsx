@@ -29,6 +29,8 @@ type CostAudit={explicit_total_usd:number;transaction_and_fx_usd:number;margin_i
 type Winner={rank:number;basket_type:string;symbols:string[];model:string;validation_score:number;training:Metric;
   sleeves?:{model:string;weight_pct:number}[]|null;
   score_breakdown?:ScoreBreakdown;held_out_cost_audit?:CostAudit;
+  validation_execution_stress?:{return_pct:number;max_drawdown_pct:number;score:number;
+    delay_sessions:number;slippage_bps:number;selection_only_validation_data:boolean}|null;
   validation_objectives?:ObjectiveMetrics;held_out_objectives?:ObjectiveMetrics;
   delayed_stress_objectives?:ObjectiveMetrics;
   validation_stability?:ValidationStability;pareto_optimal_validation?:boolean;
@@ -44,6 +46,9 @@ type Outcome={universe_count:number;eligible_count:number;excluded_count:number;
   objective_targets?:{cagr_pct:number;excess_sharpe:number;risk_free_pct:number;max_drawdown_pct:number};
   pareto_candidate_count?:number;shortlist_targets_observed?:number;
   basket_count:number;candidates_evaluated:number;top10:Winner[];limitations:string[];
+  basket_search?:"focused"|"expanded";selection_policy?:"return_risk"|"execution_robust";
+  asset_screen?:{screen_cutoff:string|null;screened_instruments:number;
+    screened_pool:number;generated_baskets:number;method:string};
   selection_method:string;execution_assumptions:Record<string,string|number>;
   candidate_model_counts?:Record<string,number>;
   historical_coverage?:{universe_earliest_session:string|null;
@@ -56,7 +61,8 @@ type Job={id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";c
     target_sharpe?:number;risk_free_pct?:number;
     target_investment_pct?:number;equity_class_cap_pct?:number;
     redistribute_excess?:boolean;base_currency?:"USD"|"CAD";slippage_bps?:number;
-    commission_usd?:number;fx_conversion_bps?:number;include_blends?:boolean};result:Outcome|null};
+    commission_usd?:number;fx_conversion_bps?:number;include_blends?:boolean;
+    basket_search?:"focused"|"expanded";selection_policy?:"return_risk"|"execution_robust"};result:Outcome|null};
 import {validatedPercent} from "./validatedPercent";
 
 const pct=(x:number)=>Number.isFinite(x)?x.toFixed(2)+"%":"N/A";
@@ -73,6 +79,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   const [commission,setCommission]=useState("0");
   const [fxBps,setFxBps]=useState("150");
   const [includeBlends,setIncludeBlends]=useState(true);
+  const [basketSearch,setBasketSearch]=useState<"focused"|"expanded">("expanded");
+  const [selectionPolicy,setSelectionPolicy]=useState<"return_risk"|"execution_robust">("execution_robust");
   const [drawdown,setDrawdown]=useState("30");
   const [weight,setWeight]=useState("35");
   const [objective,setObjective]=useState<"balanced"|"high_performance">("high_performance");
@@ -134,7 +142,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
         body:JSON.stringify({scope,delay_sessions:delay,
           max_drawdown_pct,max_position_pct,research_objective:objective,
           base_currency:baseCurrency,slippage_bps,commission_usd,fx_conversion_bps,
-          include_blends:includeBlends,
+          include_blends:includeBlends,basket_search:basketSearch,
+          selection_policy:selectionPolicy,
           target_cagr_pct,target_sharpe,risk_free_pct,
           target_investment_pct:objective==="high_performance"?target_investment_pct:95,
           equity_class_cap_pct:objective==="high_performance"?equity_class_cap_pct:70,
@@ -251,6 +260,21 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             <option value="etfs">{t("ETFs only")}</option>
             <option value="stocks">{t("Stocks only")}</option>
           </select></label>
+        <div className="ur-objective-panel">
+          <strong>{bilingual("Portfolio search and selection","组合搜索及筛选方法")}</strong>
+          <label>{bilingual("Asset basket search breadth","资产组合搜索范围")}
+            <select value={basketSearch} onChange={e=>setBasketSearch(e.target.value as "focused"|"expanded")}>
+              <option value="focused">{bilingual("Focused · baseline screened baskets","精简 · 基础资产组合")}</option>
+              <option value="expanded">{bilingual("Expanded · up to 16 additional training-screened baskets","扩展 · 最多增加16个仅用训练数据筛选的组合")}</option>
+            </select></label>
+          <label>{bilingual("Validation ranking policy","验证期排名规则")}
+            <select value={selectionPolicy} onChange={e=>setSelectionPolicy(e.target.value as "return_risk"|"execution_robust")}>
+              <option value="return_risk">{bilingual("Growth, Sharpe and risk","增长、夏普及风险")}</option>
+              <option value="execution_robust">{bilingual("Execution robust · penalize delayed fills","执行稳健 · 惩罚延迟成交损失")}</option>
+            </select></label>
+          <p>{bilingual("Expanded baskets use training-only momentum, historical volatility and correlations. Robust ranking also evaluates delayed validation fills before sealing the held-out audit.",
+            "扩展组合仅使用训练期动量、历史波动及相关性。稳健排名会在留出测试前，使用验证期评估延迟成交的影响。")}</p>
+        </div>
         <label>{t("Signal execution delay")}
           <select value={delay} onChange={e=>setDelay(Number(e.target.value) as 1|2)}>
             <option value={1}>{t("Next session open")}</option>
@@ -339,6 +363,21 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 [t("Ranked"),result.top10.length]].map(([name,n])=>
                 <div key={String(name)}><small>{name}</small><strong>{n}</strong></div>)}
             </div>
+            {result.asset_screen&&<details className="ur-score-details">
+              <summary>{bilingual("Asset-screen audit and leakage safeguards","资产筛选审计及防止未来数据泄露")}</summary>
+              <div className="ur-kpis">
+                <div><small>{bilingual("Screen cutoff","筛选截止日期")}</small>
+                  <strong>{result.asset_screen.screen_cutoff??"N/A"}</strong></div>
+                <div><small>{bilingual("Eligible screen candidates","有效筛选资产")}</small>
+                  <strong>{result.asset_screen.screened_instruments}</strong></div>
+                <div><small>{bilingual("Risk/correlation pool","相关性分析资产池")}</small>
+                  <strong>{result.asset_screen.screened_pool}</strong></div>
+                <div><small>{bilingual("Generated baskets","生成的资产组合")}</small>
+                  <strong>{result.asset_screen.generated_baskets}</strong></div>
+              </div><p>{result.asset_screen.method}</p>
+              <p>{bilingual("Asset selection does not use validation or held-out candles. The symbol catalog can still have survivorship bias.",
+                "资产筛选不使用验证期或留出期价格，但标的列表仍可能存在幸存者偏差。")}</p>
+            </details>}
             <p>{result.selection_method}</p>
             {result.research_objective==="high_performance"&&result.objective_targets&&<div className="ur-objective-results">
               <h3>{t("High-performance discovery results")}</h3>
@@ -384,6 +423,20 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               <p>{chosen.symbols.map(x=>x.toUpperCase()).join(" · ")}</p>
               {chosen.sleeves&&<p>{bilingual("Blended research sleeves","混合研究策略权重")}: {
                 chosen.sleeves.map(x=>label(x.model)+" "+x.weight_pct+"%").join(" + ")}</p>}
+              {chosen.validation_execution_stress&&<div className="ur-objective-results">
+                <h4>{bilingual("Validation execution robustness","验证期执行稳健性")}</h4>
+                <div className="ur-kpis">
+                  <div><small>{bilingual("Extra-delay validation return","额外延迟验证收益")}</small>
+                    <strong>{pct(chosen.validation_execution_stress.return_pct)}</strong></div>
+                  <div><small>{bilingual("Delayed validation drawdown","延迟执行验证回撤")}</small>
+                    <strong>{pct(chosen.validation_execution_stress.max_drawdown_pct)}</strong></div>
+                  <div><small>{bilingual("Delayed ranking score","延迟执行评分")}</small>
+                    <strong>{chosen.validation_execution_stress.score.toFixed(2)}</strong></div>
+                  <div><small>{bilingual("Stress slippage","压力测试滑点")}</small>
+                    <strong>{chosen.validation_execution_stress.slippage_bps} bps</strong></div>
+                </div><p>{bilingual("Both the normal and delayed results are from validation. Held-out data does not influence the winner.",
+                  "正常与延迟情景均使用验证期数据。留出测试数据不参与选择获胜模型。")}</p>
+              </div>}
               {chosen.score_breakdown&&<details open className="ur-score-details">
                 <summary>{bilingual("Why this score? Validation-only breakdown","评分依据：仅验证期的分项得分")}</summary>
                 <p>{bilingual("These are ranking points, not expected returns. Negative points are penalties. Held-out results never enter the ranking.",

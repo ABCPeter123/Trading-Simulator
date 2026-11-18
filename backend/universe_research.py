@@ -25,6 +25,7 @@ from fastapi import HTTPException
 
 from . import assets, portfolio_research as pr, advanced_portfolio_research as adv, performance_objectives as objectives
 from . import blended_portfolio_research as blends
+from . import basket_optimizer
 from .archive import load_archived_history
 from .market import history
 
@@ -164,7 +165,8 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
             target_sharpe=2., risk_free_pct=3.,
             target_investment_pct=95., equity_class_cap_pct=70.,
             redistribute_excess=False,base_currency="USD",slippage_bps=8.,
-            commission_usd=0.,fx_conversion_bps=150.,include_blends=True):
+            commission_usd=0.,fx_conversion_bps=150.,include_blends=True,
+            basket_search="focused",selection_policy="return_risk"):
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
         raise HTTPException(403,detail="Owner research is unavailable in public demos.")
     if scope not in ("all","etfs","stocks") or delay_sessions not in (1,2):
@@ -183,6 +185,9 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
         or not 5<=target_investment_pct<=100 or not 10<=equity_class_cap_pct<=100
         or type(redistribute_excess) is not bool):
         raise HTTPException(422,detail="Invalid investment or asset-class concentration settings.")
+    if basket_search not in ("focused","expanded") or selection_policy not in (
+            "return_risk","execution_robust"):
+        raise HTTPException(422,detail="Invalid basket search or validation selection policy.")
     if base_currency not in ("USD","CAD") or type(include_blends) is not bool:
         raise HTTPException(422,detail="Invalid research account or strategy mix setting.")
     if type(slippage_bps) not in (int,float) or not math.isfinite(slippage_bps) or not 0<=slippage_bps<=100:
@@ -209,7 +214,8 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
               "base_currency":base_currency,"slippage_bps":float(slippage_bps),
               "commission_usd":float(commission_usd),
               "fx_conversion_bps":float(fx_conversion_bps),
-              "include_blends":include_blends}
+              "include_blends":include_blends,
+              "basket_search":basket_search,"selection_policy":selection_policy}
         c.execute("""INSERT INTO universe_jobs
           (id,status,created_at,updated_at,progress,stage,params)
           VALUES (?,'queued',?,?,0,'Awaiting local research worker',?)""",
@@ -438,6 +444,18 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         if loader is None and ix<len(universe)-1 and sym not in histories:
             pause(.4)
     baskets=_basket_candidates(histories,list(histories))
+    screen={"baskets":[],"cutoff_session":None,"screened":0,"pool_size":0,
+            "method":"Focused deterministic basket seeds and training-only momentum screens."}
+    if params.get("basket_search","focused")=="expanded" and histories:
+        def grouping(symbol):
+            item=assets.get_instrument(symbol)
+            return pr._group(symbol,item.kind)
+        screen=basket_optimizer.discover(histories,list(histories),grouping)
+        prior={tuple(sorted(symbols)) for _,symbols in baskets}
+        for label,symbols in screen["baskets"]:
+            key=tuple(sorted(symbols))
+            if key not in prior:
+                prior.add(key);baskets.append((label,symbols))
     ranked=[];discarded=[];evaluated=0
     model_counts={name:0 for name in CANDIDATE_MODELS}
     # Cash, defensive, leveraged and short research models × viable baskets. All candidates
@@ -503,10 +521,51 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                                                    risk_free_pct=risk_free)
                     stability=objectives.validation_windows(
                         valid["equity_curve"],risk_free_pct=risk_free)
+                validation_stress=None
+                if passes and score>-1e5 and params.get("selection_policy","return_risk")=="execution_robust":
+                    stressed_broker={**broker,"delay_sessions":2,
+                                     "slippage_bps":max(20.,broker["slippage_bps"])}
+                    try:
+                        stressed=researcher(argument,symbols,market,metadata,
+                                            train_end,test_start,
+                                            params["max_position_pct"]/100,
+                                            broker=stressed_broker)
+                        # Stress guardrails use the validation segment ONLY.
+                        # The final held-out history stays sealed.
+                        if (not stressed["trades"] or stressed.get("margin_calls",0)
+                            or abs(stressed["max_drawdown_pct"])>params["max_drawdown_pct"]):
+                            continue
+                        if mode=="high_performance":
+                            stress_details,_,_=objectives.score_breakdown(
+                                stressed,stressed["equity_curve"],risk_free,
+                                drawdown_limit=params["max_drawdown_pct"],
+                                target_cagr_pct=target_cagr,target_sharpe=target_sharpe)
+                        else:
+                            stress_regimes=adv.scenario_grade(stressed["equity_curve"],
+                                                               market,symbols,train_end)
+                            stress_details=_balanced_breakdown(stressed,stress_regimes)
+                        if not stress_details["eligible"]:continue
+                        # Only downside execution deterioration is penalized;
+                        # an unexpectedly better stress outcome cannot earn bonus points.
+                        penalty=round(-.5*max(0.,score-stress_details["total"]),6)
+                        breakdown={**breakdown,
+                                   "components":{**breakdown["components"],
+                                                 "execution_stress_points":penalty},
+                                   "total":round(score+penalty,4)}
+                        score=breakdown["total"]
+                        validation_stress={"return_pct":stressed["return_pct"],
+                            "max_drawdown_pct":stressed["max_drawdown_pct"],
+                            "score":stress_details["total"],
+                            "delay_sessions":2,
+                            "slippage_bps":stressed_broker["slippage_bps"],
+                            "selection_only_validation_data":True}
+                    except (ArithmeticError,ValueError,ZeroDivisionError):
+                        continue
                 if passes and score>-1e5:
                     ranked.append({"basket_type":label,"symbols":symbols,
                                    "model":model,"sleeves":sleeves,
                                    "score_breakdown":breakdown,"score":score,
+                                   "validation_execution_stress":validation_stress,
                                    "validation_objectives":quality,
                                    "validation_stability":stability,
                                    "train":pr._compact(train),
@@ -588,6 +647,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "held_out_target_evaluable":sufficient_test,"basket_type":item["basket_type"],"symbols":item["symbols"],
             "model":item["model"],"sleeves":item["sleeves"],
             "score_breakdown":item["score_breakdown"],
+            "validation_execution_stress":item["validation_execution_stress"],
             "held_out_cost_audit":_execution_cost_audit(test,item["_market"],item["_metadata"],broker["slippage_bps"]),
             "validation_score":item["score"],
             "training":item["train"],"validation":item["validation"],
@@ -616,6 +676,13 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         "eligible_count":sum(1 for sym in universe if sym in histories and sym not in rejected),
         "excluded_count":len(rejected),"exclusions":rejected,
         "basket_count":len(baskets),"candidates_evaluated":evaluated,
+        "basket_search":params.get("basket_search","focused"),
+        "selection_policy":params.get("selection_policy","return_risk"),
+        "asset_screen":{"screen_cutoff":screen.get("cutoff_session"),
+                        "screened_instruments":screen.get("screened",0),
+                        "screened_pool":screen.get("pool_size",0),
+                        "generated_baskets":len(screen.get("baskets",[])),
+                        "method":screen["method"]},
         "candidate_model_counts":model_counts,
         "historical_coverage":{"universe_earliest_session":min((
             datetime.fromtimestamp(int(h["bars"][0]["time"]),timezone.utc).date().isoformat()
@@ -634,6 +701,9 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         "shortlist_targets_observed":sum(bool(item["held_out_target_observed"]) for item in leaders),
         "top10":leaders,
         "selection_method":(
+            ("Expanded correlation-aware asset search; " if params.get("basket_search","focused")=="expanded" else "Focused asset screening; ")
+            +("Execution-stressed validation ranking; " if params.get("selection_policy","return_risk")=="execution_robust" else "Standard validation ranking; ")
+            +(
             "High-performance discovery: shortlist candidates using validation-only "
             "annualized compound growth and cash-rate-adjusted Sharpe with caps, "
             "penalties for drawdowns, turnover and negative validation subperiods. "
@@ -645,7 +715,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "representative of distinct models, then fill remaining places by score. "
             "Sort selected finalists by validation return minus drawdown, turnover, "
             "volatility and weak historical regimes. This is not the unrestricted "
-            "global top ten. Held-out tests and future scenarios never determine selection."),
+            "global top ten. Held-out tests and future scenarios never determine selection.")),
         "shortlist_is_global_top_ten":False,
         "execution_assumptions":{**broker_assumptions,"configured_delay_sessions":params["delay_sessions"],
                                  "long_only_target_investment_pct":investment if mode=="high_performance" else 95.,
@@ -654,6 +724,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                                  "commission_note":"User-configured per-order commission and FX bps apply only when currency differs from the funding account. Estimates, not verified broker charges."},
         "test_used_for_selection":False,
         "limitations":[
+            "Expanded asset search screens only observations before the earliest training cutoff; validation and held-out prices cannot influence basket constituents, but the catalog may still have survivorship bias.",
+            "Execution-robust selection tests a second-session 20bps-minimum slippage scenario on validation only and penalizes deterioration; daily open bars cannot establish executable 12-hour intraday liquidity.",
             "Blended portfolios use one shared long-only cash and transaction ledger. They are research-only until supported by the strategy importer and live monitor.",
             "Historical coverage may exclude delisted symbols; verify point-in-time survivorship and corporate-action adjustments before relying on results.",
             "Explicit fees and implicit spread/slippage are reported separately; implicit costs are already in modeled fill prices and must not be double-counted.",
