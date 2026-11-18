@@ -67,6 +67,8 @@ function Stats({title,values}:{title:string;values:Metric}){
   </section>;
 }
 
+import {validatedPercent} from "./validatedPercent";
+
 function SingleAssetDiscovery(){
   const {t}=useI18n();
   const [asset,setAsset]=useState("spy");
@@ -87,8 +89,9 @@ function SingleAssetDiscovery(){
     try{
       const result=await request<Optimization>("/live/research/optimize",{
         method:"POST",body:JSON.stringify({
-          asset_id:asset.trim().toLowerCase(),max_drawdown_pct:Number(drawdown),
-          allocation_pct:Number(allocation),
+          asset_id:asset.trim().toLowerCase(),
+          max_drawdown_pct:validatedPercent(drawdown,"Maximum validation drawdown",1,50),
+          allocation_pct:validatedPercent(allocation,"Position allocation",1,25),
         }),
       });
       setSelected(result);setName("");await refresh();
