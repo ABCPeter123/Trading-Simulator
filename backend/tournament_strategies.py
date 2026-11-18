@@ -35,9 +35,9 @@ def validate_spec(spec):
     if not isinstance(spec, dict) or spec.get("version") not in (1,2):
         raise HTTPException(422, detail="Unsupported tournament strategy version.")
     symbols = spec.get("symbols")
-    if not isinstance(symbols, list) or not 2 <= len(symbols) <= 10 or len(set(
+    if not isinstance(symbols, list) or not 2 <= len(symbols) <= 16 or len(set(
             str(s) for s in symbols)) != len(symbols):
-        raise HTTPException(422, detail="Tournament model requires 2-10 distinct assets.")
+        raise HTTPException(422, detail="Tournament model requires 2-16 distinct assets.")
     for s in symbols:
         if not isinstance(s, str) or not s or len(s) > 32 or not all(
                 c.isascii() and (c.isalnum() or c in "._-") for c in s):
