@@ -46,7 +46,7 @@ try {
           active_deployments:0,pending_signals:0,critical_alerts:0,recent_evaluations:[],
           execution_mode:"human_confirmation_only",broker_connected:false};
         else if(["/api/live/deployments","/api/live/signals","/api/live/alerts","/api/strategies",
-                 "/api/live/research/runs"].includes(path))payload=[];
+                 "/api/live/research/runs","/api/live/research/universe/jobs"].includes(path))payload=[];
         else if(path==="/api/live/journal")payload={fills:[],positions:[],realized_pnl:0,realized_by_currency:{},note:""};
         else if(path==="/api/live/notifications")payload={channels:[],deliveries:[]};
         else if(path==="/api/arcade/runs")payload=[];
