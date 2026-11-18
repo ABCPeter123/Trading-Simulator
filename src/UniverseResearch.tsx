@@ -14,6 +14,8 @@ type Outcome={universe_count:number;eligible_count:number;excluded_count:number;
   selection_method:string;execution_assumptions:Record<string,string|number>};
 type Job={id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";created_at:string;
   progress:number;stage:string;scanned:number;eligible:number;error_code:string|null;result:Outcome|null};
+import {validatedPercent} from "./validatedPercent";
+
 const pct=(x:number)=>Number.isFinite(x)?x.toFixed(2)+"%":"N/A";
 const label=(x:string)=>x.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
 export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>void}){
@@ -57,9 +59,11 @@ export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>
   async function run(){
     setBusy(true);setError("");
     try{
+      const max_drawdown_pct=validatedPercent(drawdown,"Maximum validation drawdown",5,60);
+      const max_position_pct=validatedPercent(weight,"Maximum position weight",10,50);
       const job=await request<Job>("/live/research/universe/jobs",{method:"POST",
         body:JSON.stringify({scope,delay_sessions:delay,
-          max_drawdown_pct:Number(drawdown),max_position_pct:Number(weight)})});
+          max_drawdown_pct,max_position_pct})});
       setActive(job);setPick(0);await refresh();
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);}
