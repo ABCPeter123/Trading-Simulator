@@ -15,6 +15,7 @@ import {
 import type {Alert,ConfirmedFill,Deployment,DeploymentSource,FillDraft,Journal,MachineStatus,NotificationStatus,Signal} from "./liveMachineApi";
 import "./liveOperations.css";
 import PaperForwardMonitor from "./PaperForwardMonitor";
+import ExecutionWindowMonitor from "./ExecutionWindowMonitor";
 
 interface ResearchShortlist {
   id:string;status:string;created_at:string;result?:{
@@ -256,6 +257,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
       </section>
     </div>}
     {section==="machine"&&<PaperForwardMonitor/>}
+    {section==="machine"&&<ExecutionWindowMonitor actualReviews={journal?.execution_reviews}/>}
     {section==="machine"&&<div className="ops-grid">
       <section className="ops-card">
         <h2><PlayCircle size={18}/>{t("Deploy saved strategy")}</h2>
@@ -363,6 +365,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
           </tr>)}</tbody></table></div>
       </section>
     </div>}
+    {section==="journal"&&<ExecutionWindowMonitor actualReviews={journal?.execution_reviews}/>}
     {section==="journal"&&<div className="ops-grid">
       <section className="ops-card">
         <h2><Save size={18}/>{t(editing?"Correct recorded trade":"Record broker execution")}</h2>
