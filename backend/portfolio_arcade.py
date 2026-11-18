@@ -36,7 +36,7 @@ DB_PATH = Path(os.environ.get(
     "TRADING_SIM_ARCADE_DB",
     Path(__file__).resolve().parent.parent / "data" / "arcade.sqlite3",
 ))
-MAX_SYMBOLS = 10
+MAX_SYMBOLS = 16
 MAX_SKIP = 100
 
 
