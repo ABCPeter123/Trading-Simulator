@@ -39,7 +39,54 @@ def _db():
         updated_at TEXT NOT NULL,last_attempt TEXT,last_success TEXT,
         last_bar INTEGER,records INTEGER NOT NULL DEFAULT 0,
         failure_code TEXT,PRIMARY KEY(asset_id,resolution))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS collector_heartbeat(
+        id INTEGER PRIMARY KEY CHECK(id=1),
+        checked_at TEXT NOT NULL, state TEXT NOT NULL,
+        attempted INTEGER NOT NULL DEFAULT 0)""")
     return conn
+
+
+
+def record_heartbeat(state: str, attempted: int = 0,
+                     now: datetime | None = None) -> None:
+    """Record worker activity only. API queries never claim a worker is alive."""
+    if state not in ("polling", "idle"):
+        raise ValueError("Invalid collector state.")
+    stamp = (now or datetime.now(timezone.utc)).isoformat()
+    with LOCK, closing(_db()) as conn:
+        conn.execute("""INSERT INTO collector_heartbeat(id,checked_at,state,attempted)
+                        VALUES(1,?,?,?)
+                        ON CONFLICT(id) DO UPDATE SET
+                        checked_at=excluded.checked_at,
+                        state=excluded.state,
+                        attempted=excluded.attempted""",
+                     (stamp, state, int(attempted)))
+        conn.commit()
+
+
+def collector_health(now: datetime | None = None) -> dict:
+    """Recent heartbeat is evidence of activity, never a delivery guarantee."""
+    now = now or datetime.now(timezone.utc)
+    with LOCK, closing(_db()) as conn:
+        item = conn.execute(
+            "SELECT checked_at,state,attempted FROM collector_heartbeat WHERE id=1"
+        ).fetchone()
+    if item is None:
+        return {"state": "unverified", "last_heartbeat": None,
+                "heartbeat_age_seconds": None, "last_attempted": 0}
+    try:
+        previous = datetime.fromisoformat(item["checked_at"])
+        if previous.tzinfo is None:
+            previous = previous.replace(tzinfo=timezone.utc)
+        elapsed = max(0, int((now - previous).total_seconds()))
+    except ValueError:
+        return {"state": "unverified", "last_heartbeat": None,
+                "heartbeat_age_seconds": None, "last_attempted": 0}
+    # A poll can take longer than the nominal 30-second interval while
+    # waiting for providers. "stale" means no recent confirmed heartbeat.
+    return {"state": item["state"] if elapsed <= 120 else "stale",
+            "last_heartbeat": item["checked_at"], "heartbeat_age_seconds": elapsed,
+            "last_attempted": int(item["attempted"])}
 
 
 def list_subscriptions():
