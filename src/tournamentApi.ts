@@ -8,6 +8,14 @@ export interface TournamentVersion {
   code:string;created_at:string;
 }
 
+export const modelDescription=(model:string):string=>({
+  equal_weight:"Allocate equal starting weights, then enforce per-asset and asset-class risk caps.",
+  inverse_volatility:"Allocate more to assets with lower trailing 60-session volatility, subject to risk caps.",
+  trend_filter:"Hold assets above their 126-session average and size them by inverse volatility.",
+  relative_momentum:"Select the strongest positive blend of 64- and 127-session momentum, sized by inverse volatility.",
+  volatility_target:"Use inverse-volatility weights and reduce total exposure toward a 12% annual risk target.",
+} as Record<string,string>)[model]??"Unsupported allocation model.";
+
 export const importTournamentRank=(jobId:string,rank:number)=>
   request<TournamentVersion>(
     "/live/research/universe/jobs/"+encodeURIComponent(jobId)+
