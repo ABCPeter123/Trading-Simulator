@@ -228,6 +228,7 @@ def _public(row, details=False):
         "delay_sessions":config["delay_sessions"],
         "audit_reference":audit,
         "broker":broker_model.cost_snapshot(state.get("broker",broker_model.normalize())),
+        "execution_profile":state.get("broker",broker_model.normalize()),
         "capital_currency":state.get("capital_currency","USD"),
         "initial_amount":state.get("initial_amount",obj["capital"]),
         "equity_cad":round(state["equity"]*state["fx_rate"],2) if state.get("fx_rate") else None,
