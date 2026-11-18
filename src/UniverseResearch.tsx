@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useState} from "react";
 import {request} from "./api";
-import {importTournamentRank,createTournamentReplay,modelDescription} from "./tournamentApi";
+import {importTournamentRank,createTournamentReplay} from "./tournamentApi";
+import TournamentStrategyInspector from "./TournamentStrategyInspector";
 import {useI18n} from "./i18n";
 import "./universeResearch.css";
 
@@ -194,7 +195,18 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             {chosen&&<article className="ur-detail">
               <h3>#{chosen.rank} {label(chosen.basket_type)} · {label(chosen.model)}</h3>
               <p>{chosen.symbols.map(x=>x.toUpperCase()).join(" · ")}</p>
-              <p>{t(modelDescription(chosen.model))}</p>
+              <TournamentStrategyInspector key={`${active.id}-${chosen.rank}`} spec={{
+                version:1,model:chosen.model,symbols:chosen.symbols,
+                max_position_pct:active.params.max_position_pct,
+                delay_sessions:active.params.delay_sessions,rebalance_sessions:21,
+                restricted_research:chosen.restricted_research,
+                short_proxy_research:chosen.short_proxy_research,
+              }} costs={{
+                commission_usd:Number(result.execution_assumptions.commission_usd),
+                slippage_bps:Number(result.execution_assumptions.slippage_bps),
+                fx_conversion_bps:Number(result.execution_assumptions.fx_conversion_bps),
+                base_currency:String(result.execution_assumptions.base_currency),
+              }} />
               <p>{t("Executable model")}: {label(chosen.model)} · {active?.params.max_position_pct}% {t("Maximum position weight (%)")} ·
                 {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
