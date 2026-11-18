@@ -267,7 +267,7 @@ def _weights(model, symbols, closes, i, metadata, max_weight, *,
 
 
 def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
-             broker=None):
+             broker=None, allocator=None):
     """One cash ledger; optional broker stress assumptions for research only.
 
     Default arguments preserve every existing experiment. A delayed signal
@@ -300,9 +300,17 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
         opens = {s:market[s][i]["open"] for s in symbols}
         if (i-start)%REBALANCE_SESSIONS==0:
             signal_index=max(1,i-(delay_sessions-1))
-            targets = _weights(model,symbols,closes,signal_index,metadata,max_weight,
-                               gross_target=gross_target,equity_cap=equity_cap,
-                               redistribute=redistribute)
+            targets = (allocator(symbols,closes,signal_index,metadata,max_weight,
+                                 gross_target,equity_cap,redistribute)
+                       if allocator is not None else
+                       _weights(model,symbols,closes,signal_index,metadata,max_weight,
+                                gross_target=gross_target,equity_cap=equity_cap,
+                                redistribute=redistribute))
+            if (set(targets)!=set(symbols)
+                or not all(isinstance(v,(int,float)) and math.isfinite(v)
+                           and -1e-9<=v<=max_weight+1e-8 for v in targets.values())
+                or sum(targets.values())>gross_target+1e-8):
+                raise ValueError("Invalid long-only allocation from research model.")
             total_equity = cash+sum(holdings[s]*opens[s] for s in symbols)
             # Sell first, freeing cash for reallocations.
             for side in ("sell","buy"):
