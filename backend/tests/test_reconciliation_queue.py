@@ -37,7 +37,7 @@ def test_subscription_queues_initial_history_and_hourly_reconciliation(isolated)
 
 def test_failed_backfill_retries_without_claiming_success(isolated):
     ingest.subscribe("spy", "15m")
-    now = datetime(2026, 11, 17, 14, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc) + timedelta(minutes=2)
     calls = []
     def fail(asset_id, resolution, kind, instant):
         calls.append((asset_id, resolution, kind))
