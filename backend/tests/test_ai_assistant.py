@@ -711,6 +711,7 @@ def test_qwen4b_question_specific_prompt_reduces_irrelevant_fields():
 def test_qwen4b_relevant_details_and_multilingual_routing():
     example = {
         "symbols": ["synthetic-a"], "summary": {"total_return_pct": 1.5},
+        "positions": [{"symbol": "synthetic-a", "market_value": 10000}],
         "risk": {"stop_loss_pct": 4},
         "saved_strategy_untrusted": "SYNTHETIC RULES ONLY",
         "rolling": {"20": {"return_pct": 1}},
