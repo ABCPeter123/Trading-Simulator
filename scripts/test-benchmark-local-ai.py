@@ -41,6 +41,7 @@ class LocalStub(BaseHTTPRequestHandler):
         assert request["model"] == ("Qwen3.5-4B-Q4_K_M" if self.single_model else "Qwen3.5-9B-Q4_K_M")
         assert request["max_tokens"] == 32
         assert request["stream"] is False
+        assert request["cache_prompt"] is True
         assert "arithmetic mean" in request["messages"][-1]["content"]
         self.send_json({
             "choices": [{"message": {"content": "4"}}],
@@ -48,6 +49,8 @@ class LocalStub(BaseHTTPRequestHandler):
             "timings": {
                 "predicted_n": 32,
                 "predicted_per_second": 12.5,
+                "cache_n": 40,
+                "prompt_n": 7,
                 "prompt_per_second": 150.0,
             },
         })
@@ -87,6 +90,8 @@ def main():
             assert "Generation: 12.5 tokens/sec" in run.stdout, run.stdout
             assert "Prompt processing: 150 tokens/sec" in run.stdout, run.stdout
             assert "Request completed in " in run.stdout, run.stdout
+            assert "Reused prompt tokens (KV cache): 40" in run.stdout, run.stdout
+            assert "Newly processed prompt tokens: 7" in run.stdout, run.stdout
             if single_mode:
                 assert "Inventory endpoint: /v1/models" in run.stdout, run.stdout
             else:
