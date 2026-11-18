@@ -18,6 +18,7 @@ from . import tournament_strategies
 from . import strategy_source
 from . import strategy_period_queue
 from . import walkforward_queue
+from . import paper_forward
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -317,6 +318,41 @@ def get_walkforward_study(job_id:str):
 def cancel_walkforward_study(job_id:str):
     private()
     return walkforward_queue.cancel(job_id)
+
+
+class ForwardPaperStart(BaseModel):
+    job_id:str=Field(min_length=1,max_length=100)
+    capital:float=Field(default=100000,ge=100,le=1e9)
+    max_drawdown_pct:float=Field(default=30,ge=5,le=60)
+
+class ForwardPaperState(BaseModel):
+    status:Literal["active","paused","retired"]
+
+@router.post("/research/paper-forward",status_code=201)
+def create_forward_paper(body:ForwardPaperStart):
+    private()
+    return paper_forward.create(body.job_id,capital=body.capital,
+                                max_drawdown_pct=body.max_drawdown_pct)
+
+@router.get("/research/paper-forward")
+def list_forward_paper():
+    private()
+    return paper_forward.list_studies()
+
+@router.get("/research/paper-forward/{study_id}")
+def get_forward_paper(study_id:str):
+    private()
+    return paper_forward.get_study(study_id)
+
+@router.post("/research/paper-forward/{study_id}/evaluate")
+def evaluate_forward_paper(study_id:str):
+    private()
+    return paper_forward.process_one(study_id)
+
+@router.put("/research/paper-forward/{study_id}")
+def set_forward_paper_state(study_id:str,body:ForwardPaperState):
+    private()
+    return paper_forward.change_status(study_id,body.status)
 
 
 @router.get("/research/universe/strategies")
