@@ -420,21 +420,30 @@ def analyze(payload, *, loader=None, report=None):
     source_candidate=tournament_reference.source_config(settings["spec"])
     folds=[]
     realized=[]
+    fold_training=[]
+    fold_ledgers=[]
     for fold_idx in range(3):
         train_end=points[fold_idx]
         out_end=points[fold_idx+1]
         report(36+int(42*fold_idx/3),"Selecting parameters from past observations")
+        evaluations=_evaluate_training_candidates(
+            configs,symbols,market,metadata,train_end,settings)
+        fold_training.append(evaluations)
         selected,attempted,eligible=_choose(configs,symbols,market,metadata,
-                                            train_end,settings)
+                                            train_end,settings,
+                                            evaluations=evaluations)
         if selected is None:
             # A failed selection is a failed study, not a cherry-picked fold.
             return {"status":"no_eligible_candidate","fold_failed":fold_idx+1,
                     "candidate_count":len(configs),"research_only":True,
                     "no_real_orders":True,
-                    "reason":"No candidate passed prior-period drawdown, trading and exposure checks."}
+                    "reason":"No configuration met the configured growth, drawdown, exposure and training eligibility requirements.",
+                    "rejection_diagnostics":_gate_report(evaluations,settings),
+                    "selection_outcome":"no_qualified_strategy"}
         result=_execute(selected["config"],symbols,market,metadata,
                         train_end,out_end,settings["slippage_bps"],settings)
         realized.append(result)
+        fold_ledgers.append({"selected":selected["config"],"ledger":result})
         fold_metrics=objectives.performance(result["equity_curve"],
                                              risk_free_pct=settings["risk_free_pct"])
         baseline=explanation.baseline_comparison(
@@ -472,13 +481,22 @@ def analyze(payload, *, loader=None, report=None):
                                                   target_cagr_pct=settings["target_cagr_pct"])
     test_start=points[3]
     report(88,"Training final choice without seeing the audit period")
+    final_training=_evaluate_training_candidates(
+        configs,symbols,market,metadata,test_start,settings)
     final_choice,attempted,eligible=_choose(configs,symbols,market,metadata,
-                                             test_start,settings)
+                                             test_start,settings,
+                                             evaluations=final_training)
     if final_choice is None:
         return {"status":"no_eligible_candidate","fold_failed":"final",
                 "candidate_count":len(configs),"research_only":True,
                 "no_real_orders":True,
-                "reason":"No candidate qualified on the pre-audit training sample."}
+                "reason":"No configuration met the configured growth, drawdown, exposure and training eligibility requirements on the pre-audit training sample.",
+                "rejection_diagnostics":_gate_report(final_training,settings),
+                "selection_outcome":"no_qualified_strategy"}
+    report(88,"Comparing drawdown constraints on pre-audit folds only")
+    risk_frontier=_risk_frontier(
+        configs,fold_training,fold_ledgers,final_training,settings,
+        symbols,market,metadata,points)
     # All competing curves are calculated entirely in the pre-audit period.
     # They remain in memory, and only aggregate diagnostics enter the local
     # private report. Retain attempted trials even when a model cannot run.
@@ -574,11 +592,19 @@ def analyze(payload, *, loader=None, report=None):
                     "shared_sessions":n,"warmup_sessions":pr.WARMUP},
         "execution_assumptions":{key:settings[key] for key in
               ("base_currency","commission_usd","fx_conversion_bps","slippage_bps")},
+        "eligibility_policy":{
+            "minimum_training_cagr_pct":settings["minimum_training_cagr_pct"],
+            "minimum_excess_cagr_pct_points":settings["minimum_excess_cagr_pct_points"],
+            "min_average_invested_pct":settings["min_average_invested_pct"],
+            "growth_target_is_a_hard_gate":False,
+            "reason":"Aspirational CAGR and Sharpe remain scoring objectives. Explicit minimum training growth and invested exposure are hard eligibility gates, not forced investments.",
+        },
         "targets":{"cagr_pct":settings["target_cagr_pct"],
                    "excess_sharpe":settings["target_sharpe"],
                    "max_drawdown_pct":settings["max_drawdown_pct"],
                    "risk_free_pct":settings["risk_free_pct"]},
         "model_search":{"width":settings["search_width"],
+                        "pre_audit_risk_frontier":risk_frontier,
                         "pre_audit_candidate_leaderboard":final_choice["candidate_diagnostics"],
                         "pre_audit_parameter_stability":pre_audit_stability,
                         "candidate_count":len(configs),
@@ -629,6 +655,9 @@ def analyze(payload, *, loader=None, report=None):
             "curve":final["equity_curve"],
         },
         "limitations":[
+            "Configurable minimum training growth and cash-hurdle excess growth are absolute candidate eligibility gates, separate from the aspirational CAGR/Sharpe scoring objectives. If no strategy passes, the report fails closed instead of choosing a low-return model.",
+            "Minimum average invested exposure is a training eligibility filter only; it never adds borrowed money or forces buying when a strategy signals cash.",
+            "The drawdown-constraint frontier compares training-only selections across fixed risk thresholds on the three pre-audit validation folds. It does not run alternate risk limits on the final audit and cannot select a replacement model from observed fold outcomes.",
             "Models and allocation parameters are reselected before each walk-forward fold from prior-only training data. No predictive model is fitted; each OOS fold and audit reset capital and positions.",
             "Three objective leaders (highest training growth, highest training Sharpe and balanced) are all chosen exclusively before the audit. Their final audit outcomes are comparison diagnostics, never a held-out selection mechanism.",
             "The final audit is never used to rank, select or retune candidates; do not manually retune based on this audit and still call it unseen.",
