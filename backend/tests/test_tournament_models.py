@@ -25,9 +25,9 @@ def model_fixture(tmp_path, monkeypatch):
              "symbols":["spy","qqq"],"model":"equal_weight",
              "restricted_research":False,"short_proxy_research":False}
     with closing(tour._connection()) as conn:
-        conn.execute("INSERT INTO universe_jobs (id,status,created_at,updated_at,params,result) "
-                     "VALUES (?,?,?,?,?,?)",
-                     ("fixture-job","completed","2026-01-01","2026-01-01",
+        conn.execute("INSERT INTO universe_jobs (id,status,created_at,updated_at,stage,params,result) "
+                     "VALUES (?,?,?,?,?,?,?)",
+                     ("fixture-job","completed","2026-01-01","2026-01-01","Research complete",
                       json.dumps({"scope":"all","delay_sessions":1,
                                   "max_drawdown_pct":30,"max_position_pct":35}),
                       json.dumps({"top10":[example]})))
