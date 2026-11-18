@@ -10,16 +10,22 @@ const display=(n:number|null|undefined,suffix="")=>
 
 function EquityChart({marks,label}:{marks:PaperForwardDetail["marks"];label:string}){
   if(marks.length<2)return null;
+  const benchmarkReady=marks.every(m=>m.benchmark_value!=null);
   const values=marks.map(m=>m.value);
-  const bottom=Math.min(...values),top=Math.max(...values);
+  const comparison=benchmarkReady?marks.map(m=>m.benchmark_value as number):[];
+  const bottom=Math.min(...values,...comparison),top=Math.max(...values,...comparison);
   const span=Math.max(1,top-bottom);
-  const path=values.map((value,index)=>{
-    const x=8+684*index/(values.length-1);
+  const line=(series:number[])=>series.map((value,index)=>{
+    const x=8+684*index/(series.length-1);
     const y=149-136*(value-bottom)/span;
     return (index===0?"M":"L")+x.toFixed(2)+","+y.toFixed(2);
   }).join(" ");
+  const path=line(values);
   return <svg viewBox="0 0 704 165" className="pf-plot" role="img" aria-label={label}>
     <title>{label}</title>
+    {benchmarkReady&&<path d={line(comparison)} stroke="#e1bc7e"
+      strokeWidth="1.8" fill="none" strokeDasharray="6 4"
+      strokeLinejoin="round" strokeLinecap="round"/>}
     <path d={path} stroke="#6dd3ba" strokeWidth="2.5" fill="none"
       strokeLinejoin="round" strokeLinecap="round"/>
   </svg>;
@@ -216,6 +222,25 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
           <small>{say("CAD drawdown from peak","加元峰值回撤")}</small>
           <strong>{display(selected.current_drawdown_cad_pct,"%")}</strong></div>}
       </div>
+      <h5>{say("New-session comparison with frozen equal-weight benchmark",
+        "新交易日与冻结等权基准比较")}</h5>
+      {selected.forward_benchmark.status==="available"?<>
+        <div className="pf-metrics">
+          <div><small>{say("Exact-date equal-weight return (price only)",
+            "同日期等权收益（仅价格）")}</small>
+            <strong>{display(selected.forward_benchmark.return_pct,"%")}</strong></div>
+          <div><small>{say("Strategy minus equal weight (percentage points)",
+            "策略相对等权收益（百分点）")}</small>
+            <strong>{display(selected.forward_benchmark.strategy_minus_benchmark_return_pct_points," pp")}</strong></div>
+        </div>
+        <p className="pf-disclaimer">{say(
+          "The dotted line is a price-only, zero-fee buy-and-hold benchmark frozen at the study activation close. It uses only the exact subsequent sessions recorded by this paper study; no dividend reinvestment, trade latency, or borrow costs. Green is the simulated strategy. Historical audit performance does not alter either series.",
+          "虚线为研究启动日收盘时冻结的零费用、仅价格等权持有基准，只使用该研究随后真实记录的相同交易日。未计股息再投资、成交延迟与借券费用。绿色是策略模拟净值；历史审计结果不改变这两条曲线。")}</p>
+      </>:<p>{say("This study predates benchmark tracking. The missing forward baseline cannot be reconstructed as an originally frozen benchmark.",
+        "本研究建立于基准跟踪功能之前，无法事后将历史价格伪装为当时已冻结的基准。")}</p>}
+      {selected.frozen_strategy_fingerprint&&<p className="pf-disclaimer">
+        {say("Frozen research identity","冻结研究身份")}: <code>{selected.frozen_strategy_fingerprint.slice(0,16)}</code>
+      </p>}
       <p>{say("Modeled execution delay","模拟成交延迟")}: {selected.delay_sessions}
         {say(" completed sessions"," 个交易日")} ·
         {say("Pending simulated fill","待模拟成交")}: {selected.pending_execution?say("Yes","是"):say("No","否")}.
@@ -242,9 +267,11 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
       </p>}
       <div className="pf-scroll"><table><thead><tr>
         <th>{say("Session","日期")}</th><th>{say("Equity USD","净值（美元）")}</th>
+        <th>{say("Equal-weight USD","等权基准（美元）")}</th>
         <th>{say("Drawdown","回撤")}</th><th>{say("Gross exposure","总敞口")}</th>
       </tr></thead><tbody>{selected.marks.slice(-40).reverse().map(item=><tr key={item.session}>
         <td>{item.session}</td><td>{display(item.value)} USD</td>
+        <td>{display(item.benchmark_value)} USD</td>
         <td>{display(item.drawdown_pct,"%")}</td>
         <td>{display(item.gross_pct,"%")}</td>
       </tr>)}</tbody></table></div>
