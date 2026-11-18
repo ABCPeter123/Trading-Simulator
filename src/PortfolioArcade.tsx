@@ -285,6 +285,7 @@ export default function PortfolioArcade({onExit,initialRunId}: {onExit:()=>void;
           {season.model_strategy.model.replaceAll("_"," ")} ·
           {season.model_strategy.max_position_pct}% {t("Maximum position weight (%)")} ·
           {t("Rebalance every")} {season.model_strategy.rebalance_sessions} {t("shared sessions")}</span>
+        <button type="button" onClick={()=>setWorkspaceTab("strategy")}>{t("Inspect full strategy logic and code")}</button>
       </div>}
       {workspaceTab==="market"&&<MarketDesk/>}
       <section className="port-main">
