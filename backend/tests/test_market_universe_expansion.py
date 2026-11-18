@@ -41,8 +41,8 @@ def test_catalog_includes_diversified_us_canadian_and_reference_instruments():
         asset = assets.get_instrument(asset_id)
         assert (asset.kind, asset.currency, asset.tradable) == (
             category, currency, allowed)
-    assert len(TestClient(app).get("/api/instruments?limit=1000").json()) >= 320
-    assert TestClient(app).get("/api/instruments?limit=1001").status_code == 422
+    assert len(TestClient(app).get("/api/instruments?limit=2000").json()) >= 320
+    assert TestClient(app).get("/api/instruments?limit=2001").status_code == 422
 
 
 def test_15_and_20_year_daily_yahoo_use_explicit_valid_start_end(monkeypatch):
