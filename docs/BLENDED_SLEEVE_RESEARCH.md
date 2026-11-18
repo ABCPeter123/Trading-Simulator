@@ -21,6 +21,12 @@ remain cash. Short selling and margin borrowing are never allowed inside
 the long-only shared-cash blend. They remain separate, research-only
 signed-exposure models with their original assumptions.
 
+For the untouched final audit, the system also compares three prior-selected
+candidates: highest training CAGR, highest training excess Sharpe and the
+balanced risk-adjusted objective. All three configurations are frozen using
+pre-audit history, and the audit never elects a new candidate. These are
+diagnostic comparisons, not three independent forward-tested strategies.
+
 Blend selection uses exactly the same expanding-window, prior-only objective
 ranking as single models. The final 20% held-out audit is not an input to
 candidate construction or selection. The bounded focused search retains 12
