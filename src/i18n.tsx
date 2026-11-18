@@ -1306,6 +1306,7 @@ const zh: Record<string, string> = {
   "Bonds": "债券类",
   "Commodities": "大宗商品类",
   "Real estate": "房地产类",
+  "Inspect full strategy logic and code": "查看完整策略逻辑与代码",
 };
 
 const LocaleContext = createContext<{
