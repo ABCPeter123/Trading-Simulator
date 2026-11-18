@@ -273,6 +273,7 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
             <th>{l("Fold","验证期")}</th>
             <th>{l("Selected return","所选策略收益")}</th>
             <th>{l("Same-basket equal weight","相同资产等权")}</th>
+            <th>{l("SPY price-only return","SPY 仅价格收益")}</th>
             <th>{l("Fixed-rate cash hurdle","固定现金利率门槛")}</th>
             <th>{l("Gross invested","总投资敞口")}</th>
             <th>{l("Turnover","交易换手")}</th>
@@ -280,6 +281,7 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           </tr></thead><tbody>{study.folds.map(f=><tr key={f.fold}>
             <td>{f.fold}</td><td>{pct(f.out_of_sample_return_pct)}</td>
             <td>{pct(f.unseen_benchmark_comparison?.benchmarks.find(b=>b.id==="same_basket_equal_weight")?.return_pct)}</td>
+            <td>{pct(f.unseen_spy_price_benchmark?.return_pct)}</td>
             <td>{pct(f.unseen_benchmark_comparison?.benchmarks.find(b=>b.id==="constant_cash_hurdle")?.return_pct)}</td>
             <td>{pct(f.unseen_exposure_and_costs?.average_gross_invested_pct)}</td>
             <td>{pct(f.unseen_exposure_and_costs?.turnover_pct_of_initial_capital)}</td>
@@ -322,12 +324,24 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
             <tr><td>{l("Selected portfolio","所选组合")}</td>
               <td>{pct(audit.return_pct)}</td><td>{pct(audit.objectives.cagr_pct)}</td>
               <td>{pct(audit.drawdown_pct)}</td><td>{dec(audit.objectives.excess_sharpe)}</td></tr>
+            {audit.market_benchmark?.status==="available"&&<tr>
+              <td>{l("SPY buy and hold, price only","SPY 买入持有，仅价格")}</td>
+              <td>{pct(audit.market_benchmark.return_pct)}</td>
+              <td>{pct(audit.market_benchmark.cagr_pct)}</td>
+              <td>{pct(audit.market_benchmark.drawdown_pct)}</td>
+              <td>{dec(audit.market_benchmark.excess_sharpe)}</td>
+            </tr>}
             {audit.benchmark_comparison.benchmarks.map(b=><tr key={b.id}>
               <td>{b.id==="same_basket_equal_weight"?l("Same-basket equal weight","同资产等权"):l("Hypothetical fixed-rate cash","假设固定利率现金")}</td>
               <td>{pct(b.return_pct)}</td><td>{pct(b.cagr_pct)}</td>
               <td>{pct(b.drawdown_pct)}</td><td>{dec(b.excess_sharpe)}</td>
             </tr>)}
           </tbody></table></div>
+          <p className="wfo-disclaimer">{audit.market_benchmark?.status==="available"?
+            l("SPY is loaded independently after the strategy selection is locked. Sessions match exactly, with one modeled opening purchase. Dividends are not explicitly reinvested and price adjustments depend on the provider. Source: ",
+              "SPY 在锁定策略选择后独立读取。交易日严格匹配，模拟首日开盘买入。股息未单独再投资，复权方式取决于数据提供方。数据来源： ")+audit.market_benchmark.source:
+            l("SPY reference unavailable on all required dates. No missing observations were filled or invented.",
+              "所需日期的 SPY 数据不完整。缺失数据未填补或伪造。")}</p>
         </>}
         {audit.exposure_and_costs&&<>
           <h5>{l("Why did the portfolio earn this return?","组合收益表现归因")}</h5>
@@ -439,6 +453,43 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           <p>{l("CAGR range across valid neighbors","有效相邻参数的年增长率跨度")}:{" "}
             {pct(result.model_search.pre_audit_parameter_stability.cagr_range_pct_points)}.</p>
         </details>}
+        {result.research_review?.status==="diagnostic_only"&&<section className="wfo-limit">
+          <h5>{l("Private research review: findings and next experiments",
+            "私人研究复盘：主要发现与下一步实验")}</h5>
+          <p>{l("This is a deterministic local diagnostic, not an AI-generated forecast. It never launches jobs, changes strategy parameters or submits orders.",
+            "这是本地确定性诊断，不是 AI 预测。不会自动启动任务、更改策略参数或下单。")}</p>
+          <div className="wfo-headline">
+            <div><small>{l("High-priority findings","高优先级发现")}</small>
+              <strong>{result.research_review.summary?.critical_findings??0}</strong></div>
+            <div><small>{l("Training candidates eligible","训练期合格候选")}</small>
+              <strong>{result.research_review.summary?.training_candidates_eligible??"N/A"}</strong></div>
+          </div>
+          {(result.research_review.findings?.length??0)>0?
+            <div className="wfo-scroll"><table><thead><tr>
+              <th>{l("Severity","重要程度")}</th>
+              <th>{l("Observed issue","观察到的问题")}</th>
+              <th>{l("Evidence period","证据时期")}</th>
+            </tr></thead><tbody>{result.research_review.findings?.map(f=><tr key={f.code}>
+              <td>{f.severity==="high"?l("High","高"):f.severity==="medium"?l("Medium","中"):l("Info","提示")}</td>
+              <td>{name(f.code)}
+                <p>{f.observation}</p>
+              </td><td>{f.basis==="sealed_audit"?l("Already opened audit","已查看的审计期"):
+                l("Pre-audit only","审计前")}</td>
+            </tr>)}</tbody></table></div>:
+            <p>{l("No rule-based concerns met the current thresholds. This is not proof of a profitable strategy.",
+              "没有达到目前的规则诊断阈值，但这不能证明策略有盈利优势。")}</p>}
+          <h5>{l("Proposed follow-up experiments","建议的后续实验")}</h5>
+          <div className="wfo-objective-grid">
+            {result.research_review.next_experiments?.map(p=><article key={p.id}>
+              <strong>{p.id==="compare_exposure_and_costs"?l("Audit cash and trading costs","检查现金配置及交易成本"):
+                p.id==="benchmark_over_new_sessions"?l("Collect fresh forward-paper evidence","收集新的前向模拟证据"):
+                l("Verify historical data provenance","核查历史数据来源")}</strong>
+              <p>{p.method}</p>
+            </article>)}
+          </div>
+          <p className="wfo-disclaimer">{l("The final audit has been seen and cannot be reused as untouched evidence for revisions. New tests need truly fresh sessions. All suggestions require deliberate action.",
+            "最终审计已经被查看，不能在修改策略后再次称作未见数据。新的验证需要真正新产生的交易日数据，所有建议均需主动执行。")}</p>
+        </section>}
         <h5>{l("Pre-audit selection-bias diagnostics","审计前选择偏差诊断")}</h5>
         {preAuditDiagnostics&&(()=>{
           const diagnostics=preAuditDiagnostics;
