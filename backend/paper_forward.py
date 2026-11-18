@@ -325,8 +325,11 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
         # Broker compatibility errors do not reveal strategy parameters.
         raise HTTPException(422,detail="Incompatible paper broker settings: "+str(exc)) from None
     try:
+        fx_required=(profile["capital_currency"]=="CAD"
+                     or (profile["broker"]=="wealthsimple"
+                         and profile["account_type"]=="margin"))
         days, market, meta, fx = _portfolio(
-            symbols, at, loader,need_fx=profile["capital_currency"]=="CAD"
+            symbols, at, loader,need_fx=fx_required
         )
         closes = {s:[b["close"] for b in market[s]] for s in symbols}
         targets = _safe_targets(config, symbols, closes, meta, len(days))
@@ -335,7 +338,8 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
     audit_reference={"objectives":audit["objectives"],
                      "risk_free_pct":float(result["targets"]["risk_free_pct"])}
     start = days[-1]
-    spot=fx.get(start) if profile["capital_currency"]=="CAD" else None
+    observed_fx=fx.get(start)
+    spot=observed_fx if profile["capital_currency"]=="CAD" else None
     nominal_usd=capital/spot if spot is not None else float(capital)
     fx_fee=broker_model.fx_commission_usd(profile,capital,spot) if spot else 0.
     actual_usd=nominal_usd-fx_fee
@@ -348,7 +352,7 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
            "pending":pending, "since_signal":0,
            "financing_paid":0.,"transaction_fees_paid":0.,
            "broker":profile,"capital_currency":profile["capital_currency"],
-           "initial_amount":float(capital),"fx_rate":spot,
+           "initial_amount":float(capital),"fx_rate":observed_fx,
            "fx_conversion_fee_usd":fx_fee,
            "peak_cad":float(capital) if spot else None}
     with LOCK, closing(_db()) as c:
@@ -376,8 +380,8 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
             (study_id,session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad)
             VALUES(?,?,?,?,?,?,?,?,?)""",
                   (uid,start,actual_usd,actual_usd,0.,
-                   (actual_usd/nominal_usd-1)*100,0.,spot,
-                   actual_usd*spot if spot else None))
+                   (actual_usd/nominal_usd-1)*100,0.,observed_fx,
+                   actual_usd*observed_fx if observed_fx else None))
         c.commit()
         return _public(c.execute("SELECT * FROM paper_studies WHERE id=?",(uid,)).fetchone())
 
@@ -459,8 +463,11 @@ def _advance(c, row, days, market, meta, fx_rates, at):
         closes={s:market[s][index]["close"] for s in symbols}
         field="close" if profile["fill_timing"]=="next_close" else "open"
         opens={s:market[s][index][field] for s in symbols}
-        rate=fx_rates.get(day) if profile["capital_currency"]=="CAD" else None
-        if profile["capital_currency"]=="CAD" and rate is None:
+        require_fx=(profile["capital_currency"]=="CAD"
+                    or (profile["broker"]=="wealthsimple"
+                        and profile["account_type"]=="margin"))
+        rate=fx_rates.get(day) if require_fx else None
+        if require_fx and rate is None:
             raise ValueError("No previous completed daily FX quote.")
         next_session=state["observed_sessions"]+1
         if state["pending"] is not None:
@@ -485,7 +492,7 @@ def _advance(c, row, days, market, meta, fx_rates, at):
         gross=sum(abs(state["positions"][s]*closes[s]) for s in symbols)
         state["gross_pct"]=100*gross/state["equity"]
         drawdown=(state["equity"]/state["peak"]-1)*100
-        if rate is not None:
+        if rate is not None and profile["capital_currency"]=="CAD":
             value_cad=state["equity"]*rate
             state["peak_cad"]=max(state.get("peak_cad") or value_cad,value_cad)
             funding_drawdown=(value_cad/state["peak_cad"]-1)*100
@@ -540,8 +547,11 @@ def process_one(study_id, *, now=None, loader=None):
         try:
             state=json.loads(row["state"])
             profile=state.get("broker",broker_model.normalize())
+            require_fx=(profile["capital_currency"]=="CAD"
+                        or (profile["broker"]=="wealthsimple"
+                            and profile["account_type"]=="margin"))
             days, market, meta, fx = _portfolio(
-                symbols, at, loader,need_fx=profile["capital_currency"]=="CAD")
+                symbols, at, loader,need_fx=require_fx)
             if any(day > row["last_session"] for day in days):
                 c.execute("BEGIN IMMEDIATE")
                 # The caller and live worker can run concurrently: re-read
