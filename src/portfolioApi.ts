@@ -64,7 +64,7 @@ export interface PortfolioSeason {
   events: string[];
   strategy: string;
   model_strategy: null | {
-    id:string;name:string;model:string;symbols:string[];
+    id:string;name:string;version:1;model:string;symbols:string[];
     max_position_pct:number;delay_sessions:1|2;rebalance_sessions:number;
     elapsed_shared:number;next_rebalance:number;
   };
