@@ -186,6 +186,13 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
         {say("Initial FX fee","初始换汇费用")}: {display(selected.fx_conversion_fee_usd)} USD
         {selected.fx_rate!=null&&<> · USD/CAD {display(selected.fx_rate)}</>}
       </p>
+      <p className="pf-disclaimer">
+        {say("Execution:","模拟执行：")} {selected.execution_profile.fill_timing} ·
+        {say("Slippage:","滑点：")} {display(selected.execution_profile.slippage_bps)} bps ·
+        {say("Margin rate:","融资年利率：")} {display(selected.execution_profile.margin_rate_pct,"%")} ·
+        {say("Borrow rate:","融券年利率：")} {display(selected.execution_profile.short_borrow_rate_pct,"%")} ·
+        {say("Borrow policy:","融券假设：")} {selected.execution_profile.borrow_policy}
+      </p>
       <div className="pf-metrics">
         <div><small>{say("Paper CAGR, annualized","模拟年复合增长率")}</small>
           <strong>{display(selected.statistics.cagr_pct,"%")}</strong></div>
