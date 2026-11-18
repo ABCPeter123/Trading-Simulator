@@ -5,15 +5,29 @@ import TournamentStrategyInspector from "./TournamentStrategyInspector";
 import {useI18n} from "./i18n";
 import "./universeResearch.css";
 
-type Metric={return_pct:number;max_drawdown_pct:number;trades:number;fees:number;turnover_pct:number};
+type Metric={return_pct:number;max_drawdown_pct:number;trades:number;fees:number;turnover_pct:number;
+  sharpe?:number|null;sortino?:number|null;annualized_volatility_pct?:number|null;
+  peak_gross_leverage?:number;margin_interest?:number;short_borrow_cost?:number;
+  margin_calls?:number;short_executions?:number;average_gross_exposure_pct?:number};
 type Scenario={name:string;horizon_sessions:number;p05_return_pct:number;median_return_pct:number;p95_return_pct:number;median_max_drawdown_pct:number;
   daily?:{session:number;p05_return_pct:number;median_return_pct:number;p95_return_pct:number}[]};
+type RegimeMetrics={samples:number;worst_regime_return_pct:number;
+  regimes:Record<string,{observations:number;return_pct:number;positive_day_pct:number;worst_day_pct:number}>};
+type ExecutionSample={time:number;symbol:string;side:string;quantity:number;price:number;fee:number;notional:number};
 type Winner={rank:number;basket_type:string;symbols:string[];model:string;validation_score:number;training:Metric;
   validation:Metric;held_out:Metric;delayed_execution_stress:Metric;restricted_research:boolean;
-  short_proxy_research:boolean;hypothetical_scenarios:{paths:Scenario[]};execution_model:string};
+  short_proxy_research:boolean;research_only?:boolean;
+  validation_regimes?:RegimeMetrics;held_out_regimes?:RegimeMetrics;
+  held_out_execution_sample?:ExecutionSample[];
+  coverage?:{first_session:string;last_session:string;common_sessions:number};
+  hypothetical_scenarios:{paths:Scenario[]};execution_model:string};
 type Outcome={universe_count:number;eligible_count:number;excluded_count:number;qualified_candidates:number;
   basket_count:number;candidates_evaluated:number;top10:Winner[];limitations:string[];
-  selection_method:string;execution_assumptions:Record<string,string|number>};
+  selection_method:string;execution_assumptions:Record<string,string|number>;
+  candidate_model_counts?:Record<string,number>;
+  historical_coverage?:{universe_earliest_session:string|null;
+    universe_latest_session:string|null;method:string};
+  shortlist_is_global_top_ten?:boolean};
 type Job={id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";created_at:string;
   progress:number;stage:string;scanned:number;eligible:number;error_code:string|null;
   params:{scope:string;delay_sessions:1|2;max_drawdown_pct:number;max_position_pct:number};result:Outcome|null};
@@ -177,7 +191,15 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 [t("Ranked"),result.top10.length]].map(([name,n])=>
                 <div key={String(name)}><small>{name}</small><strong>{n}</strong></div>)}
             </div>
-            <p>{t("Ranked using historical validation only. Held-out tests and simulated futures do not influence selection.")}</p>
+            <p>{result.selection_method}</p>
+            {result.historical_coverage&&<p>{t("Available historical coverage")}: {
+              result.historical_coverage.universe_earliest_session??t("Unknown")} · {
+              result.historical_coverage.universe_latest_session??t("Unknown")}.
+              {t("Each portfolio uses only dates shared by all of its instruments.")}</p>}
+            {result.candidate_model_counts&&<details><summary>{t("Models evaluated by family")}</summary>
+              <div className="ur-kpis">{Object.entries(result.candidate_model_counts).map(([name,count])=>
+                <div key={name}><small>{label(name)}</small><strong>{count}</strong></div>)}</div>
+            </details>}
             <h2>{t("Top 10 research strategies")}</h2>
             <button type="button" className="ur-secondary" disabled={busy||!result.top10.length}
               onClick={()=>void importAll()}>{t("Save all top 10 as executable models")}</button>
@@ -188,7 +210,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             </tr></thead><tbody>{result.top10.map((row,i)=><tr key={row.rank} className={i===pick?"ur-active":""}>
               <td><button className="ur-link" onClick={()=>setPick(i)}>#{row.rank}</button></td>
               <td><button className="ur-link" onClick={()=>setPick(i)}>{label(row.basket_type)} · {label(row.model)}</button>
-                <small>{row.symbols.join(", ").toUpperCase()}</small></td>
+                <small>{row.symbols.join(", ").toUpperCase()}</small>
+                {row.research_only&&<small>{t("Synthetic short / margin research only")}</small>}</td>
               <td>{pct(row.validation.return_pct)}</td><td>{pct(row.validation.max_drawdown_pct)}</td>
               <td>{pct(row.held_out.return_pct)}</td><td>{row.validation_score.toFixed(2)}</td>
             </tr>)}</tbody></table></div>}
@@ -196,11 +219,12 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               <h3>#{chosen.rank} {label(chosen.basket_type)} · {label(chosen.model)}</h3>
               <p>{chosen.symbols.map(x=>x.toUpperCase()).join(" · ")}</p>
               <TournamentStrategyInspector key={`${active.id}-${chosen.rank}`} spec={{
-                version:1,model:chosen.model,symbols:chosen.symbols,
+                version:chosen.model==="leveraged_trend"||chosen.model==="long_short_momentum"||chosen.model==="market_neutral"||chosen.model==="defensive_rotation"||chosen.model==="diversified_risk_parity"||chosen.model==="equity_hedge"?2:1,model:chosen.model,symbols:chosen.symbols,
                 max_position_pct:active.params.max_position_pct,
                 delay_sessions:active.params.delay_sessions,rebalance_sessions:21,
                 restricted_research:chosen.restricted_research,
                 short_proxy_research:chosen.short_proxy_research,
+                research_only:chosen.research_only,
               }} costs={{
                 commission_usd:Number(result.execution_assumptions.commission_usd),
                 slippage_bps:Number(result.execution_assumptions.slippage_bps),
@@ -210,23 +234,50 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               <p>{t("Executable model")}: {label(chosen.model)} · {active?.params.max_position_pct}% {t("Maximum position weight (%)")} ·
                 {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
-                <button type="button" className="ur-primary" disabled={busy}
+                <button type="button" className="ur-primary" disabled={busy||chosen.research_only}
                   onClick={()=>void promote("simulation")}>{t("Load this strategy into simulation")}</button>
-                <button type="button" className="ur-secondary" disabled={busy}
+                <button type="button" className="ur-secondary" disabled={busy||chosen.research_only}
                   onClick={()=>void promote("live")}>{t("Open in Live Engine (paper first)")}</button>
               </div>
-              <p>{t("Simulation uses the selected model, not a substitute SMA script. Live Engine imports the same version for manual-review paper signals. Eligible USD stocks and ETFs only; leveraged or inverse research stays simulation-only.")}</p>
+              <p>{chosen.research_only?
+                t("Real share shorting and margin borrowing are evaluated only in the historical research model. This strategy cannot be loaded into the cash simulator or live engine. The audited historical test and trades remain available here."):
+                t("Supported cash-funded models can be loaded into simulation and paper monitoring. Leveraged and inverse ETFs are separately restricted for live monitoring.")}</p>
               <div className="ur-kpis">
                 {[[t("Training return"),pct(chosen.training.return_pct)],
                   [t("Validation return"),pct(chosen.validation.return_pct)],
                   [t("Held-out return"),pct(chosen.held_out.return_pct)],
                   [t("Held-out drawdown"),pct(chosen.held_out.max_drawdown_pct)],
                   [t("Slower fill stress"),pct(chosen.delayed_execution_stress.return_pct)],
-                  [t("Simulated costs"),chosen.held_out.fees.toFixed(2)]].map(([name,value])=>
+                  [t("Simulated costs"),chosen.held_out.fees.toFixed(2)],
+                  [t("Validation Sharpe"),chosen.validation.sharpe?.toFixed(2)??"N/A"],
+                  [t("Validation Sortino"),chosen.validation.sortino?.toFixed(2)??"N/A"],
+                  [t("Peak gross leverage"),chosen.held_out.peak_gross_leverage?.toFixed(2)??"N/A"],
+                  [t("Margin interest"),chosen.held_out.margin_interest?.toFixed(2)??"N/A"],
+                  [t("Short borrow costs"),chosen.held_out.short_borrow_cost?.toFixed(2)??"N/A"],
+                  [t("Margin calls"),chosen.held_out.margin_calls??0]].map(([name,value])=>
                   <div key={name}><small>{name}</small><strong>{value}</strong></div>)}
               </div>
               {(chosen.restricted_research||chosen.short_proxy_research)&&
                 <p className="ur-warning">{t("Leveraged/inverse ETF exposure is research-only, not a share short or approved broker order.")}</p>}
+              {chosen.coverage&&<p>{t("Actual common history")}: {chosen.coverage.first_session}
+                {" → "}{chosen.coverage.last_session} · {chosen.coverage.common_sessions} {t("common sessions")}.</p>}
+              {chosen.validation_regimes&&<details open><summary>{t("Historical validation performance by market regime")}</summary>
+                <div className="ur-scroll"><table><thead><tr>
+                  <th>{t("Regime")}</th><th>{t("Observed sessions")}</th>
+                  <th>{t("Compounded return")}</th><th>{t("Positive days")}</th><th>{t("Worst day")}</th>
+                </tr></thead><tbody>{Object.entries(chosen.validation_regimes.regimes).map(([regime,x])=>
+                  <tr key={regime}><td>{label(regime)}</td><td>{x.observations}</td>
+                    <td>{pct(x.return_pct)}</td><td>{pct(x.positive_day_pct)}</td><td>{pct(x.worst_day_pct)}</td></tr>)}
+                </tbody></table></div></details>}
+              {(chosen.held_out_execution_sample?.length??0)>0&&<details>
+                <summary>{t("Historical test trade executions")}</summary>
+                <div className="ur-scroll"><table><thead><tr><th>{t("Time")}</th><th>{t("Asset")}</th>
+                  <th>{t("Side")}</th><th>{t("Quantity")}</th><th>{t("Price")}</th><th>{t("Fee")}</th></tr>
+                </thead><tbody>{chosen.held_out_execution_sample?.map((x,i)=><tr key={i}>
+                  <td>{new Date(x.time*1000).toLocaleDateString()}</td>
+                  <td>{x.symbol.toUpperCase()}</td><td>{label(x.side)}</td><td>{x.quantity}</td>
+                  <td>{x.price.toFixed(2)}</td><td>{x.fee.toFixed(2)}</td></tr>)}</tbody></table></div>
+              </details>}
               <p>{chosen.execution_model}</p>
               <h4>{t("Hypothetical 30-session scenarios")}</h4>
               <div className="ur-scroll"><table><thead><tr><th>{t("Scenario")}</th>
