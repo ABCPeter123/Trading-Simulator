@@ -100,7 +100,10 @@ market-data refresh or an ongoing pricing guarantee.
 hours later, before weekends/holidays. A promised under-12-hour
 completion cannot be inferred from daily bars; selecting the next
 session's close is an adverse/slower execution scenario, not an
-intraday time-window forecast.
+intraday time-window forecast. Activation timestamps are checked
+against the modeled 9:30 am opening and 4:00 pm closing auctions. A study
+started after an auction cannot retroactively fill at that auction; it
+waits for a later eligible session instead.
 
 ## Deliberate limitations
 
