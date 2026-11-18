@@ -270,6 +270,25 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
         </tr></thead><tbody>{Object.entries(result.rejection_diagnostics.rejection_reasons).map(([reason,count])=>
           <tr key={reason}><td>{name(reason)}</td><td>{count}</td></tr>)}</tbody></table></div>
       </details>}
+      {result?.status==="no_eligible_candidate"&&result.model_search?.pre_audit_risk_frontier&&
+        <details className="wfo-limit" open>
+          <summary>{l("Risk-limit sensitivity, training and pre-audit folds only",
+            "风险限制敏感性，仅训练期及最终审计前验证")}</summary>
+          <p>{l("All risk limits are tested under the same minimum growth, investment and execution assumptions. No alternate model was evaluated on the final audit, and this failed study did not select any strategy.",
+            "所有回撤限制均使用相同的最低增长率、投资敞口和执行成本假设。没有对最终审计期测试替代模型，本次研究也没有选出任何策略。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Training drawdown cap","训练期回撤上限")}</th>
+            <th>{l("Qualified historical folds","合格的历史验证区间")}</th>
+            <th>{l("Stitched fold CAGR","验证期拼接年复合增长")}</th>
+            <th>{l("Final pre-audit training eligible","最终审计前训练合格数")}</th>
+          </tr></thead><tbody>{result.model_search.pre_audit_risk_frontier.experiments.map(x=>
+            <tr key={x.max_training_drawdown_pct}>
+              <td>{pct(x.max_training_drawdown_pct)}</td>
+              <td>{x.folds_with_eligible_candidate}/{x.fold_count}</td>
+              <td>{pct(x.validation_cagr_pct)}</td>
+              <td>{x.pre_audit_final_training_eligible_count}</td>
+            </tr>)}</tbody></table></div>
+        </details>}
       {study&&audit&&<>
         <div className="wfo-headline">
           <div><small>{l("Validation fold success","验证期盈利区间")}</small>
