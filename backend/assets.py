@@ -386,7 +386,7 @@ def get_instrument(asset_id: str) -> Instrument:
         raise HTTPException(404, detail="Unknown instrument.")
     return instrument
 
-def list_instruments(search: str = "", category: str = "", limit: int = 1000) -> list[dict]:
+def list_instruments(search: str = "", category: str = "", limit: int = 2000) -> list[dict]:
     needle = search.strip().lower()
     result = []
     for instrument in INSTRUMENTS.values():
@@ -400,7 +400,7 @@ def list_instruments(search: str = "", category: str = "", limit: int = 1000) ->
             "currency": instrument.currency, "tradable": instrument.tradable,
             "decimals": instrument.decimals,
         })
-        if len(result) >= min(max(1, limit), 1000):
+        if len(result) >= min(max(1, limit), 2000):
             break
     return result
 
