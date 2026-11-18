@@ -12,6 +12,11 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Daily scenario trajectory": "逐日情景轨迹",
+  "Day-by-day percentile bands": "逐日百分位区间",
+  "Trading session": "交易时段",
+  "Downside 5%": "下侧5%",
+  "Upside 95%": "上侧95%",
   "Top 10 historical research candidates": "历史研究前十名策略",
   "Ranked using validation history, not future information. Historical candidates are not live trade recommendations.": "仅按历史验证数据排名，不使用未来信息。历史候选策略并非实时交易建议。",
   "No completed universe scan yet. Run Strategy Tournament in Research Lab.": "尚未完成全市场扫描。请到研究实验室运行策略竞赛。",
