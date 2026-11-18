@@ -31,6 +31,7 @@ def local_output_token_limit():
         return 8192
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+LLAMA_CPP_ROUTER_MODELS_URL = "http://127.0.0.1:8081/models"
 LLAMA_CPP_MODELS_URL = "http://127.0.0.1:8081/v1/models"
 LLAMA_CPP_CHAT_URL = "http://127.0.0.1:8081/v1/chat/completions"
 OLLAMA_LOAD_URL = "http://127.0.0.1:11434/api/generate"
@@ -142,41 +143,80 @@ def selected_local_model(requested=None):
     return selected[:-5] if selected.lower().endswith(".gguf") else selected
 
 
+def _llama_cpp_inventory(client):
+    """Enumerate *installed* models, including models not yet loaded.
+
+    Router GET /models is authoritative for on-demand loading.
+    GET /v1/models is a compatibility fallback and can return [] while
+    the router is healthy because no model instance has loaded yet.
+    Do not start inference just to determine availability.
+    """
+    reachable = False
+    for url in (LLAMA_CPP_ROUTER_MODELS_URL, LLAMA_CPP_MODELS_URL):
+        try:
+            response = client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            rows = data.get("data") if isinstance(data, dict) else None
+            if isinstance(rows, list):
+                reachable = True
+                if rows:
+                    return rows, True
+        except (httpx.HTTPError, ValueError, TypeError, KeyError):
+            continue
+    return [], reachable
+
+
 def provider_status(model=None):
-    """Show whether the selected local model is actually available."""
+    """Show whether the selected local model is installed, not necessarily loaded."""
     config = configuration()
     if config["provider"] == "llama_cpp":
         selected = selected_local_model(model)
         config = {**config, "model": selected}
-        choices = (*local_model_choices(), configuration()["model"])
+        approved = {_model_key(choice) for choice in
+                    (*local_model_choices(), configuration()["model"])}
         available_models = []
-        loaded = False
+        model_states = {}
+        reachable = False
         try:
-            with httpx.Client(timeout=2, trust_env=False) as client:
-                reply = client.get(LLAMA_CPP_MODELS_URL)
-                reply.raise_for_status()
-                rows = reply.json().get("data", [])
-                if isinstance(rows, list):
-                    approved = {_model_key(choice) for choice in choices}
-                    available_models = [row["id"] for row in rows
-                                        if isinstance(row, dict)
-                                        and isinstance(row.get("id"), str)
-                                        and _model_key(row["id"]) in approved]
-                    loaded = any(_model_key(row.get("id", "")) == _model_key(selected)
-                                 and isinstance(row.get("status"), dict)
-                                 and row["status"].get("value") == "loaded"
-                                 for row in rows if isinstance(row, dict))
+            with httpx.Client(timeout=4, trust_env=False) as client:
+                rows, reachable = _llama_cpp_inventory(client)
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    identifier = row.get("id")
+                    if not isinstance(identifier, str) or _model_key(identifier) not in approved:
+                        continue
+                    if identifier not in available_models:
+                        available_models.append(identifier)
+                    state = row.get("status")
+                    if isinstance(state, dict):
+                        model_states[identifier] = state.get("value", "")
         except (httpx.HTTPError, ValueError, TypeError, KeyError):
             pass
-        ready = any(_model_key(item) == _model_key(selected) for item in available_models)
-        if ready:
-            selected = next(item for item in available_models
-                            if _model_key(item) == _model_key(selected))
-            config["model"] = selected
-        return {**config, "ready": ready, "loaded": loaded,
-                "warming": False, "available_models": available_models,
-                "description": config["description"] if ready else
-                "Local llama.cpp model unavailable. Confirm server port 8081 and model names."}
+        matched = next((item for item in available_models
+                        if _model_key(item) == _model_key(selected)), None)
+        ready = matched is not None
+        if matched:
+            config["model"] = matched
+        description = (
+            config["description"] if ready else
+            "Cannot reach the local llama.cpp router on 127.0.0.1:8081."
+            if not reachable else
+            "llama.cpp is reachable, but exposes no model IDs. Check GET /models."
+            if not available_models else
+            "The chosen model is not in the approved local llama.cpp inventory."
+        )
+        return {**config, "ready": ready,
+                "loaded": bool(matched and model_states.get(matched) == "loaded"),
+                "warming": bool(matched and model_states.get(matched) == "loading"),
+                "available_models": available_models,
+                "router_reachable": reachable,
+                "connection_state": ("ready" if ready else
+                                     "unreachable" if not reachable else
+                                     "no_models" if not available_models else
+                                     "model_not_available"),
+                "description": description}
     if config["provider"] != "ollama":
         return {**config, "ready": config["configured"]}
     ready = False
