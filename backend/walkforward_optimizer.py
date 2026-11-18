@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from itertools import product
+import json
 from math import erfc, isfinite, sqrt
 from fastapi import HTTPException
 
@@ -149,7 +150,16 @@ def _choose(configs,symbols,market,metadata,train_end,settings):
         return None,attempted,0
     # Stable ties: the fixed trial order is the deterministic tiebreaker.
     best=max(valid,key=lambda item:item[0])
-    return {"score":best[0],"config":best[1],"training":best[2]},attempted,len(valid)
+    high_growth=max(valid,key=lambda item:
+                    item[2]["cagr_pct"] if item[2]["cagr_pct"] is not None else float("-inf"))
+    high_sharpe=max(valid,key=lambda item:
+                    item[2]["excess_sharpe"] if item[2]["excess_sharpe"] is not None else float("-inf"))
+    leaders={name:{"config":entry[1],"score":entry[0],"training":entry[2]}
+             for name,entry in (("highest_growth",high_growth),
+                                ("highest_sharpe",high_sharpe),
+                                ("balanced",best))}
+    return {"score":best[0],"config":best[1],"training":best[2],
+            "training_leaders":leaders},attempted,len(valid)
 
 
 def _chain_segments(segments):
@@ -281,6 +291,25 @@ def analyze(payload, *, loader=None, report=None):
                                             risk_free_pct=settings["risk_free_pct"])
     audit_consistency=objectives.consistency(final["equity_curve"],
                                               target_cagr_pct=settings["target_cagr_pct"])
+    # Compare three PRIOR-SELECTED research objectives on the same sealed
+    # historical audit. No one is re-ranked or promoted using audit outcomes.
+    comparison=[]
+    audit_cache={json.dumps(final_choice["config"],sort_keys=True):final}
+    for objective_name,leader in final_choice["training_leaders"].items():
+        config=leader["config"];key=json.dumps(config,sort_keys=True)
+        if key not in audit_cache:
+            audit_cache[key]=_execute(config,symbols,market,metadata,
+                                      test_start,n,settings["slippage_bps"])
+        observed=audit_cache[key]
+        comparison.append({
+            "objective":objective_name,"selected":config,
+            "training_objectives":leader["training"],
+            "audit_objectives":objectives.performance(
+                observed["equity_curve"],risk_free_pct=settings["risk_free_pct"]),
+            "audit_return_pct":observed["return_pct"],
+            "audit_drawdown_pct":observed["max_drawdown_pct"],
+            "audit_trades":observed["trades"],
+        })
     targets=(audit["cagr_pct"] is not None and audit["excess_sharpe"] is not None
              and audit["cagr_pct"]>=settings["target_cagr_pct"]
              and audit["excess_sharpe"]>=settings["target_sharpe"]
@@ -315,6 +344,7 @@ def analyze(payload, *, loader=None, report=None):
         },
         "final_audit":{
             "selected":final_choice["config"],
+            "prior_selected_comparison":comparison,
             "selection_score":final_choice["score"],
             "trials_evaluated":attempted,"eligible_trials":eligible,
             "start_date":days[test_start],"end_date":days[-1],
@@ -330,6 +360,7 @@ def analyze(payload, *, loader=None, report=None):
         },
         "limitations":[
             "Models and allocation parameters are reselected before each walk-forward fold from prior-only training data. No predictive model is fitted; each OOS fold and audit reset capital and positions.",
+            "Three objective leaders (highest training growth, highest training Sharpe and balanced) are all chosen exclusively before the audit. Their final audit outcomes are comparison diagnostics, never a held-out selection mechanism.",
             "The final audit is never used to rank, select or retune candidates; do not manually retune based on this audit and still call it unseen.",
             "Long-only candidates include 2-3 strategy sleeves mixed before netted trades in a single shared-cash ledger. This is not a portfolio of independently realized strategy returns. Short and margin sleeves are excluded from these blends.",
             "A fixed public grid of compatible models and bounded capital/position parameters is searched; no unlimited parameter fitting, learned indicators or multi-basket model synthesis is implemented.",
