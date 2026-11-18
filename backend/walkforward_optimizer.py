@@ -294,7 +294,8 @@ def _risk_frontier(configs,fold_training,fold_results,final_training,settings,
             if choice:
                 # The baseline ledger may be reused, but all new executions
                 # stop before the final audit's first trading session.
-                baseline_choice=fold_results[index]["selected"]
+                baseline_choice=(fold_results[index]["selected"]
+                                 if fold_results[index] is not None else None)
                 if choice["config"]==baseline_choice:
                     observed=fold_results[index]["ledger"]
                 else:
@@ -391,6 +392,38 @@ def _trial_adjustment(sharpe,sessions,trial_count):
             "assumed_trials":trial_count}
 
 
+def _no_eligible_report(fold_failed,why,evaluations,fold_training,
+                        fold_ledgers,configs,symbols,market,metadata,points,settings):
+    """Fail closed and still show controlled risk sensitivity.
+
+    All omitted training ledgers are filled using observations ending before
+    the final audit. No failed study is rescued by audit-date tuning.
+    """
+    for index in range(len(fold_training),3):
+        fold_training.append(_evaluate_training_candidates(
+            configs,symbols,market,metadata,points[index],settings))
+        fold_ledgers.append(None)
+    final_training=(evaluations if fold_failed=="final" else
+                    _evaluate_training_candidates(
+                        configs,symbols,market,metadata,points[3],settings))
+    frontier=_risk_frontier(configs,fold_training,fold_ledgers,final_training,
+                            settings,symbols,market,metadata,points)
+    return {
+        "status":"no_eligible_candidate","fold_failed":fold_failed,
+        "candidate_count":len(configs),"research_only":True,
+        "no_real_orders":True,"selection_outcome":"no_qualified_strategy",
+        "reason":why,
+        "rejection_diagnostics":_gate_report(evaluations,settings),
+        "model_search":{
+            "width":settings["search_width"],"candidate_count":len(configs),
+            "total_train_evaluations":sum(len(x) for x in fold_training)+len(final_training),
+            "candidate_scope":"Fixed historical basket; no final-audit re-selection.",
+            "pre_audit_risk_frontier":frontier,
+        },
+        "no_final_audit_performed":True,
+    }
+
+
 def analyze(payload, *, loader=None, report=None):
     settings=validate_request(payload)
     report=report or (lambda pct,stage:None)
@@ -433,13 +466,12 @@ def analyze(payload, *, loader=None, report=None):
                                             train_end,settings,
                                             evaluations=evaluations)
         if selected is None:
-            # A failed selection is a failed study, not a cherry-picked fold.
-            return {"status":"no_eligible_candidate","fold_failed":fold_idx+1,
-                    "candidate_count":len(configs),"research_only":True,
-                    "no_real_orders":True,
-                    "reason":"No configuration met the configured growth, drawdown, exposure and training eligibility requirements.",
-                    "rejection_diagnostics":_gate_report(evaluations,settings),
-                    "selection_outcome":"no_qualified_strategy"}
+            fold_ledgers.append(None)
+            return _no_eligible_report(
+                fold_idx+1,
+                "No configuration met the growth, drawdown and exposure training thresholds at this fold.",
+                evaluations,fold_training,fold_ledgers,configs,symbols,
+                market,metadata,points,settings)
         result=_execute(selected["config"],symbols,market,metadata,
                         train_end,out_end,settings["slippage_bps"],settings)
         realized.append(result)
@@ -487,12 +519,10 @@ def analyze(payload, *, loader=None, report=None):
                                              test_start,settings,
                                              evaluations=final_training)
     if final_choice is None:
-        return {"status":"no_eligible_candidate","fold_failed":"final",
-                "candidate_count":len(configs),"research_only":True,
-                "no_real_orders":True,
-                "reason":"No configuration met the configured growth, drawdown, exposure and training eligibility requirements on the pre-audit training sample.",
-                "rejection_diagnostics":_gate_report(final_training,settings),
-                "selection_outcome":"no_qualified_strategy"}
+        return _no_eligible_report(
+            "final","No configuration met the growth, drawdown and exposure thresholds on the pre-audit training sample.",
+            final_training,fold_training,fold_ledgers,configs,symbols,
+            market,metadata,points,settings)
     report(88,"Comparing drawdown constraints on pre-audit folds only")
     risk_frontier=_risk_frontier(
         configs,fold_training,fold_ledgers,final_training,settings,
