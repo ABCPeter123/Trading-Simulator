@@ -63,9 +63,9 @@ def health():
             "age_seconds": age_seconds,
             "interval_seconds": expected_seconds,
             "sync_state": ("disabled" if not entry["active"] else
-                           "collector_unverified" if worker["state"] in ("unverified","stale") else
                            "error" if entry["failure_code"] else
                            "not_started" if entry["last_success"] is None else
+                           "collector_unverified" if worker["state"] in ("unverified","stale") else
                            "last_sync_succeeded"),
         })
     return {"subscriptions":len(entries),
