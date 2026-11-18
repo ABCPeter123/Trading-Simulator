@@ -40,7 +40,10 @@ historical study is not automatically promoted to paper or live trading.
   long-only no-borrow constraints, indicative flat annual financing and
   borrow rates, maintenance floor and configurable maximum drawdown stop.
 - State, marks, and fills committed to durable SQLite using transactions and
-  session uniqueness, preventing duplicate fills on restart.
+  session uniqueness, preventing duplicate fills on restart. If more than one
+  completed trading session arrives between successful checkpoints, the study
+  pauses without recreating trades at historical opens. Start a fresh study
+  instead of claiming this as continuous forward-paper evidence.
 - A descriptive comparison against the previously sealed historical audit.
   A forward Sharpe or CAGR from fewer than 30 new sessions is not used to
   report a historical-vs-forward drift comparison.
