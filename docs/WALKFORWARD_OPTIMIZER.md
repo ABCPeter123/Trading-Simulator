@@ -60,6 +60,35 @@ returns and ignores autocorrelation, market regime drift, and user-driven
 repeat research. Repeated manual tuning after viewing an audit invalidates
 its claim to being an untouched test.
 
+## Additional pre-audit selection-bias diagnostics
+
+The optimizer now replays every runnable candidate on the **pre-audit 80%
+only**, before executing the final audit. The private output contains
+aggregate estimates, not the private candidate curves or selected rules:
+
+- **Estimated Deflated Sharpe probability**: compares the selected candidate's
+  pre-audit net daily Sharpe with a null maximum across the attempted trial
+  count. The threshold uses the expected maximum of independent normal
+  Sharpe estimates, with a conservative floor for null dispersion.
+  The estimated probability includes daily skew/kurtosis moment terms.
+  All historical Sharpe calculations apply the explicitly assumed cash rate.
+- **CSCV estimate of Probability of Backtest Overfitting (PBO)**: divides the
+  *same pre-audit* candidate return curves into eight sequential blocks,
+  evaluates 70 complementary four-block splits, and counts the fraction
+  in which the winning in-sample candidate ranks below the out-of-sample
+  median. Identical return paths count as one candidate. Unidentifiable or
+  insufficient histories produce N/A rather than fabricated scores.
+
+These are **statistical approximations**, not certified DSR/PBO confidence.
+CSCV is combinatorial and nonchronological, not a tradable rolling
+walk-forward simulation. Returns are serially correlated, strategies share
+market exposures, and manual researcher trial counts may be unknown. The
+pre-audit diagnostic can also be influenced by the earlier walk-forward
+model search conducted on that same history. Consequently, a strong score
+does not validate a future return forecast. The separate final held-out
+audit remains untouched by either diagnostic, and forward-paper monitoring
+is still necessary.
+
 ## Privacy and limits
 
 All real market-archive inputs, selected private parameter values, risk reports,
