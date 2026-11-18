@@ -124,6 +124,17 @@ def test_paper_drawdown_stop_and_new_study_after_pause(isolated):
     assert another["starting_session"]==DAYS[511].isoformat()
 
 
+def test_multiple_unobserved_sessions_stop_instead_of_backfilling(isolated):
+    created=paper.create("synthetic-gap",now=asof(510),loader=provider(510))
+    result=paper.process_one(created["id"],now=asof(512),loader=provider(512))
+    assert result["status"]=="paused"
+    assert result["observed_sessions"]==0
+    assert result["last_error"]
+    detail=paper.get_study(created["id"])
+    assert len(detail["marks"])==1
+    assert detail["fills"]==[]
+
+
 def test_private_http_endpoints_and_demo_isolation(isolated,monkeypatch):
     monkeypatch.setattr(paper,"create",lambda job_id,**kw:{"source_job_id":job_id,"status":"active"})
     client=TestClient(app)
