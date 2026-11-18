@@ -1233,6 +1233,22 @@ const zh: Record<string, string> = {
   "Latest candles": "最近K线",
   "All 256 modeled paths shown; percentile curves reflect the full distribution.": "全部256条模拟路径均已显示；分位数曲线反映完整的模拟分布。",
   "PUBLIC DEMO · Shared sandbox. Never enter your private strategy, credentials, or actual financial data. Visitors may see each other's demo sessions.": "公开演示 · 共享沙盒。切勿输入您的私人交易策略、账号凭据或真实财务数据。其他访客可能查看彼此的演示会话。",
+  "All ranked portfolio models saved privately. Open the Live Engine to select a paper strategy.": "所有排名策略模型已私密保存。请前往实盘引擎选择模拟监控策略。",
+  "Save all top 10 as executable models": "保存前十名为可执行模型",
+  "Executable model": "可执行策略模型",
+  "Every 21 common sessions": "每 21 个共同交易日调仓",
+  "session execution delay": "个交易日执行延迟",
+  "Load this strategy into simulation": "将此策略载入历史模拟",
+  "Open in Live Engine (paper first)": "在实盘引擎中打开（先模拟）",
+  "Simulation uses the selected model, not a substitute SMA script. Live Engine imports the same version for manual-review paper signals. Eligible USD stocks and ETFs only; leveraged or inverse research stays simulation-only.": "历史模拟使用所选模型的真实配置，而非替代均线脚本。实盘引擎导入相同版本，先生成需人工审核的模拟信号。实时监控仅支持符合条件的美元股票及 ETF；杠杆和反向 ETF 仅供模拟研究。",
+  "Loaded tournament strategy": "已载入竞赛策略",
+  "Allocation model": "资产配置模型",
+  "Rebalance every": "调仓间隔：每",
+  "shared sessions": "个共同交易日",
+  "The simulator executes model target allocations at common session opens using previously completed candles. Editing and activating a rule script replaces this model.": "模拟器根据已完成的历史 K 线，在共同交易日开盘按目标权重调仓。激活规则脚本将替换当前模型。",
+  "Tournament allocation models rebalance the full saved basket every 21 shared trading sessions. Live signals are indicative, calculated from confirmed fills and recent daily history. Verify all holdings and execution prices manually.": "竞赛资产配置模型每 21 个共同交易日对完整资产组合调仓。实时信号只供参考，依据已确认成交和最新日线历史计算。请人工核对全部持仓和成交价格。",
+  "Basket": "资产组合",
+  "Validation drawdown": "验证期回撤",
 };
 
 const LocaleContext = createContext<{
