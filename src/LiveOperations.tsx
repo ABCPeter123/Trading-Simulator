@@ -3,6 +3,8 @@ import {Activity,AlertTriangle,Bell,Check,Clock3,PlayCircle,RefreshCw,Save,Shiel
 import {useI18n} from "./i18n";
 import {request} from "./api";
 import {listStrategies} from "./strategyLibraryApi";
+import {listTournamentVersions} from "./tournamentApi";
+import type {TournamentVersion} from "./tournamentApi";
 import type {SavedStrategy} from "./strategyLibraryApi";
 import {
   checkMachine,editConfirmedFill,getJournal,getMachineStatus,getNotifications,
@@ -31,10 +33,10 @@ function Summary({label,value,detail}:{label:string;value:string|number;detail?:
   return <article className="ops-summary"><span>{label}</span><strong>{value}</strong>{detail&&<small>{detail}</small>}</article>;
 }
 
-export default function LiveOperations({section,initialSignal,onRecordSignal,onConsumed,onOpenResearch}:{
+export default function LiveOperations({section,initialSignal,onRecordSignal,onConsumed,onOpenResearch,preferredStrategyId}:{
   section:OperationsSection;initialSignal?:Signal|null;
   onRecordSignal?:(signal:Signal)=>void;onConsumed?:()=>void;
-  onOpenResearch?:()=>void;
+  onOpenResearch?:()=>void;preferredStrategyId?:string;
 }){
   const {t}=useI18n();
   const [shortlist,setShortlist]=useState<ResearchShortlist|null>(null);
@@ -44,7 +46,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
   const [journal,setJournal]=useState<Journal|null>(null);
   const [alerts,setAlerts]=useState<Alert[]>([]);
   const [notification,setNotification]=useState<NotificationStatus|null>(null);
-  const [library,setLibrary]=useState<SavedStrategy[]>([]);
+  const [library,setLibrary]=useState<(SavedStrategy|TournamentVersion)[]>([]);
   const [selectedStrategy,setSelectedStrategy]=useState("");
   const [capital,setCapital]=useState("100000");
   const [monitorResolution,setMonitorResolution]=useState<"1d"|"1h"|"15m">("1d");
@@ -77,9 +79,9 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
   const refresh=useCallback(async()=>{
     const results=await Promise.allSettled([
       getMachineStatus(),listDeployments(),listSignals(),getJournal(),listMachineAlerts(),getNotifications(),
-      listStrategies("single"),listStrategies("portfolio"),
+      listStrategies("single"),listStrategies("portfolio"),listTournamentVersions(),
     ]);
-    const [s,d,sg,j,a,n,single,portfolio]=results;
+    const [s,d,sg,j,a,n,single,portfolio,tournaments]=results;
     if(s.status==="fulfilled")setStatus(s.value);
     if(d.status==="fulfilled")setDeployments(d.value);
     if(sg.status==="fulfilled")setSignals(sg.value);
@@ -87,13 +89,37 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
     if(a.status==="fulfilled")setAlerts(a.value);
     if(n.status==="fulfilled")setNotification(n.value);
     if(single.status==="fulfilled"&&portfolio.status==="fulfilled"){
-      const rows=[...single.value,...portfolio.value];
+      const rows: (SavedStrategy|TournamentVersion)[]=[
+        ...single.value,...portfolio.value,
+        ...(tournaments.status==="fulfilled"?tournaments.value:[]),
+      ];
       setLibrary(rows);
       setSelectedStrategy(previous=>rows.some(x=>x.id===previous)?previous:(rows[0]?.id??""));
     }
     const rejected=results.find(x=>x.status==="rejected");
     if(rejected?.status==="rejected")throw rejected.reason;
   },[]);
+  useEffect(()=>{
+    const selected=library.find(item=>item.id===preferredStrategyId);
+    if(selected){
+      setSelectedStrategy(selected.id);
+      if("model" in selected){
+        setAllocation(String(selected.max_position_pct));
+        setDailyLimit("20");
+        setMonitorResolution("1d");
+      }
+    }
+  },[preferredStrategyId,library]);
+
+  const selectStrategy=(id:string)=>{
+    setSelectedStrategy(id);
+    const item=library.find(entry=>entry.id===id);
+    if(item && "model" in item){
+      setAllocation(String(item.max_position_pct));
+      setDailyLimit("20");
+      setMonitorResolution("1d");
+    }
+  };
   useEffect(()=>{
     let active=true;
     const load=()=>{void refresh().then(()=>{if(active)setError("");}).catch(e=>{if(active)setError(errorOf(e));});};
@@ -215,18 +241,18 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
         <h2><PlayCircle size={18}/>{t("Deploy saved strategy")}</h2>
         <p className="ops-muted">{t("Uses the version already saved in the private strategy library. Deployments are frozen snapshots. Start with paper monitoring.")}</p>
         <label>{t("Saved strategy version")}
-          <select value={selectedStrategy} onChange={e=>setSelectedStrategy(e.target.value)}>
+          <select value={selectedStrategy} onChange={e=>selectStrategy(e.target.value)}>
             {!library.length&&<option value="">{t("Save a strategy in the Research tab first.")}</option>}
             {library.map(s=><option key={s.id} value={s.id}>{s.name} ({s.mode})</option>)}
           </select></label>
         <div className="ops-field-grid">
           <label>{t("Reference capital")}<input inputMode="decimal" type="number" min="100" value={capital} onChange={e=>setCapital(e.target.value)}/></label>
-          <label>{t("Max allocation per signal (%)")}<input type="number" min="0.01" max="25" step=".5" value={allocation} onChange={e=>setAllocation(e.target.value)}/></label>
+          <label>{t("Max allocation per signal (%)")}<input type="number" min="0.01" max={library.find(x=>x.id===selectedStrategy)?.mode==="portfolio_model"?50:25} step=".5" value={allocation} onChange={e=>setAllocation(e.target.value)}/></label>
           <label>{t("Signal evaluation interval")}<select value={monitorResolution}
             onChange={e=>setMonitorResolution(e.target.value as "1d"|"1h"|"15m")}>
             <option value="1d">{t("Daily, previous completed session")}</option>
-            <option value="1h">{t("Hourly, completed candle")}</option>
-            <option value="15m">{t("15-minute, completed candle")}</option>
+            <option value="1h" disabled={library.find(x=>x.id===selectedStrategy)?.mode==="portfolio_model"}>{t("Hourly, completed candle")}</option>
+            <option value="15m" disabled={library.find(x=>x.id===selectedStrategy)?.mode==="portfolio_model"}>{t("15-minute, completed candle")}</option>
           </select></label>
           <label>{t("Daily signal limit")}<input type="number" min="1" max="20" value={dailyLimit} onChange={e=>setDailyLimit(e.target.value)}/></label>
           <label>{t("Realized-loss stop (%)")}<input type="number" min="0.5" max="25" step=".5" value={lossLimit} onChange={e=>setLossLimit(e.target.value)}/></label>
@@ -236,6 +262,8 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
           max_allocation_pct:Number(allocation),max_daily_signals:Number(dailyLimit),max_realized_loss_pct:Number(lossLimit),resolution:monitorResolution}),
           "Strategy deployed to paper signal monitoring.")}>
           {t("Deploy to paper monitoring")}</button>
+        {library.find(x=>x.id===selectedStrategy)?.mode==="portfolio_model"&&
+          <p className="ops-muted">{t("Tournament allocation models rebalance the full saved basket every 21 shared trading sessions. Live signals are indicative, calculated from confirmed fills and recent daily history. Verify all holdings and execution prices manually.")}</p>}
         <p className="ops-muted">{t("Short selling, leverage and broker automation remain disabled until their risk models are validated.")}</p>
       </section>
       <section className="ops-card">
