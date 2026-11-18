@@ -124,3 +124,22 @@ def test_existing_subscription_migrates_to_durable_queue(isolated):
     ingest.run_reconciliation_due(now,execute=fake)
     assert calls==[("spy","1h","bootstrap")]
     assert len(ingest.list_reconciliation_jobs())==2
+
+
+
+def test_full_history_bootstrap_does_not_expand_short_window_alias(isolated):
+    past=1704067200
+    recent=1735689600
+    def candle(stamp, price):
+        return {"time":stamp,"open":price,"high":price+1,
+                "low":price-1,"close":price,"volume":100}
+    archive.record_history({"asset_id":"spy","range":"1Y",
+                            "bars":[candle(recent,105.0)]})
+    result=ingest._merge_verified("spy","1d",[
+        candle(past,100.0),candle(recent,105.0),
+        candle(recent+86400,106.0)],"MAX")
+    assert result["verified_bars"]==3
+    assert archive.archive_stats("spy","MAX")["bars"]==3
+    one_year=archive.load_archived_history("spy","1Y")
+    assert [bar["time"] for bar in one_year]==[recent,recent+86400]
+    assert [bar["close"] for bar in one_year]==[105.0,106.0]
