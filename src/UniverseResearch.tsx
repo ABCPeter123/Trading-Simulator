@@ -1,6 +1,6 @@
 import {useCallback,useEffect,useState} from "react";
 import {request} from "./api";
-import {importTournamentRank,createTournamentReplay} from "./tournamentApi";
+import {importTournamentRank,createTournamentReplay,modelDescription} from "./tournamentApi";
 import {useI18n} from "./i18n";
 import "./universeResearch.css";
 
@@ -194,6 +194,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             {chosen&&<article className="ur-detail">
               <h3>#{chosen.rank} {label(chosen.basket_type)} · {label(chosen.model)}</h3>
               <p>{chosen.symbols.map(x=>x.toUpperCase()).join(" · ")}</p>
+              <p>{t(modelDescription(chosen.model))}</p>
               <p>{t("Executable model")}: {label(chosen.model)} · {active?.params.max_position_pct}% {t("Maximum position weight (%)")} ·
                 {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
