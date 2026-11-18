@@ -296,9 +296,36 @@ TRADING_SIM_AI_MODELS setting in the private .env, then restart the backend
 and router. Model installation is voluntary, never triggered by CI or
 the local launcher. It needs about 3 GB of additional SSD space.
 
-The 4B model receives a shorter read-only research prompt with all
-summary metrics, symbols, risk, holdings and strategy syntax preserved,
-but fewer observation samples and historical fills. Detailed analysis
+The 4B model now receives an intent-specific, shorter read-only research
+prompt. Exact financial summaries, risk limits, instruments, current positions,
+observed time bounds and benchmark assumptions are always preserved.
+A drawdown question includes selected curve points (including the worst
+drawdown within the already sampled observations), but not unrelated trades.
+A trade question includes recent executions, a portfolio exposure question
+includes attribution, and a strategy-creation question includes existing
+strategy text and the DSL rule catalog. Unknown questions receive the core
+overview; short follow-ups can inherit the latest user question topic.
+The selection never uses future candles and never changes stored strategies.
+The full 8B/9B context and its strategy validator remain unchanged.
+
+The llama.cpp local HTTP requests now explicitly enable cache_prompt. This
+lets its single inference slot reuse matching KV prefix tokens if possible.
+The benchmark now reports cache_n and prompt_n, which distinguish cached
+prefix tokens from newly processed tokens. Keeping the prompt shorter helps
+cold requests; cache reuse can also improve repeated requests, but performance
+depends on the llama.cpp version and on the common prefix. It is not a
+persistent SSD cache or a guaranteed speed multiplier. The benchmark never
+sends actual trading strategies or owner data.
+
+~~~powershell
+.\scripts\benchmark-local-ai.ps1 -Model Qwen3.5-4B-Q4_K_M -MaxTokens 64
+.\scripts\benchmark-local-ai.ps1 -Model Qwen3.5-4B-Q4_K_M -MaxTokens 64
+~~~
+
+Compare both runs. Actual app prompts contain different observed metrics and
+may require more prefill than this short synthetic math benchmark. Strategy
+proposals can also require longer output limits than ordinary explanation.
+ Detailed analysis
 remains available with the 8B and 9B models. The smaller model
 explicitly disables optional reasoning tokens in its chat template
 and still passes any generated strategy through the existing DSL
