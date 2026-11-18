@@ -11,8 +11,8 @@ import { ASSET_CLASSES, ASSETS as FALLBACK_ASSETS, formatMoney, formatPrice } fr
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
 import type { DiscoveredInstrument } from "./arcadeApi";
 import { getAccount, getBacktest, getHistory, getQuote, resetAccount, sendOrder, supportsCashTrading,
-  getMarketCoverage,getMarketSubscriptions,subscribeMarket,unsubscribeMarket,getArchivedMarketHistory } from "./api";
-import type { AccountResponse, BacktestResponse, HistoryResponse, QuoteResponse, MarketCoverage, MarketSubscription } from "./api";
+  getMarketCoverage,getMarketSubscriptions,getMarketCollectorHealth,subscribeMarket,unsubscribeMarket,getArchivedMarketHistory } from "./api";
+import type { AccountResponse, BacktestResponse, HistoryResponse, QuoteResponse, MarketCoverage, MarketSubscription, MarketCollectorHealth } from "./api";
 import { advanceReplay, NEW_REPLAY, replayFillPrice, replayStartIndex } from "./replay";
 import type { ReplayAccount } from "./replay";
 import type { Asset, AssetClass, ChartStyle, TradeSide } from "./types";
@@ -46,6 +46,7 @@ export default function MarketDesk() {
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [coverage,setCoverage]=useState<MarketCoverage|null>(null);
   const [subscriptions,setSubscriptions]=useState<MarketSubscription[]>([]);
+  const [collectorHealth,setCollectorHealth]=useState<MarketCollectorHealth|null>(null);
   const [marketOpsBusy,setMarketOpsBusy]=useState(false);
   const [marketOpsError,setMarketOpsError]=useState("");
   const tracking=subscriptions.find(x=>x.asset_id===selectedId&&x.resolution===resolution&&x.active);
@@ -133,6 +134,8 @@ export default function MarketDesk() {
     let active=true;
     const load=()=>{
       void getMarketSubscriptions().then(items=>{if(active)setSubscriptions(items);}).catch(()=>{});
+      void getMarketCollectorHealth().then(item=>{if(active)setCollectorHealth(item);})
+        .catch(()=>{if(active)setCollectorHealth(null);});
     };
     load();const timer=setInterval(load,30000);
     return()=>{active=false;clearInterval(timer);};
@@ -470,7 +473,20 @@ export default function MarketDesk() {
                 </div>
                 <div className="market-data-health-line">
                   <strong>{t("Incremental ingestion")}</strong>
-                  <span>{tracking?t("Tracking active"):t("Not tracking")}</span>
+                  <span>{tracking
+                    ? collectorHealth?.collector.state==="idle"||collectorHealth?.collector.state==="polling"
+                      ? t("Subscribed, collector heartbeat detected")
+                      : t("Subscribed, collector not confirmed")
+                    : t("Not tracking")}</span>
+                  <span>{t("Collector")}: {collectorHealth
+                    ? t(collectorHealth.collector.state==="stale"
+                      ? "Collector heartbeat stale"
+                      : collectorHealth.collector.state==="unverified"
+                      ? "Collector activity unverified"
+                      : "Collector recently active")
+                    : t("Collector activity unverified")}</span>
+                  {collectorHealth?.collector.heartbeat_age_seconds!=null&&
+                    <span>{t("Last worker heartbeat")}: {collectorHealth.collector.heartbeat_age_seconds}s</span>}
                   {tracking?.last_success&&<span>{t("Last successful sync")} {dt(tracking.last_success)}</span>}
                   {tracking?.failure_code&&<span role="alert">{t("Provider status")} {tracking.failure_code}</span>}
                   <button type="button" disabled={marketOpsBusy}
