@@ -498,7 +498,7 @@ class SaveStrategyRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     mode: Literal["single", "portfolio"]
     code: str = Field(min_length=1, max_length=1800)
-    symbols: list[str] = Field(min_length=1, max_length=5)
+    symbols: list[str] = Field(min_length=1, max_length=16)
     source_run_id: str | None = Field(default=None, max_length=100)
 
 @app.get("/api/strategies")
