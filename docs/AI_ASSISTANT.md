@@ -21,8 +21,23 @@ a broker or to the internet beyond the explicitly chosen AI provider.
 
 Run both GGUF models from `models/private/` using llama.cpp's loopback-only
 router. The installed router can advertise **model stems**, not the full
-`.gguf` filenames. The API now validates both representations against
+`.gguf` filenames. The API validates both representations against
 the configured allowlist and sends router-compatible model names.
+For availability, it queries **GET `/models`**, which includes installed
+but unloaded models. The OpenAI-compatible **GET `/v1/models`** endpoint
+can be empty until inference first loads a model and is only a fallback.
+If the assistant says no models are available, compare these endpoints
+before reinstalling any weights:
+
+```powershell
+(Invoke-RestMethod http://127.0.0.1:8081/models).data | Select-Object id,status
+Invoke-RestMethod http://127.0.0.1:8000/api/ai/status
+```
+
+`ready: true` means the chosen model is present and selectable, while
+`loaded: false` is normal until the router loads it for its first request.
+`connection_state` distinguishes an unreachable server from an empty model
+inventory or an unapproved selection.
 
 Example local `.env`:
 
