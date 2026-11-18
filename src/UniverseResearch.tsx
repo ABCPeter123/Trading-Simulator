@@ -4,7 +4,8 @@ import {useI18n} from "./i18n";
 import "./universeResearch.css";
 
 type Metric={return_pct:number;max_drawdown_pct:number;trades:number;fees:number;turnover_pct:number};
-type Scenario={name:string;horizon_sessions:number;p05_return_pct:number;median_return_pct:number;p95_return_pct:number;median_max_drawdown_pct:number};
+type Scenario={name:string;horizon_sessions:number;p05_return_pct:number;median_return_pct:number;p95_return_pct:number;median_max_drawdown_pct:number;
+  daily?:{session:number;p05_return_pct:number;median_return_pct:number;p95_return_pct:number}[]};
 type Winner={rank:number;basket_type:string;symbols:string[];model:string;validation_score:number;training:Metric;
   validation:Metric;held_out:Metric;delayed_execution_stress:Metric;restricted_research:boolean;
   short_proxy_research:boolean;hypothetical_scenarios:{paths:Scenario[]};execution_model:string};
@@ -174,6 +175,19 @@ export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>
                 <td>{label(row.name)}</td><td>{pct(row.p05_return_pct)}</td><td>{pct(row.median_return_pct)}</td>
                 <td>{pct(row.p95_return_pct)}</td><td>{pct(row.median_max_drawdown_pct)}</td>
               </tr>)}</tbody></table></div>
+              <h4>{t("Daily scenario trajectory")}</h4>
+              {chosen.hypothetical_scenarios.paths.filter(x=>x.daily?.length).map(path=>
+                <details key={path.name}><summary>{label(path.name)} · {t("Day-by-day percentile bands")}</summary>
+                  <div className="ur-scroll"><table><thead><tr>
+                    <th>{t("Trading session")}</th><th>{t("Downside 5%")}</th>
+                    <th>{t("Median")}</th><th>{t("Upside 95%")}</th>
+                  </tr></thead><tbody>
+                    {(path.daily??[]).map(point=><tr key={point.session}>
+                      <td>{point.session}</td><td>{pct(point.p05_return_pct)}</td>
+                      <td>{pct(point.median_return_pct)}</td><td>{pct(point.p95_return_pct)}</td>
+                    </tr>)}
+                  </tbody></table></div>
+                </details>)}
               <p>{t("Scenario paths are hypothetical resamples, not forecasts or calibrated probabilities.")}</p>
             </article>}
             <details><summary>{t("Cost model and limitations")}</summary>
