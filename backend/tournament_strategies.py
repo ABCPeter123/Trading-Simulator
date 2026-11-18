@@ -56,6 +56,18 @@ def validate_spec(spec):
         raise HTTPException(422, detail="Invalid tournament execution latency.")
     if spec.get("rebalance_sessions") != pr.REBALANCE_SESSIONS:
         raise HTTPException(422, detail="Unsupported tournament rebalance cadence.")
+    keys=("target_investment_pct","equity_class_cap_pct","redistribute_excess")
+    if any(k in spec for k in keys):
+        if advanced:
+            raise HTTPException(422,detail="Advanced allocation models use their own exposure budgets.")
+        investment=spec.get("target_investment_pct",95.)
+        equity=spec.get("equity_class_cap_pct",70.)
+        redistributed=spec.get("redistribute_excess",False)
+        if (type(investment) not in (int,float) or not math.isfinite(investment)
+            or not 5<=investment<=100 or type(equity) not in (int,float)
+            or not math.isfinite(equity) or not 10<=equity<=100
+            or type(redistributed) is not bool):
+            raise HTTPException(422,detail="Invalid custom tournament model exposure controls.")
     return spec
 
 
@@ -81,6 +93,9 @@ def _public(row):
             "restricted_research": spec.get("restricted_research", False),
             "short_proxy_research": spec.get("short_proxy_research", False),
             "research_only":spec.get("research_only",False),
+            "target_investment_pct":spec.get("target_investment_pct",95.),
+            "equity_class_cap_pct":spec.get("equity_class_cap_pct",70.),
+            "redistribute_excess":spec.get("redistribute_excess",False),
             "code": json.dumps(spec, sort_keys=True, separators=(",", ":"))}
 
 
@@ -105,6 +120,11 @@ def import_rank(job_id: str, rank: int):
         "restricted_research": bool(winner.get("restricted_research", False)),
         "short_proxy_research": bool(winner.get("short_proxy_research", False)),
         "research_only":bool(winner.get("research_only",False)),
+        **({"target_investment_pct":float(study["params"].get("target_investment_pct",95.)),
+            "equity_class_cap_pct":float(study["params"].get("equity_class_cap_pct",70.)),
+            "redistribute_excess":bool(study["params"].get("redistribute_excess",False))}
+           if study["params"].get("research_objective")=="high_performance"
+           and winner["model"] in pr.MODELS else {}),
     })
     with LOCK, closing(_connection()) as conn, conn:
         previous = conn.execute("SELECT * FROM tournament_strategies WHERE source_job_id=? "
