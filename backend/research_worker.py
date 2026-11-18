@@ -13,7 +13,7 @@ import signal
 import sys
 import time
 
-from . import research_queue
+from . import research_queue, universe_research
 
 
 def main(argv=None):
@@ -34,7 +34,9 @@ def main(argv=None):
     if hasattr(signal,"SIGTERM"):signal.signal(signal.SIGTERM,shutdown)
     while not stop:
         try:
-            job=research_queue.process_one()
+            job=universe_research.process_one()
+            if job is None:
+                job=research_queue.process_one()
             if job is not None:
                 # No symbols, parameters or results in public/local logs.
                 logging.info("Research job finished with status %s",job["status"])
