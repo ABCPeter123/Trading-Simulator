@@ -94,6 +94,26 @@ def test_expanding_walkforward_seals_final_audit():
     assert all(x["no_final_audit_replay"] and x["not_used_for_selection"]
                for x in frontier["experiments"])
     assert normal["eligibility_policy"]["min_average_invested_pct"]==50
+    # The new experiment is confined to training sessions and remains
+    # immutable when the later final-audit path is deliberately shocked.
+    cost=normal["model_search"]["pre_audit_cost_review"]
+    assert cost==revised["model_search"]["pre_audit_cost_review"]
+    assert cost["used_for_selection"] is False
+    assert cost["evidence_boundary"]=="training_only_before_final_audit"
+    assert cost["training_sessions"]>90
+    assert cost["selected_zero_transaction_costs"]["fees_and_financing_usd"]==0
+    assert len(normal["walk_forward"]["folds"])==3
+    assert [f["pre_audit_training_cost_review"] for f in normal["walk_forward"]["folds"]]==[
+        f["pre_audit_training_cost_review"] for f in revised["walk_forward"]["folds"]]
+    provenance=normal["data_provenance"]
+    assert provenance["status"]=="partial_verification"
+    assert provenance["shared_sessions"]==normal["coverage"]["shared_sessions"]
+    assert provenance["can_certify_survivorship_free"] is False
+    assert provenance["historical_universe_membership"].startswith("unverified")
+    assert all(x["explicit_price_adjustment"]=="unverified"
+               for x in provenance["instruments"])
+    assert provenance["fx"]["status"]=="not_required"
+
 
     # The previously tournament-selected source is a retrospective reference.
     # Comparing it must NOT affect prior-only walk-forward selections.
