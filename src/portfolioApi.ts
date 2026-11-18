@@ -63,6 +63,11 @@ export interface PortfolioSeason {
   fills: PortfolioFill[];
   events: string[];
   strategy: string;
+  model_strategy: null | {
+    id:string;name:string;model:string;symbols:string[];
+    max_position_pct:number;delay_sessions:1|2;rebalance_sessions:number;
+    elapsed_shared:number;next_rebalance:number;
+  };
   risk: {stop_loss_pct: number; take_profit_pct: number};
   curve: {day: string; value: number}[];
   execution_notice: string;
