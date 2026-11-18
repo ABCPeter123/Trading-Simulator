@@ -148,13 +148,22 @@ With a model larger than available VRAM, the remainder stays in CPU-accessible
 memory. This is a starting point, not a guaranteed improvement: old mobile
 GPUs may run slower than a well-tuned CPU.
 
-A synthetic benchmark measures actual token generation throughput without
-loading any private trading data:
+A synthetic benchmark measures generation throughput without your
+private trading data. With 16 GB RAM, a cold model can take time to
+load. The revised benchmark prints elapsed time every five seconds,
+reports HTTP failures, and shows tokens/sec when llama.cpp returns
+timings. This fixes the older script's silent waiting behavior.
 
 ~~~powershell
-.\scripts\benchmark-local-ai.ps1 -Model Qwen3.5-9B-Q4_K_M
-.\scripts\benchmark-local-ai.ps1 -Model TwIL-8B-Q4_K_M-balanced
+.\scripts\benchmark-local-ai.ps1 -Model Qwen3.5-9B-Q4_K_M -MaxTokens 64
+.\scripts\benchmark-local-ai.ps1 -Model TwIL-8B-Q4_K_M-balanced -MaxTokens 64
 ~~~
+
+Run a model twice to compare cold and warm timings. If a request
+fails, check .local-state/logs/ai.err.log and
+.\scripts\diagnose-local-ai.ps1. Use -TimeoutSeconds 600 if needed
+for unusually slow cold loads. The HTTP benchmark uses loopback only
+and never uploads strategy information.
 
 For a fair CPU comparison, set `TRADING_SIM_LLAMA_DEVICE=cpu` in your
 Git-ignored `.env`, fully restart only the llama.cpp router, and repeat.
