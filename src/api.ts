@@ -88,6 +88,14 @@ export interface MarketSubscription {
 export const getMarketCoverage=(assetId:string,window:string,resolution:string)=>
   request<MarketCoverage>("/market-data/coverage/"+encodeURIComponent(assetId)+
     "?window="+encodeURIComponent(window)+"&resolution="+encodeURIComponent(resolution));
+export interface MarketCollectorHealth {
+  collector: {state:"polling"|"idle"|"stale"|"unverified";
+    last_heartbeat:string|null;heartbeat_age_seconds:number|null;last_attempted:number};
+  active:number;subscriptions:number;errors:number;delivery_guaranteed:boolean;
+  last_updates:{asset_id:string;resolution:string;active:boolean;sync_state:string;
+    failure_code:string|null;last_success:string|null;last_bar:number|null}[];
+}
+export const getMarketCollectorHealth=()=>request<MarketCollectorHealth>("/market-data/health");
 export const getMarketSubscriptions=()=>request<MarketSubscription[]>("/market-data/subscriptions");
 export const subscribeMarket=(assetId:string,resolution:string)=>
   request<{asset_id:string;resolution:string;active:boolean}>("/market-data/subscriptions",{
