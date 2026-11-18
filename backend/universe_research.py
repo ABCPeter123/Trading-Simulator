@@ -43,6 +43,10 @@ BASKET_SEEDS = {
     "leveraged_etf": ("spy","qqq","tqqq","upro","gld","ief","shy","xlp"),
     "canadian": ("xbal","vfv","vdy","vab","zsp","xiu","xgro","zeb"),
     "quality": ("qual","usmv","mtum","spy","vti","ief","gld","xlp"),
+    "multi_sector_16": ("xlf","xle","xlv","xli","xlp","xly","xlu","xlk",
+                        "xlb","xlre","ief","tlt","gld","efa","eem","spy"),
+    "multi_asset_16": ("vti","iwm","efa","eem","ewj","ewc","xlv","xle",
+                        "xlp","xlu","ief","shy","tip","gld","vnq","lqd"),
 }
 # The explicit seeds allow even a small but diverse archive to yield valid
 # experiments. Dynamic baskets sample the entire screened inventory.
@@ -205,7 +209,7 @@ def _basket_candidates(histories, eligible):
     for label,seed in BASKET_SEEDS.items():
         selected=[name for name in seed if name in names]
         if len(selected)>=2:
-            baskets.append((label,selected[:10]))
+            baskets.append((label,selected[:16]))
     # Group-screen every instrument. These baskets are formed from training
     # and validation only. Do not screen using held-out returns.
     by_group=defaultdict(list)
@@ -228,8 +232,15 @@ def _basket_candidates(histories, eligible):
         basket=list(dict.fromkeys(leaders[i:i+8]))
         if len(basket)>=2:
             baskets.append((f"screened_{i//8+1}",basket))
+    # Alternate training-only group leaders so a broad diversified 16-asset
+    # portfolio is tested when the catalog provides sufficient coverage.
+    mixed=[]
+    for g in ("equity","bond","commodity","real_estate"):
+        mixed.extend(sym for _,sym in by_group.get(g,[])[:4])
+    if len(mixed)>=4:
+        baskets.append(("screened_multi_class_16",mixed[:16]))
     if len(baskets)<2 and len(eligible)>=2:
-        baskets.append(("available_universe",eligible[:10]))
+        baskets.append(("available_universe",eligible[:16]))
     return baskets
 
 
