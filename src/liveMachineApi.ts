@@ -7,6 +7,13 @@ export interface Deployment {
   resolution:"1d"|"1h"|"15m";
   created_at:string;updated_at:string;last_evaluated_at:string|null;last_error:string|null;
 }
+export interface DeploymentSource {
+  id:string;strategy_id:string;name:string;
+  mode:"single"|"portfolio"|"portfolio_model";
+  code:string;symbols:string[];resolution:"1d"|"1h"|"15m";
+  model_config:import("./TournamentStrategyInspector").TournamentModelSpec|null;
+}
+
 export interface Signal {
   id:string;deployment_id:string;evaluation_id:string;source_symbol:string;
   asset_id:string;side:"buy"|"sell";allocation_pct:number;
@@ -48,6 +55,8 @@ export type FillDraft = {
 };
 export const getMachineStatus=()=>request<MachineStatus>("/live/status");
 export const listDeployments=()=>request<Deployment[]>("/live/deployments");
+export const inspectDeployment=(id:string)=>request<DeploymentSource>(
+  "/live/deployments/"+encodeURIComponent(id)+"/strategy");
 export const newDeployment=(body:{strategy_id:string;state:"paper"|"live-monitor";capital:number;max_allocation_pct:number;max_realized_loss_pct:number;max_daily_signals:number;resolution:"1d"|"1h"|"15m"})=>
   request<Deployment>("/live/deployments",{method:"POST",body:JSON.stringify(body)});
 export const setDeploymentState=(id:string,state:Deployment["state"])=>
