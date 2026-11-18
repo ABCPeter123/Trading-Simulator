@@ -168,11 +168,20 @@ def _read(asset_id, load=None):
                 candidate=bars
         except (OSError,ValueError,KeyError):
             pass
+    # A short existing archive is not proof that the provider lacks older
+    # history. Request MAX once; retain the longest valid real observation
+    # window, even if the provider is unavailable afterward.
+    try:
+        provider=history(asset_id,"MAX")
+        actual=provider.get("bars")
+        if _quality(actual) and (candidate is None or len(actual)>=len(candidate)):
+            return provider
+    except (HTTPException,OSError,ValueError,KeyError,TypeError):
+        pass
     if candidate:
         return {"bars":candidate,"source":"Local recorded provider OHLCV",
                 "offline_cache":True}
-    # Maximum available daily history, never silently truncate at five years.
-    return history(asset_id,"MAX")
+    raise ValueError("Maximum available market history unavailable")
 
 
 def _quality(bars):
