@@ -238,10 +238,12 @@ TRADING_SIM_LLAMA_FIT_TARGET=768
 TRADING_SIM_AI_MAX_OUTPUT_TOKENS=768
 ~~~
 
-The launcher now creates a same-drive NTFS hard link in its private,
-Git-ignored .local-state/ai-single-model/ folder. It points the router
-at that view so the router advertises and loads only Qwen4B, without
-duplicating 2.74 GB or deleting original weights.
+When only Qwen4B is allowlisted, the launcher now uses llama.cpp
+single-model mode with an explicit --model path and --alias
+Qwen3.5-4B-Q4_K_M. It does not scan or load the larger GGUFs.
+There is no hard link, duplication, deletion, or change to private
+research data. The local Qwen-only server starts loading weights
+immediately instead of waiting for its first request.
 
 ~~~powershell
 cd E:\Trading-Simulator
@@ -249,20 +251,32 @@ git pull
 .\stop-local.ps1
 .\start-local.ps1 -NoBrowser
 .\scripts\diagnose-local-ai.ps1
+(Invoke-RestMethod http://127.0.0.1:8081/v1/models).data | Select-Object id
 ~~~
 
-The GET /models inventory should have only the 4B model. It loads
-on demand when chat or a benchmark is sent. If port 8081 is still
-unreachable, run the same launcher in a visible PowerShell session
-to see the actual error:
+In single-model mode, GET /v1/models advertises Qwen3.5-4B-Q4_K_M.
+GET /models is the multi-model router endpoint and may be missing;
+the launcher, benchmark, and diagnostic now check both endpoints.
+
+If neither the local backend (8000) nor AI (8081) starts, check the
+visible output of start-local.ps1 and the private log excerpts from:
+
+~~~powershell
+Get-Content .\.local-state\logs\backend.err.log -Tail 30
+Get-Content .\.local-state\logs\ai.err.log -Tail 30
+~~~
+
+To show llama.cpp startup errors directly, run in a visible PowerShell
+terminal (only if port 8081 is free):
 
 ~~~powershell
 .\scripts\run-local-ai.ps1
 ~~~
 
-Leave the window open while testing. Press Ctrl+C before starting the
-hidden router again. Private launcher logs are in
-.local-state/logs/ai.err.log and ai.out.log.
+Leave that terminal open while using the model. If the GPU fails to
+initialize, change TRADING_SIM_LLAMA_DEVICE=cpu in the local, ignored
+.env and retry to isolate Vulkan from startup. When it works, stop
+the foreground server with Ctrl+C before reusing background startup.
 
 The helper requires the publicly available Hugging Face CLI. If hf is
 not installed:
