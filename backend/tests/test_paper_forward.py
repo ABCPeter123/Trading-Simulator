@@ -77,6 +77,8 @@ def test_new_session_only_fill_and_idempotent_restart(isolated):
     assert studied["fills"] and len(studied["marks"])==2
     assert studied["simulated_fills_only"] is True
     assert studied["drift"]["status"]=="insufficient_forward_sessions"
+    assert studied["statistics"]["cagr_pct"] is None
+    assert studied["statistics"]["excess_sharpe"] is None
     assert studied["marks"][-1]["session"]==DAYS[510].isoformat()
     repeated=paper.process_one(created["id"],now=asof(511),loader=provider(511))
     assert repeated["observed_sessions"]==1
