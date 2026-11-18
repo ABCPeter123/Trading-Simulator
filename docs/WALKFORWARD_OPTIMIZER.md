@@ -131,3 +131,25 @@ See [forward-paper monitoring](FORWARD_PAPER.md) for the independently
 frozen exact-session price-only control on newly observed sessions.
 Reviewing any previously unsealed audit disqualifies those same dates
 from being described as fresh evidence after subsequent research changes.
+
+## Navigating the simplified Test Ground
+
+In **Strategy Tournament**, configure the main objective and risk limits, then
+run the scan. Basket screening, slippage, currency, and other specialized
+parameters are inside **Advanced settings**. Prior scans and ancillary tools
+stay available inside a separate collapsed section.
+
+After a scan, select a ranked strategy from the dropdown. The **Overview** tab
+shows training, validation, and held-out returns together with test drawdown.
+Use **Performance** for more detailed scoring and return metrics, **Risk & trades**
+for execution costs and historical fills, or **Scenarios** for hypothetical
+outcome distributions. Open **Walk-forward & tools** to access rule explanations,
+date-specific historical research, and the walk-forward study. The complete
+ranked comparison and bulk save action are optional collapsible panels.
+
+Inside the walk-forward study, choose search breadth and run with the current
+defaults or open **Advanced selection and execution settings** first. The
+summary reports only the main held-out metrics; historical explanations,
+benchmark comparisons, diagnostics, and paper-forward monitoring remain
+available in explicit expandable sections. All existing local saved jobs and
+private study data are preserved; these are presentation changes only.
