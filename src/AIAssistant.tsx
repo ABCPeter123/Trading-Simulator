@@ -138,7 +138,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
               void getAIStatus(next).then(setStatus)
                 .catch(e=>setStatusError(e instanceof Error?e.message:"AI model unavailable."));
             }}>
-            {status.available_models.map(model=><option key={model} value={model}>{model.includes("TwIL")?"TwIL-8B":model.includes("Qwen")?"Qwen 3.5 9B":model}</option>)}
+            {status.available_models.map(model=><option key={model} value={model}>{model.includes("TwIL")?t("TwIL 8B"):model.includes("Qwen3.5-4B")?t("Qwen 3.5 4B (fast)"):model.includes("Qwen3.5-9B")?t("Qwen 3.5 9B"):model}</option>)}
           </select>
         </label>}
       {status?.model&&<strong>{status.model}</strong>}
