@@ -222,6 +222,48 @@ git pull
 .\scripts\benchmark-local-ai.ps1 -Model Qwen3.5-4B-Q4_K_M -MaxTokens 64
 ~~~
 
+### Serve ONLY Qwen3.5-4B on your local machine
+
+To stop the router advertising the larger models, preserve the GGUF files
+on E: but set the private .env allowlist to only Qwen4B:
+
+~~~dotenv
+TRADING_SIM_AI_PROVIDER=llama_cpp
+TRADING_SIM_AI_MODEL=Qwen3.5-4B-Q4_K_M.gguf
+TRADING_SIM_AI_MODELS=Qwen3.5-4B-Q4_K_M.gguf
+TRADING_SIM_LLAMA_DEVICE=Vulkan1
+TRADING_SIM_LLAMA_PROFILE=speed
+TRADING_SIM_LLAMA_GPU_LAYERS=auto
+TRADING_SIM_LLAMA_FIT_TARGET=768
+TRADING_SIM_AI_MAX_OUTPUT_TOKENS=768
+~~~
+
+The launcher now creates a same-drive NTFS hard link in its private,
+Git-ignored .local-state/ai-single-model/ folder. It points the router
+at that view so the router advertises and loads only Qwen4B, without
+duplicating 2.74 GB or deleting original weights.
+
+~~~powershell
+cd E:\Trading-Simulator
+git pull
+.\stop-local.ps1
+.\start-local.ps1 -NoBrowser
+.\scripts\diagnose-local-ai.ps1
+~~~
+
+The GET /models inventory should have only the 4B model. It loads
+on demand when chat or a benchmark is sent. If port 8081 is still
+unreachable, run the same launcher in a visible PowerShell session
+to see the actual error:
+
+~~~powershell
+.\scripts\run-local-ai.ps1
+~~~
+
+Leave the window open while testing. Press Ctrl+C before starting the
+hidden router again. Private launcher logs are in
+.local-state/logs/ai.err.log and ai.out.log.
+
 The helper requires the publicly available Hugging Face CLI. If hf is
 not installed:
 
