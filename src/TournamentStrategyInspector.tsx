@@ -66,7 +66,7 @@ function algorithmFor(spec:TournamentModelSpec):string {
       "raw[asset] = 1 / max(stdev(last_60_daily_returns), 0.002)",
       "estimated_risk = stdev(last_60_weighted_portfolio_returns) * sqrt(252)",
       "gross = 0.95",
-      "if >= 25 returns and estimated_risk > 1e-8: gross = min(0.95, 0.12 / estimated_risk)",
+      "if length(recent_returns) >= 25 and estimated_risk > 1e-8: gross = min(0.95, 0.12 / estimated_risk)",
     ],
   };
   const lines=[
@@ -107,7 +107,16 @@ export default function TournamentStrategyInspector({
           return JSON.stringify(parsed,null,2);
       }catch{/* Fall back to the versioned parameters presented by the engine. */}
     }
-    return JSON.stringify(spec,null,2);
+    // A simulation session also stores changing counters. Show the actual
+    // immutable model fields only, not those runtime fields, as configuration.
+    const normalized:TournamentModelSpec={
+      version:spec.version,model:spec.model,symbols:spec.symbols,
+      max_position_pct:spec.max_position_pct,delay_sessions:spec.delay_sessions,
+      rebalance_sessions:spec.rebalance_sessions,
+      restricted_research:spec.restricted_research??false,
+      short_proxy_research:spec.short_proxy_research??false,
+    };
+    return JSON.stringify(normalized,null,2);
   },[spec,exactCode]);
   const pseudocode=useMemo(()=>algorithmFor(spec),[spec]);
   const rules=modelRules[spec.model]??["No documented rules exist for this model."];
