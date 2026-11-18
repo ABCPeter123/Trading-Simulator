@@ -236,7 +236,7 @@ def _scenarios(curve,seed=9):
     horizon=30; paths=[]
     for label,stress in (("ordinary",0.),("slower_execution",-0.00035),
                          ("broad_market_shock",-0.004),("rebound",0.002)):
-        finals=[];worsts=[]
+        finals=[];worsts=[];track=[[] for _ in range(horizon)]
         for _ in range(120):
             value=100.;peak=value;worst=0.
             for day in range(horizon):
@@ -245,14 +245,22 @@ def _scenarios(curve,seed=9):
                 if label=="broad_market_shock" and day==0:
                     extra-=.12
                 value=max(0.01,value*(1+max(-.99,draw+extra)))
+                track[day].append((value/100-1)*100)
                 peak=max(peak,value);worst=min(worst,value/peak-1)
             finals.append((value/100-1)*100);worsts.append(worst*100)
         finals.sort();worsts.sort()
+        daily=[]
+        for day,values in enumerate(track,1):
+            values.sort()
+            daily.append({"session":day,"p05_return_pct":round(values[6],2),
+                          "median_return_pct":round(values[60],2),
+                          "p95_return_pct":round(values[113],2)})
         paths.append({"name":label,"horizon_sessions":horizon,
                       "p05_return_pct":round(finals[6],2),
                       "median_return_pct":round(finals[60],2),
                       "p95_return_pct":round(finals[113],2),
-                      "median_max_drawdown_pct":round(worsts[60],2)})
+                      "median_max_drawdown_pct":round(worsts[60],2),
+                      "daily":daily})
     return {"status":"hypothetical_resampled_history","paths":paths,
             "method":"Historical daily strategy-return bootstrap with explicit adverse shocks; NOT a forecast or guaranteed probability."}
 
