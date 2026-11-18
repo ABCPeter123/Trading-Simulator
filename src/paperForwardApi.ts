@@ -18,6 +18,7 @@ export interface PaperForwardOverview {
   gross_exposure_pct:number;current_drawdown_pct:number;financing_paid:number;
   transaction_fees_paid:number;pending_execution:boolean;delay_sessions:number;
   audit_reference:{risk_free_pct:number;objectives:{cagr_pct:number|null;excess_sharpe:number|null}};
+  execution_profile:PaperExecution & {rate_snapshot_date:string;manual_margin_override?:boolean};
   broker:{broker:string;account_type:string;pricing_date:string;currency:string;
     commission_assumption:string;borrowing_assumption:string;
     fx_assumption:string;fill_assumption:string};
