@@ -154,6 +154,24 @@ def test_usd_funded_wealthsimple_margin_uses_real_fx_for_debt_tiers(local):
     assert updated["fx_rate"]==pytest.approx(1.2+509*.0004)
 
 
+def test_activation_after_open_cannot_fill_at_earlier_auction(local):
+    assert DAYS[508].weekday()==3  # independently synthetic Thursday
+    started=paper.create("after-open",now=asof(509),loader=provider(509),
+                         execution={"broker":"ibkr","fill_timing":"next_open"})
+    first=paper.process_one(started["id"],now=asof(510),loader=provider(510))
+    assert first["observed_sessions"]==1
+    assert first["pending_execution"]
+    assert paper.get_study(started["id"])["fills"]==[]
+    second=paper.process_one(started["id"],now=asof(511),loader=provider(511))
+    assert second["observed_sessions"]==2
+    assert paper.get_study(started["id"])["fills"]
+
+    close_study=paper.create("after-open-close",now=asof(509),loader=provider(509),
+                             execution={"broker":"ibkr","fill_timing":"next_close"})
+    paper.process_one(close_study["id"],now=asof(510),loader=provider(510))
+    assert paper.get_study(close_study["id"])["fills"]
+
+
 def test_borrow_capability_is_not_approval(local,monkeypatch):
     job=paper_job()
     job["result"]["final_audit"]["selected"]["model"]="long_short_momentum"
