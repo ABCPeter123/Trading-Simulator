@@ -22,7 +22,7 @@ from fastapi import HTTPException
 
 from . import (advanced_portfolio_research as adv, blended_portfolio_research as blended,
                performance_objectives as metrics, portfolio_research as pr,
-               walkforward_queue)
+               walkforward_queue, broker_execution as broker_model)
 from .assets import get_instrument
 from .market import history
 
@@ -83,10 +83,15 @@ def _db():
         price REAL NOT NULL, fee REAL NOT NULL, delay_sessions INTEGER NOT NULL,
         simulated INTEGER NOT NULL DEFAULT 1)""")
     c.execute("CREATE INDEX IF NOT EXISTS paper_fills_study ON paper_fills(study_id,session)")
+    columns={x["name"] for x in c.execute("PRAGMA table_info(paper_marks)")}
+    if "fx_rate" not in columns:
+        c.execute("ALTER TABLE paper_marks ADD COLUMN fx_rate REAL")
+    if "value_cad" not in columns:
+        c.execute("ALTER TABLE paper_marks ADD COLUMN value_cad REAL")
     return c
 
 
-def _portfolio(symbols, at, loader=None):
+def _portfolio(symbols, at, loader=None, *, need_fx=False):
     """Reject demo/cached/unfinished bars; align actual common USD sessions."""
     load = loader or history
     histories = {}
@@ -104,12 +109,12 @@ def _portfolio(symbols, at, loader=None):
         # Exclude even a possibly completed current-day bar. That prevents
         # turning a still-forming provider candle into a hypothetical fill.
         completed = [b for b in bars
-                     if datetime.fromtimestamp(int(b["time"]), NY).date()
+                     if datetime.fromtimestamp(int(b["time"]),timezone.utc).date()
                      < at.astimezone(NY).date()]
         if not completed:
             raise ValueError("No completed observed daily bars.")
         histories[symbol] = {**response, "bars": completed}
-    latest = [datetime.fromtimestamp(int(histories[s]["bars"][-1]["time"]), NY)
+    latest = [datetime.fromtimestamp(int(histories[s]["bars"][-1]["time"]), timezone.utc)
               .date().isoformat() for s in symbols]
     if len(set(latest)) != 1:
         raise ValueError("Portfolio instruments do not share the latest completed session.")
@@ -118,7 +123,7 @@ def _portfolio(symbols, at, loader=None):
         raise ValueError("Latest completed portfolio session is stale.")
     # For the recent observation window require synchronized member dates,
     # rather than silently treating a missing asset bar as a non-trading day.
-    recent = [set(datetime.fromtimestamp(int(b["time"]), NY).date().isoformat()
+    recent = [set(datetime.fromtimestamp(int(b["time"]), timezone.utc).date().isoformat()
                   for b in histories[s]["bars"][-35:]) for s in symbols]
     latest_common = set.intersection(*recent)
     if any((dates - latest_common) for dates in recent):
@@ -126,7 +131,36 @@ def _portfolio(symbols, at, loader=None):
     days, market, metadata, _ = pr._prepare(symbols, histories)
     if days[-1] != latest[0]:
         raise ValueError("Portfolio has missing common-session candles.")
-    return days, market, metadata
+    rates={}
+    if need_fx:
+        fx=load("usdcad","5Y")
+        if (not isinstance(fx,dict) or fx.get("is_demo") or fx.get("offline_cache")
+            or not isinstance(fx.get("bars"),list)):
+            raise ValueError("No confirmed USD/CAD FX quote.")
+        observations=[]
+        for point in fx["bars"]:
+            try:
+                date=datetime.fromtimestamp(int(point["time"]),timezone.utc).date()
+                value=float(point["close"])
+            except (ValueError,KeyError,TypeError):
+                raise ValueError("Invalid FX price observation.") from None
+            if not math.isfinite(value) or value<=0:
+                raise ValueError("Invalid FX rate.")
+            observations.append((date,value))
+        if not observations or any(a[0]>=b[0] for a,b in zip(observations,observations[1:])):
+            raise ValueError("FX history has missing order or no observations.")
+        from datetime import date as date_cls
+        for day in days[-40:]:
+            current=date_cls.fromisoformat(day)
+            prior=[(d,r) for d,r in observations if d<current]
+            if not prior:
+                continue
+            fx_day,rate=prior[-1]
+            if (current-fx_day).days<=5:
+                rates[day]=rate
+        if any(day not in rates for day in days[-min(len(days),4):]):
+            raise ValueError("Missing sufficiently recent prior-close USD/CAD quotes.")
+    return days, market, metadata, rates
 
 
 def _weights(config, symbols, closes, meta, i):
@@ -193,11 +227,23 @@ def _public(row, details=False):
         "pending_execution":state["pending"] is not None,
         "delay_sessions":config["delay_sessions"],
         "audit_reference":audit,
+        "broker":broker_model.cost_snapshot(state.get("broker",broker_model.normalize())),
+        "execution_profile":state.get("broker",broker_model.normalize()),
+        "capital_currency":state.get("capital_currency","USD"),
+        "initial_amount":state.get("initial_amount",obj["capital"]),
+        "equity_cad":round(state["equity"]*state["fx_rate"],2) if state.get("fx_rate") else None,
+        "fx_rate":state.get("fx_rate"),
+        "fx_conversion_fee_usd":round(state.get("fx_conversion_fee_usd",0.),2),
+        "paper_pnl_cad":round(state["equity"]*state["fx_rate"]-state["initial_amount"],2)
+            if state.get("capital_currency")=="CAD" and state.get("fx_rate") else None,
+        "current_drawdown_cad_pct":round(
+            (state["equity"]*state["fx_rate"]/state["peak_cad"]-1)*100,3)
+            if state.get("peak_cad") and state.get("fx_rate") else None,
     }
     if details:
         with closing(_db()) as c:
             marks = [dict(x) for x in c.execute(
-                "SELECT session,value,cash,gross_pct,drawdown_pct,financing_cost "
+                "SELECT session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad "
                 "FROM paper_marks WHERE study_id=? ORDER BY session",(obj["id"],))]
             fills = [dict(x) for x in c.execute(
                 "SELECT session,symbol,action,quantity,price,fee,delay_sessions "
@@ -213,6 +259,15 @@ def _public(row, details=False):
             stats={**stats,"cagr_pct":None,"excess_sharpe":None,
                    "annualized_volatility_pct":None}
         result.update(marks=marks, fills=fills, statistics=stats)
+        if state.get("capital_currency")=="CAD":
+            cad_curve=[{"time":p["time"],"value":m["value_cad"]}
+                       for p,m in zip(curve,marks) if m["value_cad"] is not None]
+            cad_stats=metrics.performance(cad_curve,
+                starting_capital=state["initial_amount"],risk_free_pct=audit["risk_free_pct"])
+            if state["observed_sessions"]<30:
+                cad_stats={**cad_stats,"cagr_pct":None,"excess_sharpe":None,
+                           "annualized_volatility_pct":None}
+            result["statistics_cad"]=cad_stats
         if state["observed_sessions"] < 30:
             result["drift"]={"status":"insufficient_forward_sessions",
                             "cagr_gap_pct":None,"sharpe_gap":None}
@@ -243,7 +298,8 @@ def get_study(study_id):
         return _public(row, details=True)
 
 
-def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=None):
+def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=None,
+           execution=None):
     _private()
     if (not isinstance(capital, (int,float)) or isinstance(capital,bool)
         or not math.isfinite(capital) or not 100<=capital<=1e9
@@ -263,7 +319,18 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
         raise HTTPException(422,"Invalid frozen selection.")
     at = _now(now)
     try:
-        days, market, meta = _portfolio(symbols, at, loader)
+        profile=broker_model.normalize(execution)
+        broker_model.check_model(profile,config["model"])
+    except ValueError as exc:
+        # Broker compatibility errors do not reveal strategy parameters.
+        raise HTTPException(422,detail="Incompatible paper broker settings: "+str(exc)) from None
+    try:
+        fx_required=(profile["capital_currency"]=="CAD"
+                     or (profile["broker"]=="wealthsimple"
+                         and profile["account_type"]=="margin"))
+        days, market, meta, fx = _portfolio(
+            symbols, at, loader,need_fx=fx_required
+        )
         closes = {s:[b["close"] for b in market[s]] for s in symbols}
         targets = _safe_targets(config, symbols, closes, meta, len(days))
     except (ValueError,KeyError,TypeError,HTTPException) as exc:
@@ -271,31 +338,51 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
     audit_reference={"objectives":audit["objectives"],
                      "risk_free_pct":float(result["targets"]["risk_free_pct"])}
     start = days[-1]
-    pending={"weights":targets,"remaining":config["delay_sessions"],"signal_session":start}
-    state={"cash":float(capital),"equity":float(capital),
-           "positions":{s:0 for s in symbols}, "peak":float(capital),
+    observed_fx=fx.get(start)
+    spot=observed_fx if profile["capital_currency"]=="CAD" else None
+    nominal_usd=capital/spot if spot is not None else float(capital)
+    fx_fee=broker_model.fx_commission_usd(profile,capital,spot) if spot else 0.
+    actual_usd=nominal_usd-fx_fee
+    if actual_usd<=0:
+        raise HTTPException(422,"CAD-to-USD conversion exhausts paper funding.")
+    pending={"weights":targets,"remaining":config["delay_sessions"],"signal_session":start,
+             "activated_at":at.isoformat() if profile["broker"]!="legacy_research" else None}
+    state={"cash":actual_usd,"equity":actual_usd,
+           "positions":{s:0 for s in symbols}, "peak":nominal_usd,
            "gross_pct":0., "observed_sessions":0,
            "pending":pending, "since_signal":0,
-           "financing_paid":0.,"transaction_fees_paid":0.}
+           "financing_paid":0.,"transaction_fees_paid":0.,
+           "broker":profile,"capital_currency":profile["capital_currency"],
+           "initial_amount":float(capital),"fx_rate":observed_fx,
+           "fx_conversion_fee_usd":fx_fee,
+           "peak_cad":float(capital) if spot else None}
     with LOCK, closing(_db()) as c:
         c.execute("BEGIN IMMEDIATE")
         if c.execute("SELECT COUNT(*) FROM paper_studies").fetchone()[0]>=MAX_STUDIES:
             raise HTTPException(409,"Forward-paper study limit reached.")
-        existing = c.execute("SELECT * FROM paper_studies WHERE source_job=?",
-                             (job_id,)).fetchone()
-        if existing and existing["status"] == "active":
-            c.commit()
-            return _public(existing)
+        existing_rows=c.execute("SELECT * FROM paper_studies WHERE source_job=? "
+                                "AND status='active'",(job_id,)).fetchall()
+        for existing in existing_rows:
+            previous=json.loads(existing["state"])
+            if (previous.get("broker")==profile
+                and previous.get("initial_amount")==float(capital)
+                and float(existing["max_drawdown"])==max_drawdown_pct):
+                c.commit()
+                return _public(existing)
         uid = str(uuid4())
         c.execute("""INSERT INTO paper_studies(
             id,source_job,created_at,updated_at,status,config,symbols,capital,
             max_drawdown,starting_session,last_session,state,audit_reference,last_error)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (uid,job_id,at.isoformat(),at.isoformat(),"active",_dump(config),
-             _dump(symbols),capital,max_drawdown_pct,start,start,_dump(state),
+             _dump(symbols),nominal_usd,max_drawdown_pct,start,start,_dump(state),
              _dump(audit_reference),None))
-        c.execute("INSERT INTO paper_marks VALUES(?,?,?,?,?,?,?)",
-                  (uid,start,capital,capital,0.,0.,0.))
+        c.execute("""INSERT INTO paper_marks
+            (study_id,session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad)
+            VALUES(?,?,?,?,?,?,?,?,?)""",
+                  (uid,start,actual_usd,actual_usd,0.,
+                   (actual_usd/nominal_usd-1)*100,0.,observed_fx,
+                   actual_usd*observed_fx if observed_fx else None))
         c.commit()
         return _public(c.execute("SELECT * FROM paper_studies WHERE id=?",(uid,)).fetchone())
 
@@ -325,7 +412,8 @@ def _fill(state, config, meta, symbols, today, opens):
     equity_at_open = state["cash"] + sum(state["positions"][s]*opens[s] for s in symbols)
     if equity_at_open <= 0 or not math.isfinite(equity_at_open):
         raise PaperRiskError("Paper portfolio capital exhausted.")
-    slippage=8.  # model-independent conservative research default
+    profile=state.get("broker",broker_model.normalize())
+    slippage=profile["slippage_bps"]
     fees=[]
     desired={s:math.trunc(equity_at_open*target[s]/opens[s]) for s in symbols}
     for side in ("sell","buy"):
@@ -336,23 +424,33 @@ def _fill(state, config, meta, symbols, today, opens):
             price=opens[symbol]*(1+(1 if delta>0 else -1)*
                 (float(meta[symbol]["spread_bps"])/2.+slippage)/10000.)
             if delta>0 and not signed:
-                delta=min(delta,max(0,math.floor((state["cash"]-0.)/price)))
+                affordable=max(0,math.floor(max(0.,state["cash"])/price))
+                delta=min(delta,affordable)
+            if delta==0:continue
+            fee=broker_model.order_fee_usd(profile,abs(delta),abs(delta)*price)
+            if delta>0 and not signed:
+                while delta>0 and delta*price+fee>state["cash"]+1e-8:
+                    delta-=1
+                    fee=broker_model.order_fee_usd(profile,delta,delta*price)
             if delta==0:continue
             before=state["positions"][symbol]
             state["positions"][symbol]+=delta
-            state["cash"]-=delta*price
+            state["cash"]-=delta*price+fee
+            state["transaction_fees_paid"]+=fee
             action=("short_sell" if delta<0 and state["positions"][symbol]<0
                     else "cover" if delta>0 and before<0
                     else "buy" if delta>0 else "sell")
-            fees.append((symbol,action,abs(delta),price,0.))
+            fees.append((symbol,action,abs(delta),price,fee))
     state["pending"]=None
     return fees
 
 
-def _advance(c, row, days, market, meta, at):
+def _advance(c, row, days, market, meta, fx_rates, at):
     symbols=json.loads(row["symbols"])
     config=json.loads(row["config"])
     state=json.loads(row["state"])
+    profile=state.get("broker",broker_model.normalize())
+    broker_model.check_model(profile,config["model"])
     if row["last_session"] not in days:
         raise ValueError("Previous observed paper session missing from source.")
     offset=days.index(row["last_session"])
@@ -363,20 +461,43 @@ def _advance(c, row, days, market, meta, at):
     pending_orders=[]
     for index in range(offset+1,len(days)):
         day=days[index]
-        opens={s:market[s][index]["open"] for s in symbols}
         closes={s:market[s][index]["close"] for s in symbols}
+        field="close" if profile["fill_timing"]=="next_close" else "open"
+        opens={s:market[s][index][field] for s in symbols}
+        require_fx=(profile["capital_currency"]=="CAD"
+                    or (profile["broker"]=="wealthsimple"
+                        and profile["account_type"]=="margin"))
+        rate=fx_rates.get(day) if require_fx else None
+        if require_fx and rate is None:
+            raise ValueError("No previous completed daily FX quote.")
         next_session=state["observed_sessions"]+1
         if state["pending"] is not None:
-            state["pending"]["remaining"]-=1
-            if state["pending"]["remaining"]==0:
-                pending_orders=_fill(state,config,meta,symbols,day,opens)
-            else:
-                pending_orders=[]
+            # A paper order created after the session's opening (or
+            # closing) auction cannot be reconstructed as though the
+            # trader had submitted it before that auction took place.
+            activated=state["pending"].get("activated_at")
+            future_fill=True
+            if activated:
+                from datetime import time as clock_time
+                issued=datetime.fromisoformat(activated).astimezone(NY)
+                auction=(clock_time(16,0) if field=="close" else clock_time(9,30))
+                if day<issued.date().isoformat() or (
+                    day==issued.date().isoformat() and issued.time()>=auction
+                ):
+                    future_fill=False
+            if future_fill:
+                state["pending"]["remaining"]-=1
+                if state["pending"]["remaining"]==0:
+                    pending_orders=_fill(state,config,meta,symbols,day,opens)
+                else:
+                    pending_orders=[]
         else:
             pending_orders=[]
         shorts=sum(max(0,-state["positions"][s])*closes[s] for s in symbols)
         margin=max(0.,-state["cash"])
-        finance=(shorts*BORROW_RATE+margin*MARGIN_RATE)/252
+        margin_rate=broker_model.margin_rate_pct(profile,margin,rate or 1.)
+        finance=(shorts*profile["short_borrow_rate_pct"]+
+                 margin*margin_rate)/(100.*252.)
         state["cash"]-=finance
         state["financing_paid"]+=finance
         state["equity"]=state["cash"]+sum(state["positions"][s]*closes[s] for s in symbols)
@@ -386,6 +507,12 @@ def _advance(c, row, days, market, meta, at):
         gross=sum(abs(state["positions"][s]*closes[s]) for s in symbols)
         state["gross_pct"]=100*gross/state["equity"]
         drawdown=(state["equity"]/state["peak"]-1)*100
+        if rate is not None and profile["capital_currency"]=="CAD":
+            value_cad=state["equity"]*rate
+            state["peak_cad"]=max(state.get("peak_cad") or value_cad,value_cad)
+            funding_drawdown=(value_cad/state["peak_cad"]-1)*100
+        else:
+            funding_drawdown=drawdown
         if gross > 0 and state["equity"]/gross < MAINTENANCE:
             raise PaperRiskError("Margin maintenance floor breached; no future paper execution.")
         # Everything for this day is committed atomically with the state.
@@ -393,14 +520,17 @@ def _advance(c, row, days, market, meta, at):
             c.execute("INSERT INTO paper_fills VALUES(?,?,?,?,?,?,?,?,?,1)",
                       (str(uuid4()),row["id"],day,symbol,action,quantity,price,fee,
                        config["delay_sessions"]))
-        c.execute("INSERT INTO paper_marks VALUES(?,?,?,?,?,?,?)",
+        state["fx_rate"]=rate
+        c.execute("""INSERT INTO paper_marks
+            (study_id,session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad)
+            VALUES(?,?,?,?,?,?,?,?,?)""",
                   (row["id"],day,state["equity"],state["cash"],state["gross_pct"],
-                   drawdown,finance))
+                   drawdown,finance,rate,state["equity"]*rate if rate else None))
         state["observed_sessions"]=next_session
         row=dict(row)
         row["last_session"]=day
         state["since_signal"]+=1
-        if drawdown <= -float(row["max_drawdown"]):
+        if funding_drawdown <= -float(row["max_drawdown"]):
             row["status"]="paused"
             row["last_error"]="Paper drawdown stop reached. Inspect the paper ledger."
             break
@@ -430,14 +560,20 @@ def process_one(study_id, *, now=None, loader=None):
             return _public(row)
         symbols=json.loads(row["symbols"])
         try:
-            days, market, meta = _portfolio(symbols, at, loader)
+            state=json.loads(row["state"])
+            profile=state.get("broker",broker_model.normalize())
+            require_fx=(profile["capital_currency"]=="CAD"
+                        or (profile["broker"]=="wealthsimple"
+                            and profile["account_type"]=="margin"))
+            days, market, meta, fx = _portfolio(
+                symbols, at, loader,need_fx=require_fx)
             if any(day > row["last_session"] for day in days):
                 c.execute("BEGIN IMMEDIATE")
                 # The caller and live worker can run concurrently: re-read
                 # state under the SQLite write lock before applying any bar.
                 current=c.execute("SELECT * FROM paper_studies WHERE id=?",(study_id,)).fetchone()
                 if current["status"]=="active":
-                    _advance(c,current,days,market,meta,at)
+                    _advance(c,current,days,market,meta,fx,at)
                 c.commit()
             else:
                 c.execute("UPDATE paper_studies SET last_error=NULL WHERE id=?",(study_id,))

@@ -320,10 +320,22 @@ def cancel_walkforward_study(job_id:str):
     return walkforward_queue.cancel(job_id)
 
 
+class BrokerPaperExecution(BaseModel):
+    broker:Literal["legacy_research","wealthsimple","ibkr"]="wealthsimple"
+    account_type:Literal["cash","margin"]="cash"
+    capital_currency:Literal["USD","CAD"]="USD"
+    borrow_policy:Literal["block_unverified","assume_available_research"]="block_unverified"
+    fill_timing:Literal["next_open","next_close"]="next_open"
+    margin_rate_pct:float|None=Field(default=None,ge=0,le=100)
+    short_borrow_rate_pct:float|None=Field(default=None,ge=0,le=100)
+    slippage_bps:float|None=Field(default=None,ge=0,le=500)
+    fx_spread_bps:float|None=Field(default=None,ge=0,le=500)
+
 class ForwardPaperStart(BaseModel):
     job_id:str=Field(min_length=1,max_length=100)
     capital:float=Field(default=100000,ge=100,le=1e9)
     max_drawdown_pct:float=Field(default=30,ge=5,le=60)
+    execution:BrokerPaperExecution|None=None
 
 class ForwardPaperState(BaseModel):
     status:Literal["active","paused","retired"]
@@ -332,7 +344,9 @@ class ForwardPaperState(BaseModel):
 def create_forward_paper(body:ForwardPaperStart):
     private()
     return paper_forward.create(body.job_id,capital=body.capital,
-                                max_drawdown_pct=body.max_drawdown_pct)
+                                max_drawdown_pct=body.max_drawdown_pct,
+                                execution=body.execution.model_dump(exclude_none=True)
+                                  if body.execution else None)
 
 @router.get("/research/paper-forward")
 def list_forward_paper():

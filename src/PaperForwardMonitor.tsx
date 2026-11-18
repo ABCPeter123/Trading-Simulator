@@ -2,7 +2,7 @@ import {useCallback,useEffect,useState} from "react";
 import {useI18n} from "./i18n";
 import {changePaperForwardState,createPaperForward,evaluatePaperForward,
         getPaperForward,listPaperForward} from "./paperForwardApi";
-import type {PaperForwardOverview,PaperForwardDetail} from "./paperForwardApi";
+import type {PaperForwardOverview,PaperForwardDetail,PaperExecution} from "./paperForwardApi";
 import "./paperForward.css";
 
 const display=(n:number|null|undefined,suffix="")=>
@@ -32,6 +32,15 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
   const [selected,setSelected]=useState<PaperForwardDetail|null>(null);
   const [capital,setCapital]=useState("100000");
   const [drawdown,setDrawdown]=useState("30");
+  const [broker,setBroker]=useState<PaperExecution["broker"]>("wealthsimple");
+  const [account,setAccount]=useState<PaperExecution["account_type"]>("cash");
+  const [capitalCurrency,setCapitalCurrency]=useState<"USD"|"CAD">("USD");
+  const [borrowAssumption,setBorrowAssumption]=useState(false);
+  const [timing,setTiming]=useState<PaperExecution["fill_timing"]>("next_open");
+  const [marginRate,setMarginRate]=useState("");
+  const [shortRate,setShortRate]=useState("6");
+  const [slippage,setSlippage]=useState("8");
+  const [fxSpread,setFxSpread]=useState("0");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const load=useCallback(async()=>{
@@ -64,8 +73,25 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
       return;
     }
     if(!sourceJobId)return;
+    const fields=[marginRate,shortRate,slippage,fxSpread];
+    if(fields.some(x=>x.trim()!==""&&(!Number.isFinite(Number(x))||Number(x)<0||Number(x)>500))||
+      (marginRate!==""&&Number(marginRate)>100)||
+      (shortRate!==""&&Number(shortRate)>100)){
+      setError(say("Invalid financing or execution cost.","融资或成交成本参数无效。"));
+      return;
+    }
+    const execution:PaperExecution={
+      broker,account_type:account,capital_currency:capitalCurrency,
+      borrow_policy:broker==="ibkr"&&account==="margin"&&borrowAssumption
+        ?"assume_available_research":"block_unverified",
+      fill_timing:timing,
+      ...(marginRate.trim()?{margin_rate_pct:Number(marginRate)}:{}),
+      ...(shortRate.trim()?{short_borrow_rate_pct:Number(shortRate)}:{}),
+      ...(slippage.trim()?{slippage_bps:Number(slippage)}:{}),
+      ...(fxSpread.trim()?{fx_spread_bps:Number(fxSpread)}:{}),
+    };
     void update(async()=>{
-      const created=await createPaperForward(sourceJobId,n,d);
+      const created=await createPaperForward(sourceJobId,n,d,execution);
       setSelected(await getPaperForward(created.id));
     });
   };
@@ -75,9 +101,55 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
     <p>{say("Freeze a completed walk-forward selection and begin measuring only sessions observed after activation. Estimated next-open orders, not broker trades. Historical research and actual confirmed fills remain separate.",
       "冻结已完成滚动研究中的选定策略，仅衡量启动后新出现的交易日。以次日开盘价模拟成交，并非实际券商交易；历史研究与真实成交记录完全分离。")}</p>
     {sourceJobId&&<div className="pf-controls">
-      <label>{say("Paper capital (USD)","模拟本金（美元）")}
+      <label>{say("Broker research profile","券商模拟配置")}
+        <select value={broker} onChange={e=>{
+          const next=e.target.value as PaperExecution["broker"];
+          setBroker(next);
+          setAccount(next==="wealthsimple"?"cash":"margin");
+          setBorrowAssumption(false);
+          setMarginRate("");
+        }}>
+          <option value="wealthsimple">Wealthsimple</option>
+          <option value="ibkr">Interactive Brokers Canada</option>
+          <option value="legacy_research">{say("Generic research","通用研究模拟")}</option>
+        </select></label>
+      <label>{say("Simulated account","模拟账户")}
+        <select value={account} onChange={e=>setAccount(e.target.value as PaperExecution["account_type"])}>
+          <option value="cash">{say("Cash only","现金账户")}</option>
+          <option value="margin">{say("Margin research","保证金账户")}</option>
+        </select></label>
+      <label>{say("Funding currency","入金币种")}
+        <select value={capitalCurrency}
+          onChange={e=>setCapitalCurrency(e.target.value as "CAD"|"USD")}>
+          <option value="USD">USD</option><option value="CAD">CAD</option>
+        </select></label>
+      <label>{say("Paper capital","模拟本金")} ({capitalCurrency})
         <input type="number" min="100" max="1000000000" value={capital}
           onChange={e=>setCapital(e.target.value)}/></label>
+      <label>{say("Price used for delayed simulated fill","延迟模拟成交价")}
+        <select value={timing} onChange={e=>setTiming(e.target.value as PaperExecution["fill_timing"])}>
+          <option value="next_open">{say("Later session open","后续交易日开盘")}</option>
+          <option value="next_close">{say("Later session close, stress scenario","后续交易日收盘，压力场景")}</option>
+        </select></label>
+      <label>{say("Margin interest %, annual (blank = broker model)","融资年利率%，留空使用券商模型")}
+        <input type="number" min="0" max="100" step=".1" value={marginRate}
+          placeholder={broker==="wealthsimple"?"Tiered USD":"5.13"}
+          onChange={e=>setMarginRate(e.target.value)}/></label>
+      <label>{say("Short borrowing %, annual, assumed","假设融券年利率%")}
+        <input type="number" min="0" max="100" step=".1" value={shortRate}
+          onChange={e=>setShortRate(e.target.value)}/></label>
+      <label>{say("Slippage (basis points)","滑点（基点）")}
+        <input type="number" min="0" max="500" step="1" value={slippage}
+          onChange={e=>setSlippage(e.target.value)}/></label>
+      <label>{say("Extra FX spread (basis points)","额外换汇点差（基点）")}
+        <input type="number" min="0" max="500" step="1" value={fxSpread}
+          onChange={e=>setFxSpread(e.target.value)}/></label>
+      {broker==="ibkr"&&account==="margin"&&<label className="pf-borrow">
+        <input type="checkbox" checked={borrowAssumption}
+          onChange={e=>setBorrowAssumption(e.target.checked)}/>
+        {say("Assume shortable shares for research only, without verified locate",
+          "仅供研究假设可借券，未核实实际融券供应")}
+      </label>}
       <label>{say("Drawdown stop (%)","回撤止损（%）")}
         <input type="number" min="5" max="60" value={drawdown}
           onChange={e=>setDrawdown(e.target.value)}/></label>
@@ -85,6 +157,10 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
         {say("Start forward paper from this selection","按当前选定策略启动前向模拟")}
       </button>
     </div>}
+    {sourceJobId&&<p className="pf-disclaimer">
+      {say("Broker pricing is an editable assumption dated Nov 18, 2026. A USD-funded account is modeled after any upfront CAD-to-USD conversion. FX and stock-loan quotes are not executable prices. A next-session open after a 4 pm ET signal is normally more than 12 hours later.",
+        "券商定价为2026年11月18日的可编辑假设。加元本金先按假设成本转换为美元，再进行模拟交易。汇率与融券价格不是可执行报价。美东时间下午4点后的下一交易日开盘通常超过12小时。")}
+    </p>}
     {error&&<p role="alert" className="pf-error">{error}</p>}
     <div className="pf-archive">
       <div className="pf-heading"><h4>{say("Private paper portfolios","私人模拟组合")} ({list.length})</h4>
@@ -104,6 +180,19 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
     </div>
     {selected&&<div className="pf-detail">
       <h4>{say("Observed paper evidence","模拟交易观察记录")}</h4>
+      <p>{say("Broker cost model","券商成本模型")}: {selected.broker.broker} ·
+        {selected.broker.account_type} · {selected.broker.pricing_date} ·
+        {selected.capital_currency} {say("funded","入金")} ·
+        {say("Initial FX fee","初始换汇费用")}: {display(selected.fx_conversion_fee_usd)} USD
+        {selected.fx_rate!=null&&<> · USD/CAD {display(selected.fx_rate)}</>}
+      </p>
+      <p className="pf-disclaimer">
+        {say("Execution:","模拟执行：")} {selected.execution_profile.fill_timing} ·
+        {say("Slippage:","滑点：")} {display(selected.execution_profile.slippage_bps)} bps ·
+        {say("Margin rate:","融资年利率：")} {display(selected.execution_profile.margin_rate_pct,"%")} ·
+        {say("Borrow rate:","融券年利率：")} {display(selected.execution_profile.short_borrow_rate_pct,"%")} ·
+        {say("Borrow policy:","融券假设：")} {selected.execution_profile.borrow_policy}
+      </p>
       <div className="pf-metrics">
         <div><small>{say("Paper CAGR, annualized","模拟年复合增长率")}</small>
           <strong>{display(selected.statistics.cagr_pct,"%")}</strong></div>
@@ -117,6 +206,15 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
           <strong>{display(selected.financing_paid)} USD</strong></div>
         <div><small>{say("Audit versus paper CAGR gap","历史审计与模拟年化差距")}</small>
           <strong>{display(selected.drift.cagr_gap_pct,"%")}</strong></div>
+        <div><small>{say("Trade commissions (USD)","交易佣金（美元）")}</small>
+          <strong>{display(selected.transaction_fees_paid)} USD</strong></div>
+        {selected.equity_cad!=null&&<div><small>{say("CAD marked portfolio value","加元市值")}</small>
+          <strong>{display(selected.equity_cad)} CAD</strong></div>}
+        {selected.paper_pnl_cad!=null&&<div><small>{say("Net CAD P&L including FX","含换汇费用加元盈亏")}</small>
+          <strong>{display(selected.paper_pnl_cad)} CAD</strong></div>}
+        {selected.current_drawdown_cad_pct!=null&&<div>
+          <small>{say("CAD drawdown from peak","加元峰值回撤")}</small>
+          <strong>{display(selected.current_drawdown_cad_pct,"%")}</strong></div>}
       </div>
       <p>{say("Modeled execution delay","模拟成交延迟")}: {selected.delay_sessions}
         {say(" completed sessions"," 个交易日")} ·
@@ -138,6 +236,10 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
       </div>}
       <EquityChart marks={selected.marks}
         label={say("Observed forward-paper equity, USD","观察到的前向模拟净值（美元）")}/>
+      {selected.statistics_cad&&<p>
+        {say("Annualized CAD return","加元年化收益")}: {display(selected.statistics_cad.cagr_pct,"%")} ·
+        {say("CAD excess Sharpe","加元超额夏普")}: {display(selected.statistics_cad.excess_sharpe)}
+      </p>}
       <div className="pf-scroll"><table><thead><tr>
         <th>{say("Session","日期")}</th><th>{say("Equity USD","净值（美元）")}</th>
         <th>{say("Drawdown","回撤")}</th><th>{say("Gross exposure","总敞口")}</th>
