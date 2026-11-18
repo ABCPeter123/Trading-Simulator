@@ -3,6 +3,7 @@ import {useI18n} from "./i18n";
 import {submitWalkForward,getWalkForward,listWalkForward,cancelWalkForward} from "./tournamentApi";
 import type {TournamentSourceSpec,WalkForwardJob,WalkForwardResult,WalkForwardSelection} from "./tournamentApi";
 import "./walkForwardOptimizer.css";
+import PaperForwardMonitor from "./PaperForwardMonitor";
 
 const pct=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?"N/A":value.toFixed(2)+"%";
 const dec=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?"N/A":value.toFixed(2);
@@ -317,6 +318,7 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           {result.limitations?.map((item,i)=><p key={i}>{item}</p>)}
         </details>
       </>}
+      {result?.status==="completed"&&<PaperForwardMonitor sourceJobId={job?.id}/>}
       <details className="wfo-history"><summary>{l("Previous private walk-forward studies","过往私人滚动前推研究")} ({archive.length})</summary>
         {archive.length===0?<p>{l("No studies saved yet.","尚无已保存研究。")}</p>:
           archive.slice(0,20).map(item=><button type="button" key={item.id} disabled={busy}

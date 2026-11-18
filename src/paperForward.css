@@ -1,0 +1,25 @@
+.pf-monitor{border:1px solid #3b5d6e;background:#152c3c;border-radius:10px;padding:16px;margin:16px 0;color:#e1eff5;font-size:12px}
+.pf-monitor h3{font-size:15px;margin:0 0 8px;color:#b8e9df}.pf-monitor h4{font-size:13px;margin:8px 0}
+.pf-monitor p{line-height:1.65;color:#c1d5df}
+.pf-controls{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:14px 0}
+.pf-controls label{display:flex;flex-direction:column;gap:5px;min-width:125px}
+.pf-controls input{background:#203c4d;color:#f2f8fc;border:1px solid #526c7f;padding:9px;border-radius:7px;width:130px;box-sizing:border-box}
+.pf-monitor button{border:1px solid #537e82;background:#1e5e64;color:#e3f8f5;border-radius:7px;padding:9px 11px;cursor:pointer}
+.pf-monitor button:disabled{opacity:.5;cursor:wait}
+.pf-monitor button:focus-visible,.pf-monitor input:focus-visible{outline:2px solid #78dace;outline-offset:2px}
+.pf-archive,.pf-detail{margin-top:12px;border-top:1px solid #395568;padding-top:11px}
+.pf-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.pf-item{width:100%;text-align:left;display:flex;flex-direction:column;gap:5px;margin:5px 0;background:#213a4b!important}
+.pf-item span,.pf-item small{font-size:11px;line-height:1.5;color:#c4dbe7}
+.pf-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px;margin:10px 0}
+.pf-metrics>div{background:#203b4d;padding:10px;border-radius:7px;min-width:0;overflow-wrap:anywhere}
+.pf-metrics small{display:block;color:#b9d3de;margin-bottom:7px;line-height:1.4}
+.pf-metrics strong{font-size:15px;font-variant-numeric:tabular-nums}
+.pf-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.pf-scroll{max-width:100%;overflow:auto}
+.pf-scroll table{width:100%;border-collapse:collapse;min-width:530px;font-size:11px}
+.pf-scroll td,.pf-scroll th{padding:8px;border-bottom:1px solid #385668;text-align:left}
+.pf-error{border:1px solid #ab6f70;color:#ffe2d7!important;padding:9px;border-radius:6px}
+.pf-disclaimer{font-size:11px}
+
+.pf-plot{width:100%;height:auto;max-height:260px;background:#1a3140;border:1px solid #3b5b69;border-radius:7px;margin:8px 0}

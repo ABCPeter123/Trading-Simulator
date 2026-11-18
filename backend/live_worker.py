@@ -13,7 +13,7 @@ import signal
 import sys
 import time
 
-from . import live_machine, live_notifications, live_email_digest
+from . import live_machine, live_notifications, live_email_digest, paper_forward
 
 def main():
     parser=argparse.ArgumentParser()
@@ -34,6 +34,18 @@ def main():
     while not should_stop:
         try:
             live_machine.run_once(worker_heartbeat=True)
+            # Paper-only observed-session fills use an independent SQLite
+            # ledger and cannot mutate real broker confirmations.
+            paper_results=paper_forward.process_all()
+            for paper in paper_results:
+                key="paper:health:"+paper["id"]
+                if paper["last_error"]:
+                    live_machine.record_alert(key,"warning",
+                        "Forward-paper observation unavailable",
+                        "A private paper portfolio cannot advance on verified sessions. "
+                        "Review its local data and risk state. No broker order was sent.")
+                else:
+                    live_machine.resolve_alert(key)
             live_notifications.deliver_pending()
             live_email_digest.maybe_send_daily()
         except Exception as exc:
