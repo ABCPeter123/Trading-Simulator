@@ -14,6 +14,7 @@ from . import research_optimizer
 from . import portfolio_research
 from . import research_queue
 from . import universe_research
+from . import tournament_strategies
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -27,7 +28,7 @@ class DeployBody(BaseModel):
     strategy_id:str=Field(min_length=1,max_length=100)
     state:Literal["paper","live-monitor"]="paper"
     capital:float=Field(default=100000,ge=100,le=1e10)
-    max_allocation_pct:float=Field(default=10,gt=0,le=25)
+    max_allocation_pct:float=Field(default=10,gt=0,le=50)
     max_realized_loss_pct:float=Field(default=5,ge=0.5,le=25)
     max_daily_signals:int=Field(default=4,ge=1,le=20)
     resolution:Literal["1d","1h","15m"]="1d"
@@ -225,6 +226,18 @@ class UniverseStudyBody(BaseModel):
     delay_sessions:Literal[1,2]=1
     max_drawdown_pct:float=Field(default=30,ge=5,le=60)
     max_position_pct:float=Field(default=35,ge=10,le=50)
+
+
+@router.get("/research/universe/strategies")
+def imported_tournament_strategies():
+    private()
+    return tournament_strategies.list_saved()
+
+
+@router.post("/research/universe/jobs/{job_id}/strategies/{rank}",status_code=201)
+def import_tournament_strategy(job_id:str, rank:int):
+    private()
+    return tournament_strategies.import_rank(job_id, rank)
 
 
 @router.post("/research/universe/jobs",status_code=202)
