@@ -32,6 +32,12 @@ export interface AIAnswer {
     first_output_ms: number | null;
     prompt_tokens: number | null;
     completion_tokens: number | null;
+    prompt_ms?: number | null;
+    generation_ms?: number | null;
+    prompt_tokens_per_second?: number | null;
+    generation_tokens_per_second?: number | null;
+    reused_prompt_tokens?: number | null;
+    new_prompt_tokens?: number | null;
   };
 }
 export const getAIStatus = (model?: string) => request<AIStatus>(`/ai/status${model ? `?model=${encodeURIComponent(model)}` : ""}`);
