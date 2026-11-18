@@ -1,14 +1,14 @@
 import type { MarketBar } from "./api";
 
 export type ReplayResolution = "1m" | "5m" | "15m" | "1h" | "1d";
-export type ReplayWindow = "7D" | "30D" | "60D" | "6M" | "1Y" | "2Y" | "5Y" | "10Y" | "MAX";
+export type ReplayWindow = "7D" | "30D" | "60D" | "6M" | "1Y" | "2Y" | "5Y" | "10Y" | "15Y" | "20Y" | "MAX";
 
 export const REPLAY_WINDOWS: Record<ReplayResolution, readonly ReplayWindow[]> = {
   "1m": ["7D"],
   "5m": ["7D","30D","60D"],
   "15m": ["7D","30D","60D"],
-  "1h": ["7D","30D","60D","6M","1Y"],
-  "1d": ["1Y","2Y","5Y","10Y","MAX"],
+  "1h": ["7D","30D","60D","6M","1Y","2Y"],
+  "1d": ["1Y","2Y","5Y","10Y","15Y","20Y","MAX"],
 };
 const SECONDS: Record<ReplayResolution, number> = {
   "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "1d": 86400,
