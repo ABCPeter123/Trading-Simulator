@@ -128,6 +128,7 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
   const result:WalkForwardResult|null=job?.result??null;
   const study=result?.walk_forward;
   const audit=result?.final_audit;
+  const preAuditDiagnostics=result?.model_search?.pre_audit_selection_diagnostics;
   return <details className="wfo">
     <summary>{l("Walk-forward optimization and unseen-period audit","滚动前推优化与未见数据审计")}</summary>
     <div className="wfo-body">
