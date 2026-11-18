@@ -239,34 +239,35 @@ def _scenarios(curve,seed=9):
     changes=[b/a-1 for a,b in zip(vals,vals[1:]) if a>0]
     if len(changes)<10:return {"status":"insufficient_observations","paths":[]}
     rng=random.Random(seed)
-    horizon=30; paths=[]
-    for label,stress in (("ordinary",0.),("slower_execution",-0.00035),
-                         ("broad_market_shock",-0.004),("rebound",0.002)):
-        finals=[];worsts=[];track=[[] for _ in range(horizon)]
-        for _ in range(120):
-            value=100.;peak=value;worst=0.
-            for day in range(horizon):
-                draw=rng.choice(changes[-min(len(changes),180):])
-                extra=stress
-                if label=="broad_market_shock" and day==0:
-                    extra-=.12
-                value=max(0.01,value*(1+max(-.99,draw+extra)))
-                track[day].append((value/100-1)*100)
-                peak=max(peak,value);worst=min(worst,value/peak-1)
-            finals.append((value/100-1)*100);worsts.append(worst*100)
-        finals.sort();worsts.sort()
-        daily=[]
-        for day,values in enumerate(track,1):
-            values.sort()
-            daily.append({"session":day,"p05_return_pct":round(values[6],2),
-                          "median_return_pct":round(values[60],2),
-                          "p95_return_pct":round(values[113],2)})
-        paths.append({"name":label,"horizon_sessions":horizon,
-                      "p05_return_pct":round(finals[6],2),
-                      "median_return_pct":round(finals[60],2),
-                      "p95_return_pct":round(finals[113],2),
-                      "median_max_drawdown_pct":round(worsts[60],2),
-                      "daily":daily})
+    paths=[]
+    for horizon in (10,30,60,120):
+      for label,stress in (("ordinary",0.),("slower_execution",-0.00035),
+                           ("broad_market_shock",-0.004),("rebound",0.002)):
+          finals=[];worsts=[];track=[[] for _ in range(horizon)]
+          for _ in range(120):
+              value=100.;peak=value;worst=0.
+              for day in range(horizon):
+                  draw=rng.choice(changes[-min(len(changes),180):])
+                  extra=stress
+                  if label=="broad_market_shock" and day==0:
+                      extra-=.12
+                  value=max(0.01,value*(1+max(-.99,draw+extra)))
+                  track[day].append((value/100-1)*100)
+                  peak=max(peak,value);worst=min(worst,value/peak-1)
+              finals.append((value/100-1)*100);worsts.append(worst*100)
+          finals.sort();worsts.sort()
+          daily=[]
+          for day,values in enumerate(track,1):
+              values.sort()
+              daily.append({"session":day,"p05_return_pct":round(values[6],2),
+                            "median_return_pct":round(values[60],2),
+                            "p95_return_pct":round(values[113],2)})
+          paths.append({"name":label,"horizon_sessions":horizon,
+                        "p05_return_pct":round(finals[6],2),
+                        "median_return_pct":round(finals[60],2),
+                        "p95_return_pct":round(finals[113],2),
+                        "median_max_drawdown_pct":round(worsts[60],2),
+                        "daily":daily})
     return {"status":"hypothetical_resampled_history","paths":paths,
             "method":"Historical daily strategy-return bootstrap with explicit adverse shocks; NOT a forecast or guaranteed probability."}
 
@@ -351,6 +352,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                                    "train":pr._compact(train),
                                    "validation":pr._compact(valid),
                                    "regime_validation":regimes,
+                                   "_validation_curve":valid["equity_curve"],
                                    "_market":market,"_metadata":metadata,
                                    "_test_start":test_start,"_n":n,
                                    "_first_session":days[0],
@@ -399,7 +401,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "research_only":item["model"] in adv.RESEARCH_ONLY,
             "held_out":pr._compact(test),
             "delayed_execution_stress":pr._compact(stress),
-            "hypothetical_scenarios":_scenarios(test["equity_curve"],seed=42+i),
+            "hypothetical_scenarios":_scenarios(item["_validation_curve"],seed=42+i),
+            "scenario_calibration":"Validation-period strategy outcomes only; held-out prices are not used for projections.",
             "execution_model":"Next common-session open from completed prior session; "
                               "2-session +20bps adverse execution stress. "
                               "Calendar latency may exceed 12h.",
