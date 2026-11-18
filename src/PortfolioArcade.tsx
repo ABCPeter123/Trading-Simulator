@@ -279,6 +279,13 @@ export default function PortfolioArcade({onExit,initialRunId}: {onExit:()=>void;
       </div>
     </main> : <main className="port-layout" data-tab={workspaceTab}>
       <WorkspaceTabs active={workspaceTab} onChange={setWorkspaceTab}/>
+      {season.model_strategy&&<div className="port-model-banner" role="status">
+        <strong>{t("Loaded tournament strategy")}: {season.model_strategy.name}</strong>
+        <span>{season.model_strategy.symbols.map(x=>x.toUpperCase()).join(" + ")} ·
+          {season.model_strategy.model.replaceAll("_"," ")} ·
+          {season.model_strategy.max_position_pct}% {t("Maximum position weight (%)")} ·
+          {t("Rebalance every")} {season.model_strategy.rebalance_sessions} {t("shared sessions")}</span>
+      </div>}
       {workspaceTab==="market"&&<MarketDesk/>}
       <section className="port-main">
         <div className="port-metrics">
