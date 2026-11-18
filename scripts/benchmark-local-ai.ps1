@@ -44,7 +44,9 @@ $payload = @{
 } | ConvertTo-Json -Depth 6 -Compress
 
 Add-Type -AssemblyName System.Net.Http
-$http = New-Object System.Net.Http.HttpClient
+$handler = [System.Net.Http.HttpClientHandler]::new()
+$handler.UseProxy = $false
+$http = [System.Net.Http.HttpClient]::new($handler)
 $http.Timeout = [TimeSpan]::FromSeconds($TimeoutSeconds)
 $body = [System.Net.Http.StringContent]::new($payload, [Text.Encoding]::UTF8, "application/json")
 $watch = [Diagnostics.Stopwatch]::StartNew()
