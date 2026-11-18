@@ -317,3 +317,38 @@ would contaminate the claim of independent verification. Use genuinely new
 forward-paper data for assessing subsequent revisions. This milestone
 does not include point-in-time-delisted instruments, independent market
 benchmarks outside the selected basket, or a live broker execution engine.
+
+
+### Private research-review feedback and external-market reference
+
+Completed walk-forward reports now include a *read-only* review derived from
+existing private results. The review documents cash-hurdle misses, excess
+Sharpe weakness, relative underperformance against benchmarks, low average
+invested exposure, heavy turnover, parameter-neighborhood instability, and
+weak multiple-testing evidence, when supported. It returns three generic
+follow-up investigation prompts and provenance for each finding. No model is
+reselected, no new job is queued, no API credentials leave the PC, and no
+broker orders are placed. The stored report remains in Git-ignored local
+SQLite. This is deterministic diagnostic logic, **not an AI model** and
+not a forecast.
+
+A separate SPY price-only buy-and-hold reference is loaded **only after**
+all walk-forward fold selections and the final pre-audit choice are locked.
+The reference purchases shares at the first segment opening price with
+assumed spread, slippage, commission, and purchase-only FX conversion, then
+marks shares to close through the identical session dates. A benchmark is
+unavailable if any required SPY observation is missing or demonstrational;
+it must not forward-fill, interpolate, shorten the comparison range, or
+silently invent dividend returns. SPY is 100% market exposure and has
+different risk from constrained or diversified portfolios. Provider price
+adjustments may differ and distributions are not explicitly reinvested, so
+this **is not a verified total-return SPY benchmark**.
+
+The review distinguishes observations from the *already opened final
+audit* versus pre-audit diagnostics. Neither audit-based findings nor
+comparisons can change the model in the completed study. Any revised
+strategy must earn independent credibility from genuinely new forward
+paper-trading observations. Do not rerun the same final dates and call the
+result an untouched audit. ChatGPT still cannot directly read the owner's
+localhost/private research outputs without an explicitly authorized local
+connection in an appropriate runtime.
