@@ -138,6 +138,22 @@ def test_cad_fx_data_must_be_confirmed_at_activation_and_on_update(local):
     assert blocked["last_error"]
 
 
+def test_usd_funded_wealthsimple_margin_uses_real_fx_for_debt_tiers(local):
+    execution={"broker":"wealthsimple","account_type":"margin",
+               "capital_currency":"USD"}
+    started=paper.create("usd-margin",now=asof(510),
+                         loader=fx_loader(510),execution=execution)
+    assert started["capital_currency"]=="USD"
+    assert started["fx_rate"]==pytest.approx(1.2+508*.0004)
+    assert started["initial_capital"]==100000
+    assert started["fx_conversion_fee_usd"]==0
+    assert started["paper_pnl_cad"] is None
+    assert started["current_drawdown_cad_pct"] is None
+    updated=paper.process_one(started["id"],now=asof(511),loader=fx_loader(511))
+    assert updated["observed_sessions"]==1
+    assert updated["fx_rate"]==pytest.approx(1.2+509*.0004)
+
+
 def test_borrow_capability_is_not_approval(local,monkeypatch):
     job=paper_job()
     job["result"]["final_audit"]["selected"]["model"]="long_short_momentum"
