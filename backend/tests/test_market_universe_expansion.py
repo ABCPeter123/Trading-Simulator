@@ -156,3 +156,128 @@ def test_wider_market_ingestion_schedules_fairly_and_rate_limits(tmp_path,monkey
     assert len(second)==5
     assert len(set(called))==15
     assert set(called)==set(instruments)
+
+
+
+def test_bulk_all_catalog_plan_has_no_duplicate_tasks_or_undated_options():
+    helper = runpy.run_path(str(Path(__file__).resolve().parents[2] /
+                                "scripts" / "backfill-market-history.py"))
+    all_ids = helper["target_ids"](None, "", 2000, all_catalog=True)
+    assert len(all_ids) >= 320
+    assert len(all_ids) == len(set(all_ids))
+    assert "aapl-opt" not in all_ids
+    assert "spy-opt" not in all_ids
+    with pytest.raises(ValueError):
+        helper["target_ids"]("canada", "spy", 2000, all_catalog=True)
+    plan = helper["download_plan"](["spy", "spy", "qqq", "spy"], "MAX", True)
+    assert len(plan) == 10  # one daily plus four distinct intraday intervals
+    assert len(plan) == len(set(plan))
+    assert plan[0] == ("spy", "1d", "MAX")
+    assert ("spy", "1h", "2Y") in plan
+    assert ("spy", "5m", "60D") in plan
+    # NAV-only mutual funds never get fabricated intraday subscriptions.
+    asset = assets.Instrument("synthetic-nav", "SYNTHETIC", "Funds")
+    original = assets.INSTRUMENTS.get("synthetic-nav")
+    try:
+        assets.INSTRUMENTS["synthetic-nav"] = asset
+        assert helper["download_plan"](["synthetic-nav"], "MAX", True) == [
+            ("synthetic-nav", "1d", "MAX")]
+    finally:
+        if original is None:
+            assets.INSTRUMENTS.pop("synthetic-nav", None)
+        else:
+            assets.INSTRUMENTS["synthetic-nav"] = original
+
+
+def test_bulk_resume_skips_archive_even_without_checkpoint_and_preserves_unique_bars(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("TRADING_SIM_MARKET_DIR", str(tmp_path / "market"))
+    helper = runpy.run_path(str(Path(__file__).resolve().parents[2] /
+                                "scripts" / "backfill-market-history.py"))
+    checkpoint = tmp_path / "private-progress.json"
+    start = int(datetime(2020, 1, 1, tzinfo=UTC).timestamp())
+    fetches = []
+    def fake_fetch(asset_id, window):
+        fetches.append((asset_id, window))
+        # Intentional duplicate stamp, repeated across consecutive downloads.
+        candles = [
+            {"time": start, "open": 10., "high": 11., "low": 9.,
+             "close": 10., "volume": 20.},
+            {"time": start, "open": 10., "high": 12., "low": 9.,
+             "close": 11., "volume": 23.},
+            {"time": start + 86400, "open": 12., "high": 13., "low": 11.,
+             "close": 12., "volume": 25.},
+        ]
+        archive.record_history({"asset_id": asset_id, "range": window,
+                                "bars": candles, "is_demo": False})
+        return {"bars": candles, "is_demo": False}
+    first = helper["backfill_catalog"](
+        ["spy", "spy"], "MAX", 0, checkpoint=checkpoint, fetch_daily=fake_fetch)
+    assert first["requested"] == 1
+    assert first["downloaded"] == 1
+    assert first["skipped_existing"] == 0
+    assert fetches == [("spy", "MAX")]
+    assert archive.archive_stats("spy", "MAX")["bars"] == 2
+    recorded = archive.load_archived_history("spy", "MAX")
+    assert len(recorded) == len({row["time"] for row in recorded})
+    assert recorded[0]["close"] == 11.
+
+    # Progress JSON can disappear after a crash, but valid Parquet survives.
+    checkpoint.unlink()
+    second = helper["backfill_catalog"](
+        ["spy"], "MAX", 0, checkpoint=checkpoint, fetch_daily=fake_fetch)
+    assert second["downloaded"] == 0
+    assert second["skipped_existing"] == 1
+    assert fetches == [("spy", "MAX")]
+    assert checkpoint.is_file()
+
+    # Explicit refresh may correct old prices, but never duplicates timestamps.
+    third = helper["backfill_catalog"](
+        ["spy"], "MAX", 0, checkpoint=checkpoint,
+        fetch_daily=fake_fetch, refresh=True)
+    assert third["downloaded"] == 1
+    assert len(fetches) == 2
+    assert archive.archive_stats("spy", "MAX")["bars"] == 2
+
+
+def test_bulk_failed_task_retries_but_completed_work_is_never_fetched_twice(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("TRADING_SIM_MARKET_DIR", str(tmp_path / "market"))
+    helper = runpy.run_path(str(Path(__file__).resolve().parents[2] /
+                                "scripts" / "backfill-market-history.py"))
+    base = int(datetime(2020, 1, 1, tzinfo=UTC).timestamp())
+    attempts = []
+    def flaky(asset_id, window):
+        attempts.append(asset_id)
+        if asset_id == "qqq" and attempts.count("qqq") == 1:
+            raise ValueError("Simulated transient provider failure.")
+        candle = {"time": base, "open": 10., "high": 11.,
+                  "low": 9., "close": 10., "volume": 20.}
+        archive.record_history({"asset_id": asset_id, "range": window,
+                                "bars": [candle]})
+        return {"bars": [candle]}
+    checkpoint = tmp_path / "checkpoint.json"
+    first = helper["backfill_catalog"](
+        ["spy", "qqq"], "MAX", 0, checkpoint=checkpoint, fetch_daily=flaky)
+    assert (first["downloaded"], first["unavailable"]) == (1, 1)
+    second = helper["backfill_catalog"](
+        ["spy", "qqq"], "MAX", 0, checkpoint=checkpoint, fetch_daily=flaky)
+    assert (second["skipped_existing"], second["downloaded"]) == (1, 1)
+    assert attempts == ["spy", "qqq", "qqq"]
+    assert archive.archive_stats("spy", "MAX")["bars"] == 1
+    assert archive.archive_stats("qqq", "MAX")["bars"] == 1
+
+
+def test_bulk_dry_run_never_fetches_history(monkeypatch, capsys, tmp_path):
+    helper = runpy.run_path(str(Path(__file__).resolve().parents[2] /
+                                "scripts" / "backfill-market-history.py"))
+    monkeypatch.setenv("TRADING_SIM_MARKET_DIR", str(tmp_path / "market"))
+    monkeypatch.setattr(market, "history", lambda *_:
+                        (_ for _ in ()).throw(AssertionError("Network forbidden")))
+    assert helper["main"](["--all", "--include-intraday", "--dry-run"]) == 0
+    output = capsys.readouterr().out
+    assert "distinct download tasks" in output
+    assert "Existing complete Parquet windows will be skipped" in output
+    assert not (tmp_path / "market").exists()
