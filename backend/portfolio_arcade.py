@@ -458,9 +458,15 @@ def _rebalance_model(snapshot, state, ids, next_idx):
         item=get_instrument(s)
         metadata[s]={"group":pr._group(s,item.kind),"kind":item.kind,
                      "currency":item.currency,"spread_bps":float(item.spread_bps)}
-    allocation=(adv.weights if config["model"] in adv.MODELS else pr._weights)
-    weights=allocation(config["model"],ids,closes,len(observed),metadata,
-                       config["max_position_pct"]/100)
+    if config["model"] in adv.MODELS:
+        weights=adv.weights(config["model"],ids,closes,len(observed),metadata,
+                            config["max_position_pct"]/100)
+    else:
+        weights=pr._weights(config["model"],ids,closes,len(observed),metadata,
+                            config["max_position_pct"]/100,
+                            gross_target=float(config.get("target_investment_pct",95.))/100,
+                            equity_cap=float(config.get("equity_class_cap_pct",70.))/100,
+                            redistribute=config.get("redistribute_excess",False))
     if any(weight<0 for weight in weights.values()):
         raise ValueError("Signed exposure cannot enter a cash-only replay")
     opening={s:dec(snapshot["daily"][s][day]["open"]) for s in ids}
