@@ -77,7 +77,7 @@ def fake_streaming(monkeypatch):
 def test_preview_only_exposes_decoded_answer_not_raw_strategy():
     raw = '{"answer": "Return was 2.5% \\u0026 drawdown -3%","strategy":"PRIVATE_DO_NOT_SHOW"}'
     assert ai._visible_answer_preview(raw) == "Return was 2.5% & drawdown -3%"
-    assert ai._visible_answer_preview('{"strategy":"PRIVATE_DO_NOT_SHOW","answer":"Observed"}') == "Observed"
+    assert ai._visible_answer_preview('{"strategy":"PRIVATE_DO_NOT_SHOW","answer":"Observed"}') == ""
     assert ai._visible_answer_preview('{"strategy":"PRIVATE_DO_NOT_SHOW"}') == ""
     assert ai._visible_answer_preview('{"answer":"unfinished \\') == "unfinished "
     assert ai._visible_answer_preview("random <think>private</think>") == ""
