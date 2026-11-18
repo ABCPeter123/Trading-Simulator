@@ -23,14 +23,14 @@ import time
 
 from fastapi import HTTPException
 
-from . import assets, portfolio_research as pr
+from . import assets, portfolio_research as pr, advanced_portfolio_research as adv
 from .archive import load_archived_history
 from .market import history
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = Path(os.environ.get("TRADING_SIM_UNIVERSE_DB", ROOT/"data/universe_research.sqlite3"))
 LOCK = RLock()
-CANDIDATE_MODELS = tuple(pr.MODELS)
+CANDIDATE_MODELS = tuple(pr.MODELS) + tuple(adv.MODELS)
 # Predefined portfolio groups are starting configurations, not guaranteed winners.
 BASKET_SEEDS = {
     "diversified": ("spy","qqq","ief","gld","eem","vnq","vti","xlv"),
@@ -57,6 +57,8 @@ COST_ASSUMPTIONS = {
     "delay_sessions": 1,
     "delayed_stress_sessions": 2,
     "time_target_hours": 12,
+    "short_borrow_rate_annual": adv.BORROW_RATE_ANNUAL,
+    "margin_rate_annual": adv.MARGIN_RATE_ANNUAL,
 }
 MAX_QUEUE = 2
 MAX_STORED = 50
@@ -151,18 +153,22 @@ def cancel(identity):
 
 
 def _read(asset_id, load=None):
-    """Prefer real owner archives. For missing archives fetch one real 5Y window."""
+    """Prefer longest valid local archive, then maximum real provider history."""
     if load is not None:
         return load(asset_id)
-    for window in ("5Y","MAX","10Y","20Y"):
+    candidate=None
+    for window in ("MAX","20Y","15Y","10Y","5Y"):
         try:
             bars=load_archived_history(asset_id,window)
-            if len(bars)>=500:
-                return {"bars":bars[-1800:],"source":"Local recorded provider OHLCV","offline_cache":True}
+            if len(bars)>=500 and (candidate is None or len(bars)>len(candidate)):
+                candidate=bars
         except (OSError,ValueError,KeyError):
             pass
-    # Unofficial provider request is rate-limited by the scanner itself.
-    return history(asset_id,"5Y")
+    if candidate:
+        return {"bars":candidate,"source":"Local recorded provider OHLCV",
+                "offline_cache":True}
+    # Maximum available daily history, never silently truncate at five years.
+    return history(asset_id,"MAX")
 
 
 def _quality(bars):
@@ -278,7 +284,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             response=_read(sym,load=loader)
             if response.get("is_demo") or not _quality(response.get("bars")):
                 raise ValueError("Insufficient or invalid real daily OHLCV")
-            histories[sym]={"bars":response["bars"][-1800:],
+            histories[sym]={"bars":response["bars"],
                             "source":response.get("source","historical provider")}
         except (HTTPException,ValueError,OSError,KeyError,TypeError):
             rejected[sym]="missing_or_invalid_ohlcv"
@@ -290,7 +296,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             pause(.4)
     baskets=_basket_candidates(histories,list(histories))
     ranked=[];discarded=[];evaluated=0
-    # Five reusable portfolio templates × every viable basket. All candidates
+    model_counts={name:0 for name in CANDIDATE_MODELS}
+    # Cash, defensive, leveraged and short research models × viable baskets. All candidates
     # use training/validation only; the final 20% is untouched by scoring.
     for ix,(label,symbols) in enumerate(baskets):
         try:
@@ -309,27 +316,45 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                 evaluated+=1
                 broker={**COST_ASSUMPTIONS,
                         "delay_sessions":params["delay_sessions"]}
-                train=pr._segment(model,symbols,market,metadata,pr.WARMUP,
-                                  train_end,params["max_position_pct"]/100,
-                                  broker=broker)
-                valid=pr._segment(model,symbols,market,metadata,train_end,
-                                  test_start,params["max_position_pct"]/100,
-                                  broker=broker)
-                passes=(abs(valid["max_drawdown_pct"])<=params["max_drawdown_pct"]
+                researcher=adv.segment if model in adv.MODELS else pr._segment
+                try:
+                    train=researcher(model,symbols,market,metadata,pr.WARMUP,
+                                     train_end,params["max_position_pct"]/100,
+                                     broker=broker)
+                    valid=researcher(model,symbols,market,metadata,train_end,
+                                     test_start,params["max_position_pct"]/100,
+                                     broker=broker)
+                except (ArithmeticError, ValueError, ZeroDivisionError):
+                    continue
+                model_counts[model]+=1
+                regimes=adv.scenario_grade(valid["equity_curve"],market,symbols,train_end)
+                train_stable=train.get("ending_equity",0)>0
+                passes=(train_stable
+                        and abs(valid["max_drawdown_pct"])<=params["max_drawdown_pct"]
                         and valid["trades"]>0
-                        and valid["average_invested_pct"]>=5)
-                # Decline underfit templates rather than always pretending
-                # there must be ten good choices.
-                score=round(valid["return_pct"]-1.7*abs(valid["max_drawdown_pct"])
+                        and valid["average_invested_pct"]>=5
+                        and not valid.get("margin_calls",0))
+                # Selection uses validation ONLY. Drawdown, volatility,
+                # turnover and performance in adverse observed regimes are
+                # explicit penalizers rather than return alone.
+                worst=regimes["worst_regime_return_pct"]
+                volatility=valid.get("annualized_volatility_pct") or 0.
+                score=round(valid["return_pct"]
+                            -1.7*abs(valid["max_drawdown_pct"])
                             -.025*valid["turnover_pct"]
+                            -.08*volatility
+                            -.12*abs(min(0,worst))
                             -(4 if valid["trades"]<2 else 0),4)
                 if passes:
                     ranked.append({"basket_type":label,"symbols":symbols,
                                    "model":model,"score":score,
                                    "train":pr._compact(train),
                                    "validation":pr._compact(valid),
+                                   "regime_validation":regimes,
                                    "_market":market,"_metadata":metadata,
-                                   "_test_start":test_start,"_n":n})
+                                   "_test_start":test_start,"_n":n,
+                                   "_first_session":days[0],
+                                   "_last_session":days[-1]})
             report(58+int(34*(ix+1)/max(1,len(baskets))),
                    f"Comparing {ix+1}/{len(baskets)} portfolio baskets",
                    len(universe),len(histories))
@@ -340,16 +365,23 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
     for i,item in enumerate(ranked[:10]):
         broker={**COST_ASSUMPTIONS,"delay_sessions":params["delay_sessions"]}
         slow={**broker,"delay_sessions":2,"slippage_bps":20}
-        test=pr._segment(item["model"],item["symbols"],item["_market"],
+        researcher=adv.segment if item["model"] in adv.MODELS else pr._segment
+        test=researcher(item["model"],item["symbols"],item["_market"],
                          item["_metadata"],item["_test_start"],item["_n"],
                          params["max_position_pct"]/100,broker=broker)
-        stress=pr._segment(item["model"],item["symbols"],item["_market"],
+        stress=researcher(item["model"],item["symbols"],item["_market"],
                            item["_metadata"],item["_test_start"],item["_n"],
                            params["max_position_pct"]/100,broker=slow)
         leaders.append({
             "rank":i+1,"basket_type":item["basket_type"],"symbols":item["symbols"],
             "model":item["model"],"validation_score":item["score"],
             "training":item["train"],"validation":item["validation"],
+            "validation_regimes":item["regime_validation"],
+            "held_out_regimes":adv.scenario_grade(test["equity_curve"],
+                item["_market"],item["symbols"],item["_test_start"]),
+            "coverage":{"first_session":item["_first_session"],
+                        "last_session":item["_last_session"],"common_sessions":item["_n"]},
+            "research_only":item["model"] in adv.RESEARCH_ONLY,
             "held_out":pr._compact(test),
             "delayed_execution_stress":pr._compact(stress),
             "hypothetical_scenarios":_scenarios(test["equity_curve"],seed=42+i),
@@ -359,6 +391,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "restricted_research":any(s in LEVERAGED_IDS for s in item["symbols"]),
             "short_proxy_research":any(s in SHORT_PROXY_IDS for s in item["symbols"]),
             "no_real_order":True,
+            "held_out_execution_sample":test["executions"][:40],
         })
     report(98,"Saving ranked research and hypothetical scenarios",
            len(universe),len(histories))
@@ -367,22 +400,30 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         "eligible_count":sum(1 for sym in universe if sym in histories and sym not in rejected),
         "excluded_count":len(rejected),"exclusions":rejected,
         "basket_count":len(baskets),"candidates_evaluated":evaluated,
+        "candidate_model_counts":model_counts,
+        "historical_coverage":{"universe_earliest_session":min((
+            datetime.fromtimestamp(int(h["bars"][0]["time"]),timezone.utc).date().isoformat()
+            for h in histories.values() if h.get("bars")),default=None),
+            "universe_latest_session":max((
+            datetime.fromtimestamp(int(h["bars"][-1]["time"]),timezone.utc).date().isoformat()
+            for h in histories.values() if h.get("bars")),default=None),
+            "method":"Maximum available provider or locally recorded daily history; overlap depends on each basket"},
         "qualified_candidates":len(ranked),"rejected_baskets":discarded,
         "top10":leaders,
-        "selection_method":"Validation-only ranking; held-out results and simulated future scenarios are never selection criteria.",
+        "selection_method":"Training and validation only. Rank by validation return minus drawdown, turnover, annual volatility and weak historical regimes. Held-out tests and hypothetical scenarios never determine ranking.",
         "execution_assumptions":{**COST_ASSUMPTIONS,"configured_delay_sessions":params["delay_sessions"],
                                  "commission_note":"USD $0 listed-stock/ETF commission. FX 1.5% assumed on any cross-currency trade; this is conservative and account-dependent."},
         "test_used_for_selection":False,
         "limitations":[
-            "The entire reference catalog is checked; only USD/CAD stocks and ETFs with sufficient actual daily history enter the present cash-account optimizer. Futures, currencies, crypto, options and unsupported contract types are explicitly excluded, not falsely treated as executable.",
+            "The current provider-backed universe covers available USD/CAD stocks and ETFs. Futures, currencies, crypto and option contracts need separate historical pricing and execution models; excluded instruments are reported.",
             "Only symbols with sufficient actual valid historical daily data are evaluated. Exclusions are reported, not backfilled with synthetic observations.",
-            "Broker eligibility varies by account and instrument. Shorting shares is not supported by Wealthsimple; inverse/leveraged ETFs are separate risky research products, never automatic shorts.",
+            "Research-only short and margin models use synthetic negative holdings, 6% annual short borrow and 8.5% margin funding assumptions, with 25% maintenance margin. These are approximations and cannot be deployed as Wealthsimple share shorts.",
             "No direct Wealthsimple broker-price API, order routing, options margin engine, cash settlement, borrowing, taxes or dividend-adjusted total returns.",
             "Signals from completed daily candles can take more than 12 calendar hours to reach the next regular-session open. A two-session stress test measures a longer delay.",
             "Hypothetical future paths resample historical strategy outcomes and add shocks. They are not predictions or calibrated probabilities.",
             "Ticker universe and available listings introduce survivorship bias. Historical OHLCV can be incomplete and requires point-in-time symbol membership and corporate-action data for stronger conclusions.",
         ],
-        "automation":"Never deploys, shorts, leverages on margin, or submits brokerage orders.",
+        "automation":"Runs signed margin and short exposure in private historical research only. Never submits any brokerage order.",
     }
 
 
