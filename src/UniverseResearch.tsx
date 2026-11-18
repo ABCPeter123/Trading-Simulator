@@ -202,7 +202,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             </details>}
             <h2>{t("Top 10 research strategies")}</h2>
             <button type="button" className="ur-secondary" disabled={busy||!result.top10.length}
-              onClick={()=>void importAll()}>{t("Save all top 10 as executable models")}</button>
+              onClick={()=>void importAll()}>{t("Save all top 10 strategy models")}</button>
             {result.top10.length===0?<p>{t("No qualifying candidates. Inspect missing history or relax the validation constraints.")}</p>:
             <div className="ur-scroll"><table><thead><tr><th>{t("Rank")}</th>
               <th>{t("Basket / Model")}</th><th>{t("Validation")}</th>
@@ -231,12 +231,12 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 fx_conversion_bps:Number(result.execution_assumptions.fx_conversion_bps),
                 base_currency:String(result.execution_assumptions.base_currency),
               }} />
-              <p>{t("Executable model")}: {label(chosen.model)} · {active?.params.max_position_pct}% {t("Maximum position weight (%)")} ·
+              <p>{t(chosen.research_only?"Synthetic research model":"Executable allocation model")}: {label(chosen.model)} · {active?.params.max_position_pct}% {t("Maximum position weight (%)")} ·
                 {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
                 <button type="button" className="ur-primary" disabled={busy||chosen.research_only}
                   onClick={()=>void promote("simulation")}>{t("Load this strategy into simulation")}</button>
-                <button type="button" className="ur-secondary" disabled={busy||chosen.research_only}
+                <button type="button" className="ur-secondary" disabled={busy||chosen.research_only||chosen.restricted_research||chosen.short_proxy_research}
                   onClick={()=>void promote("live")}>{t("Open in Live Engine (paper first)")}</button>
               </div>
               <p>{chosen.research_only?
