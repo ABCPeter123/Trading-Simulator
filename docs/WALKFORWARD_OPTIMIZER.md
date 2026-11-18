@@ -104,3 +104,30 @@ survivorship bias is not resolved by walk-forward alone.
 
 The research process sends no broker orders. Reports can inform paper
 forward testing, but do not automatically create deployed strategies.
+
+## Evidence integrity diagnostics added after the original audit
+
+The private report now includes a **pre-audit-only cash and execution-cost
+counterfactual** for each fold's training window and for the final selection's
+training window. It compares the selected model with configured costs, the
+same model with zero transaction costs, and constrained equal weight with
+configured costs. Training sessions, turnover, gross exposure and fees appear
+alongside returns. The zero-cost rerun can alter integer share quantities, so
+its return difference is a sensitivity, **not exact causal fee attribution**.
+Cash holdings and category limits may protect against drawdown; a return gap
+alone does not justify increasing investment. These comparisons do not score,
+reselect or rank models.
+
+Each completed study also stores a **historical input provenance check**:
+source, date range, mismatched calendars, adjustment metadata where explicitly
+provided, and previous-completed-day FX handling. The default Yahoo request
+uses `auto_adjust=False`; archived provider OHLC does not preserve a certified
+total-return adjustment record. Delisted-security histories, historical index
+constituents, dividends, splits and issuer-level corporate actions are not
+verified by this check. The report labels those limitations rather than
+claiming a survivorship-free backtest.
+
+See [forward-paper monitoring](FORWARD_PAPER.md) for the independently
+frozen exact-session price-only control on newly observed sessions.
+Reviewing any previously unsealed audit disqualifies those same dates
+from being described as fresh evidence after subsequent research changes.

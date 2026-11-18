@@ -171,6 +171,35 @@ export interface WalkForwardExposure {
   short_borrow_cost_usd:number|null;trade_count:number;
   turnover_interpretation:string;
 }
+export interface WalkForwardTrainingLedger {
+  return_pct:number;average_gross_invested_pct:number|null;
+  turnover_pct_of_starting_capital:number|null;
+  fees_and_financing_usd:number|null;maximum_drawdown_pct:number;
+}
+export interface WalkForwardCostReview {
+  status:"available";evidence_boundary:string;training_sessions:number;
+  selected_with_configured_costs:WalkForwardTrainingLedger;
+  selected_zero_transaction_costs:WalkForwardTrainingLedger;
+  same_basket_equal_weight_with_configured_costs:WalkForwardTrainingLedger;
+  estimated_cost_sensitivity_pct_points:number;
+  selected_minus_equal_weight_pct_points:number;
+  interpretation:string;used_for_selection:false;
+}
+export interface WalkForwardDataProvenance {
+  status:"partial_verification";basis:string;
+  shared_start:string;shared_end:string;shared_sessions:number;
+  instruments:{symbol:string;source:string;recorded_snapshot:boolean;
+    currency:string;first_observed_date:string;last_observed_date:string;
+    observed_sessions:number;unmatched_dates_within_shared_span:number;
+    explicit_price_adjustment:string;corporate_actions_verified:false;
+    delisting_history_verified:false;point_in_time_membership_verified:false}[];
+  fx:{status:string;source?:string;observed_quotes?:number;
+    cad_sessions_missing_recent_prior_quote?:number;
+    future_or_same_day_fx_lookups?:number;conversion_rule?:string};
+  corporate_actions_verified:false;delisted_instruments_included:string;
+  historical_universe_membership:string;can_certify_survivorship_free:false;
+  limitations:string[];used_for_selection:false;
+}
 export interface WalkForwardCandidates {
   eligible_count:number;attempted_count:number;rejected_count:number;
   rejection_reasons:Record<string,number>;
@@ -235,6 +264,7 @@ export interface WalkForwardFold {
   original_tournament_reference?:OriginalTournamentReference;
   unseen_spy_price_benchmark?:MarketBenchmark;
   unseen_exposure_and_costs?:WalkForwardExposure;
+  pre_audit_training_cost_review?:WalkForwardCostReview;
 }
 export interface WalkForwardConsistency {
   rolling_window_sessions:number;rolling_windows:number;
@@ -278,6 +308,7 @@ export interface WalkForwardResult {
   reason?:string;fold_failed?:number|string;
   selection_outcome?:string;rejection_diagnostics?:RejectionDiagnostics;
   coverage?:{first_date:string;last_date:string;shared_sessions:number;warmup_sessions:number};
+  data_provenance?:WalkForwardDataProvenance;
   targets?:{cagr_pct:number;excess_sharpe:number;max_drawdown_pct:number;risk_free_pct:number};
   execution_assumptions?:{base_currency:string;commission_usd:number;fx_conversion_bps:number;slippage_bps:number};
   research_review?:ResearchReview;
@@ -289,6 +320,7 @@ export interface WalkForwardResult {
     candidate_scope:string;
     pre_audit_candidate_leaderboard?:WalkForwardCandidates;
     pre_audit_parameter_stability?:WalkForwardStability;
+    pre_audit_cost_review?:WalkForwardCostReview;
     pre_audit_risk_frontier?:RiskFrontier;
     pre_audit_selection_diagnostics?:{
       basis:string;valid_candidate_curves:number;attempted_candidates:number;

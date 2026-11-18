@@ -24,12 +24,19 @@ export interface PaperForwardOverview {
     fx_assumption:string;fill_assumption:string};
   capital_currency:"USD"|"CAD";initial_amount:number;
   equity_cad:number|null;fx_rate:number|null;
+  frozen_strategy_fingerprint:string|null;
+  forward_benchmark:{
+    status:"available"|"not_recorded";method:string;starting_session:string;
+    last_session:string;observed_sessions:number;value_usd:number|null;
+    return_pct:number|null;strategy_minus_benchmark_return_pct_points:number|null;
+    benchmark_used_to_select_strategy:false;
+  };
   fx_conversion_fee_usd:number;paper_pnl_cad:number|null;
   current_drawdown_cad_pct:number|null;
 }
 export interface PaperForwardDetail extends PaperForwardOverview {
   marks:{session:string;value:number;cash:number;gross_pct:number;
-    drawdown_pct:number;financing_cost:number;fx_rate:number|null;value_cad:number|null}[];
+    drawdown_pct:number;financing_cost:number;fx_rate:number|null;value_cad:number|null;benchmark_value:number|null}[];
   fills:{session:string;symbol:string;action:string;quantity:number;
     price:number;fee:number;delay_sessions:number}[];
   statistics:{cagr_pct:number|null;excess_sharpe:number|null;

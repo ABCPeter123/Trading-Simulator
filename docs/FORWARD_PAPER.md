@@ -130,3 +130,27 @@ waits for a later eligible session instead.
   begins only at activation and is initially statistically very small.
 - Vercel deployments stay frozen. No changes here publish a site, submit
   real orders, alter saved strategies, or touch the actual broker journal.
+
+## Frozen forward-paper benchmark
+
+New paper studies freeze an immutable local configuration fingerprint and
+the observed activation-session closes of every eligible instrument. Alongside
+each subsequent paper mark the service records a **same-session, equal-weight
+buy-and-hold price-only reference**, initialized with the paper study's
+post-funding USD capital. It uses the exact new completed sessions already
+validated by the forward observer and is not consulted in model training.
+
+The comparison is deliberately *not* a simulated tradable equal-weight account:
+there are no reference execution delays, commissions, spreads, income
+reinvestment, borrow fees, taxes or independent broker fills. CAD-funded
+studies show this reference in USD after the same initial funding conversion,
+not a CAD total-return benchmark. The new benchmark therefore serves as a
+contemporaneous price-movement control, not as evidence of net alpha.
+
+Existing studies are migrated without deleting marks or changing the
+strategy ledger. A study created before this feature has no frozen activation
+reference and displays **not recorded**, instead of retroactively inventing a
+benchmark with later-observed prices. The daily benchmark mark and paper
+strategy state are written in the same local SQLite transaction; repeating
+an already-observed day produces no new paper mark. The strategy
+configuration fingerprint remains local, as all selected strategy data must.

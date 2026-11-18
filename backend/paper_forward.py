@@ -7,6 +7,7 @@ selected rules nor run output may be committed to the public repository.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -88,6 +89,8 @@ def _db():
         c.execute("ALTER TABLE paper_marks ADD COLUMN fx_rate REAL")
     if "value_cad" not in columns:
         c.execute("ALTER TABLE paper_marks ADD COLUMN value_cad REAL")
+    if "benchmark_value" not in columns:
+        c.execute("ALTER TABLE paper_marks ADD COLUMN benchmark_value REAL")
     return c
 
 
@@ -227,6 +230,26 @@ def _public(row, details=False):
         "pending_execution":state["pending"] is not None,
         "delay_sessions":config["delay_sessions"],
         "audit_reference":audit,
+        "frozen_strategy_fingerprint":state.get("frozen_strategy_fingerprint"),
+        "forward_benchmark":{
+            "status":"available" if state.get("forward_benchmark") else "not_recorded",
+            "method":"Equal-weight price-only buy-and-hold from activation close, no fees or dividends, exact observed sessions",
+            "starting_session":obj["starting_session"],
+            "last_session":obj["last_session"],
+            "observed_sessions":state["observed_sessions"],
+            "value_usd":round(state["forward_benchmark"]["last_value"],2)
+                if state.get("forward_benchmark") else None,
+            "return_pct":round(
+                (state["forward_benchmark"]["last_value"] /
+                 state["forward_benchmark"]["starting_capital_usd"]-1)*100,4)
+                if state.get("forward_benchmark") else None,
+            "strategy_minus_benchmark_return_pct_points":round(
+                (state["equity"]/state["forward_benchmark"]["starting_capital_usd"] -
+                 state["forward_benchmark"]["last_value"] /
+                 state["forward_benchmark"]["starting_capital_usd"])*100,4)
+                if state.get("forward_benchmark") else None,
+            "benchmark_used_to_select_strategy":False,
+        },
         "broker":broker_model.cost_snapshot(state.get("broker",broker_model.normalize())),
         "execution_profile":state.get("broker",broker_model.normalize()),
         "capital_currency":state.get("capital_currency","USD"),
@@ -243,7 +266,7 @@ def _public(row, details=False):
     if details:
         with closing(_db()) as c:
             marks = [dict(x) for x in c.execute(
-                "SELECT session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad "
+                "SELECT session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad,benchmark_value "
                 "FROM paper_marks WHERE study_id=? ORDER BY session",(obj["id"],))]
             fills = [dict(x) for x in c.execute(
                 "SELECT session,symbol,action,quantity,price,fee,delay_sessions "
@@ -347,7 +370,18 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
         raise HTTPException(422,"CAD-to-USD conversion exhausts paper funding.")
     pending={"weights":targets,"remaining":config["delay_sessions"],"signal_session":start,
              "activated_at":at.isoformat() if profile["broker"]!="legacy_research" else None}
+    # Freeze equal-weight shares at the last completed close. Only subsequently
+    # observed provider sessions update this price-only benchmark.
+    initial_closes={s:float(market[s][-1]["close"]) for s in symbols}
+    fingerprint=hashlib.sha256(_dump({
+        "config":config,"symbols":symbols,"starting_session":start,
+        "source_job":job_id}).encode("utf-8")).hexdigest()
     state={"cash":actual_usd,"equity":actual_usd,
+           "frozen_strategy_fingerprint":fingerprint,
+           "forward_benchmark":{
+               "starting_capital_usd":actual_usd,
+               "base_closes":initial_closes,
+               "last_value":actual_usd},
            "positions":{s:0 for s in symbols}, "peak":nominal_usd,
            "gross_pct":0., "observed_sessions":0,
            "pending":pending, "since_signal":0,
@@ -378,11 +412,11 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
              _dump(symbols),nominal_usd,max_drawdown_pct,start,start,_dump(state),
              _dump(audit_reference),None))
         c.execute("""INSERT INTO paper_marks
-            (study_id,session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad)
-            VALUES(?,?,?,?,?,?,?,?,?)""",
+            (study_id,session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad,benchmark_value)
+            VALUES(?,?,?,?,?,?,?,?,?,?)""",
                   (uid,start,actual_usd,actual_usd,0.,
                    (actual_usd/nominal_usd-1)*100,0.,observed_fx,
-                   actual_usd*observed_fx if observed_fx else None))
+                   actual_usd*observed_fx if observed_fx else None,actual_usd))
         c.commit()
         return _public(c.execute("SELECT * FROM paper_studies WHERE id=?",(uid,)).fetchone())
 
@@ -515,6 +549,17 @@ def _advance(c, row, days, market, meta, fx_rates, at):
             funding_drawdown=drawdown
         if gross > 0 and state["equity"]/gross < MAINTENANCE:
             raise PaperRiskError("Margin maintenance floor breached; no future paper execution.")
+        # This reference uses only the exact session now observed in paper.
+        # Missing values for older pre-upgrade studies remain unavailable.
+        benchmark_value=None
+        if state.get("forward_benchmark"):
+            benchmark=state["forward_benchmark"]
+            bases=benchmark["base_closes"]
+            benchmark_value=(benchmark["starting_capital_usd"] / len(symbols) *
+                             sum(closes[s]/bases[s] for s in symbols))
+            if not math.isfinite(benchmark_value) or benchmark_value<=0:
+                raise PaperRiskError("Forward benchmark cannot be marked.")
+            benchmark["last_value"]=benchmark_value
         # Everything for this day is committed atomically with the state.
         for symbol,action,quantity,price,fee in pending_orders:
             c.execute("INSERT INTO paper_fills VALUES(?,?,?,?,?,?,?,?,?,1)",
@@ -522,10 +567,10 @@ def _advance(c, row, days, market, meta, fx_rates, at):
                        config["delay_sessions"]))
         state["fx_rate"]=rate
         c.execute("""INSERT INTO paper_marks
-            (study_id,session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad)
-            VALUES(?,?,?,?,?,?,?,?,?)""",
+            (study_id,session,value,cash,gross_pct,drawdown_pct,financing_cost,fx_rate,value_cad,benchmark_value)
+            VALUES(?,?,?,?,?,?,?,?,?,?)""",
                   (row["id"],day,state["equity"],state["cash"],state["gross_pct"],
-                   drawdown,finance,rate,state["equity"]*rate if rate else None))
+                   drawdown,finance,rate,state["equity"]*rate if rate else None,benchmark_value))
         state["observed_sessions"]=next_session
         row=dict(row)
         row["last_session"]=day
