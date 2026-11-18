@@ -42,6 +42,8 @@ function Simulator() {
   const [liveSection,setLiveSection]=useState<OperationsSection|"market">("dashboard");
   const [privateConnected,setPrivateConnected] = useState(hasPrivateConnection());
   const [preparedSignal,setPreparedSignal] = useState<Signal|null>(null);
+  const [tournamentReplayId,setTournamentReplayId]=useState<string|undefined>(undefined);
+  const [preferredLiveStrategy,setPreferredLiveStrategy]=useState<string|undefined>(undefined);
   if(cloudFrontend && !privateConnected) return <><CloudGateway onConnected={()=>setPrivateConnected(true)}/><LanguageSwitcher/></>;
   return <>
     {cloudFrontend && <div className="cloud-engine-bar" role="status">
@@ -73,9 +75,11 @@ function Simulator() {
       {import.meta.env.VITE_PUBLIC_DEMO==="1" || researchSection==="single" ?
         <TradingArcade onOpenPortfolio={()=>setResearchSection("portfolio")}/>:
        researchSection==="portfolio"?
-        <PortfolioArcade onExit={()=>setResearchSection("single")}/>:
+        <PortfolioArcade onExit={()=>setResearchSection("single")} initialRunId={tournamentReplayId}/>:
        researchSection==="discovery"?<StrategyDiscovery/>:
-        <UniverseResearch onOpenDiscovery={()=>setResearchSection("discovery")}/>}
+        <UniverseResearch onOpenDiscovery={()=>setResearchSection("discovery")}
+          onOpenSimulation={id=>{setTournamentReplayId(id);setResearchSection("portfolio");}}
+          onOpenLive={id=>{setPreferredLiveStrategy(id);setLiveSection("machine");setSection("live");}}/>}
     </> : <>
       <nav className="sim-mode-tabs" aria-label={t("Live Engine sections")}>
         <span className="sim-mode-title">{t("Live Engine")}</span>
@@ -88,6 +92,7 @@ function Simulator() {
       </nav>
       {liveSection==="market"?<main className="arc-page"><MarketDesk/></main>:
        <LiveOperations section={liveSection} initialSignal={preparedSignal}
+        preferredStrategyId={preferredLiveStrategy}
         onOpenResearch={()=>{setSection("research");setResearchSection("tournament");}}
         onRecordSignal={signal=>{setPreparedSignal(signal);setLiveSection("journal");}}
         onConsumed={()=>setPreparedSignal(null)}/>}
