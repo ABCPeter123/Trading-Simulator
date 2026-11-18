@@ -77,10 +77,16 @@ def test_run_study_uses_validation_and_reports_unavailable_assets(isolated,monke
     assert result["qualified_candidates"] >= len(result["top10"])
     assert all(x["validation_score"]>=y["validation_score"]
                for x,y in zip(result["top10"],result["top10"][1:]))
+    assert result["shortlist_is_global_top_ten"] is False
+    assert "leveraged_trend" in result["candidate_model_counts"]
+    assert "long_short_momentum" in result["candidate_model_counts"]
+    assert result["historical_coverage"]["universe_earliest_session"] is not None
     for pick in result["top10"]:
         assert pick["no_real_order"] is True
         assert pick["rank"]>=1
         assert "held_out" in pick
+        assert "validation_regimes" in pick
+        assert pick["coverage"]["common_sessions"]>=450
         assert pick["hypothetical_scenarios"]["status"] in (
             "hypothetical_resampled_history","insufficient_observations")
     assert set(calls)==set(chosen)
@@ -115,7 +121,8 @@ def test_scenarios_are_deterministic_but_not_real_predictions():
     two=ur._scenarios(curve,9)
     assert one==two
     assert one["status"]=="hypothetical_resampled_history"
-    assert len(one["paths"])==4
+    assert len(one["paths"])==16
+    assert {p["horizon_sessions"] for p in one["paths"]}=={10,30,60,120}
     assert all(x["p05_return_pct"]<=x["p95_return_pct"] for x in one["paths"])
 
 
