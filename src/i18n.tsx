@@ -1300,6 +1300,8 @@ const zh: Record<string, string> = {
   "Start with raw_weight = 1 / volatility(60) for each asset.": "首先将每个资产的初始权重设为最近 60 日波动率的倒数。",
   "Use the last 60 daily returns to estimate the annualized volatility of that normalized basket.": "根据最近 60 日收益率估算归一化资产组合的年化波动率。",
   "Set gross_exposure = min(95%, 12% / estimated_annualized_volatility), then apply risk limits.": "设定总敞口为 min(95%, 12% / 估算年化波动率)，随后应用风险限制。",
+  "Research asset basket": "研究资产组合",
+  "This basket includes leveraged or inverse ETFs. The result is for research and simulation only, not approved live monitoring.": "该组合包含杠杆或反向 ETF，仅供研究和历史模拟，不允许启用实时监控。",
 };
 
 const LocaleContext = createContext<{
