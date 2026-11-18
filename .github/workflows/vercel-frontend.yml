@@ -9,6 +9,7 @@ on:
       - "scripts/test-bridge-directory.mjs"
       - "vercel.json"
       - "scripts/vercel-frontend-smoke.mjs"
+      - "scripts/local-no-auth-smoke.mjs"
       - ".github/workflows/vercel-frontend.yml"
   pull_request:
     paths:
@@ -17,6 +18,7 @@ on:
       - "scripts/test-bridge-directory.mjs"
       - "vercel.json"
       - "scripts/vercel-frontend-smoke.mjs"
+      - "scripts/local-no-auth-smoke.mjs"
       - ".github/workflows/vercel-frontend.yml"
 
 jobs:
