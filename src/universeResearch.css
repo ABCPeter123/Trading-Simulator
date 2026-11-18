@@ -47,3 +47,21 @@
 .ur-objective-results h4{font-size:13px}
 .ur-objective-results .ur-kpis{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
 @media(max-width:550px){.ur-objective-panel,.ur-objective-results{padding:10px}.ur-objective-results .ur-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Test Ground: one visible primary workflow, details revealed on demand. */
+.ur-workflow-help{margin:0 0 14px;border:1px solid #324456;border-radius:9px;background:#121e2d;padding:10px 14px}
+.ur-workflow-help>summary{cursor:pointer;color:#b5d6e6;font-size:12px;font-weight:650}
+.ur-workflow-help .ur-steps{margin-top:14px;margin-bottom:0}
+.ur-subtitle{margin:6px 0 14px}
+.ur-advanced,.ur-history{margin:14px 0;border:1px solid #3a5162;border-radius:9px;background:#162637;padding:12px}
+.ur-advanced>summary,.ur-history>summary{cursor:pointer;font-size:12px;color:#c9e1ef;font-weight:700}
+.ur-advanced>summary:hover,.ur-history>summary:hover,.ur-workflow-help>summary:hover{color:#a0ece1}
+.ur-result-method,.ur-batch-actions{padding:10px 12px;border:1px solid #365166;border-radius:8px;background:#182c3e;margin:13px 0}
+.ur-result-method>summary,.ur-batch-actions>summary{color:#c2deea;cursor:pointer}
+.ur-detail-tabs{display:flex;gap:7px;overflow-x:auto;scrollbar-width:thin;margin:16px 0 12px;padding:0 0 8px;border-bottom:1px solid #405769}
+.ur-detail-tabs button{flex:0 0 auto;white-space:nowrap;cursor:pointer;border:1px solid #456174;border-radius:7px;background:#1b2c3c;color:#bcd2e1;padding:9px 12px;font-size:12px}
+.ur-detail-tabs button.selected{background:#176d83;border-color:#3db5b6;color:#fff;font-weight:750}
+.ur-detail-tabs button:focus-visible,.ur-advanced>summary:focus-visible,.ur-history>summary:focus-visible,.ur-workflow-help>summary:focus-visible,.ur-result-method>summary:focus-visible{outline:2px solid #82ded1;outline-offset:2px}
+.ur-key-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.ur-key-metrics strong{font-size:20px}
+@media(max-width:720px){.ur-key-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.ur-detail-tabs button{padding:10px}}
