@@ -429,9 +429,15 @@ def test_llama_cpp_request_stays_on_loopback(monkeypatch):
     assert answer["applied"] is False
     assert observed["url"] == "http://127.0.0.1:8081/v1/chat/completions"
     assert observed["model"] == "Qwen3.5-9B-Q4_K_M"
-    assert 1024 <= observed["max_tokens"] <= 16384
+    assert 128 <= observed["max_tokens"] <= 16384
     monkeypatch.setenv("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "invalid")
-    assert ai.local_output_token_limit() == 8192
+    assert ai.local_output_token_limit() == 768
+    monkeypatch.setenv("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "384")
+    assert ai.local_output_token_limit() == 384
+    monkeypatch.setenv("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "2")
+    assert ai.local_output_token_limit() == 128
+    monkeypatch.setenv("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "9999999")
+    assert ai.local_output_token_limit() == 16384
 
 
 def test_llama_cpp_router_stems_are_detected_and_protected(monkeypatch):
@@ -545,3 +551,39 @@ def test_router_unreachable_is_distinct_from_empty_models(monkeypatch):
     down = client.get("/api/ai/status").json()
     assert down["router_reachable"] is False
     assert down["connection_state"] == "unreachable"
+
+
+def test_optional_small_qwen_is_selected_only_when_allowlisted_and_installed(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL", "TwIL-8B-Q4_K_M-balanced.gguf")
+    monkeypatch.setenv("TRADING_SIM_AI_MODELS",
+                       "TwIL-8B-Q4_K_M-balanced.gguf,Qwen3.5-9B-Q4_K_M.gguf,Qwen3.5-4B-Q4_K_M.gguf")
+
+    class Reply:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"data": [{"id": "Qwen3.5-4B-Q4_K_M", "status": {"value": "unloaded"}},
+                             {"id": "unapproved-model", "status": {"value": "loaded"}}]}
+    class Client:
+        def __init__(self, **kwargs):
+            assert kwargs.get("trust_env") is False
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def get(self, url):
+            assert url == "http://127.0.0.1:8081/models"
+            return Reply()
+
+    monkeypatch.setattr(ai.httpx, "Client", Client)
+    response = client.get("/api/ai/status?model=Qwen3.5-4B-Q4_K_M.gguf")
+    assert response.status_code == 200
+    result = response.json()
+    assert result["ready"] is True
+    assert result["loaded"] is False
+    assert result["model"] == "Qwen3.5-4B-Q4_K_M"
+    assert result["available_models"] == ["Qwen3.5-4B-Q4_K_M"]
+    assert client.get("/api/ai/status?model=unapproved-model").status_code == 422
+
+    monkeypatch.setenv("TRADING_SIM_AI_MODELS",
+                       "TwIL-8B-Q4_K_M-balanced.gguf,Qwen3.5-9B-Q4_K_M.gguf")
+    assert client.get("/api/ai/status?model=Qwen3.5-4B-Q4_K_M").status_code == 422
