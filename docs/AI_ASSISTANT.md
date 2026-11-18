@@ -92,6 +92,71 @@ The button only appears when an applicable saved research simulation is open.
 The llama.cpp server must stay on `127.0.0.1:8081`; do not expose an
 unauthenticated AI router on a public interface or tunnel.
 
+## Running faster on 16 GB RAM Windows
+
+The local launcher defaults to the **speed** profile: 4096-token context,
+512/256 prompt batch limits, one loaded model, and single-query parallelism.
+Generation threads default to physical CPU cores (up to 12), while prompt
+batch threads can use up to 16 logical processors. The server asks llama.cpp
+to offload GPU layers automatically and use flash attention where supported.
+A CPU-only llama.cpp build cannot use the GPU merely through command flags.
+
+Add these to your existing Git-ignored local .env:
+
+~~~dotenv
+TRADING_SIM_LLAMA_PROFILE=speed
+TRADING_SIM_LLAMA_GPU_LAYERS=auto
+TRADING_SIM_AI_MAX_OUTPUT_TOKENS=4096
+# Optional manual overrides:
+# TRADING_SIM_LLAMA_THREADS=8
+# TRADING_SIM_LLAMA_THREADS_BATCH=12
+# TRADING_SIM_LLAMA_CONTEXT=6144
+# TRADING_SIM_LLAMA_BATCH=1024
+# TRADING_SIM_LLAMA_UBATCH=256
+~~~
+
+Available profiles are speed (4096 context, 512/256 batch),
+balanced (6144 context, 1024/256 batch) and quality (8192 context,
+1024/512 batch). All profiles use --models-max 1 and --parallel 1,
+so both models remain installed but only one is loaded.
+
+Long reasoning models may consume their entire output budget while
+thinking. Reduce the budget for faster everyday answers, and raise it
+again for long tasks that need more reasoning. A smaller limit can cause
+an incomplete response and does not guarantee higher tokens/second.
+
+~~~powershell
+cd E:\Trading-Simulator
+git pull
+.\stop-local.ps1
+.\start-local.ps1 -NoBrowser
+.\scripts\diagnose-local-ai.ps1
+~~~
+
+The launcher reuses any existing listener on port 8081, so it cannot
+change settings of a llama.cpp process that was started manually. Close
+that manual process before starting the tuned router.
+
+Check actual GPU hardware and llama.cpp backend support:
+
+~~~powershell
+nvidia-smi
+llama-server --list-devices
+~~~
+
+GPU offload improves speed only if the installed llama.cpp binary includes
+a compatible hardware backend. If --list-devices shows only CPU, install
+a GPU-enabled llama.cpp build appropriate for your GPU before expecting
+acceleration. CPU thread counts also require benchmarking: more threads
+than physical CPU cores can be slower.
+
+The E: drive stores model weights and may improve cold model loads if it
+is an SSD. llama.cpp normally memory-maps model files. A Windows page
+file on a fast SSD can avoid an out-of-memory crash, but active paging
+is far slower than physical RAM and usually reduces tokens/second.
+Do not force KV cache to disk as a speed optimization. No Windows
+virtual-memory settings are changed automatically.
+
 ## Legacy: troubleshooting slow or timed-out Ollama responses
 
 The original local Ollama integration had a 45-second response timeout. It
