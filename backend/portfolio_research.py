@@ -66,7 +66,7 @@ def _db():
 
 def _validate_basket(symbols: list[str]):
     if not isinstance(symbols, list) or not 2 <= len(symbols) <= MAX_SYMBOLS:
-        raise HTTPException(422, detail="Research requires 2-10 portfolio instruments.")
+        raise HTTPException(422, detail="Research requires 2-16 portfolio instruments.")
     basket = []
     for symbol in symbols:
         if not isinstance(symbol, str) or not 1 <= len(symbol) <= 32:
