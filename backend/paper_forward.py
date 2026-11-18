@@ -207,6 +207,11 @@ def _public(row, details=False):
         # Session count excludes the initial zero-return activation mark.
         stats = metrics.performance(curve, starting_capital=obj["capital"],
                                     risk_free_pct=audit["risk_free_pct"])
+        if state["observed_sessions"] < 30:
+            # Short paper windows must not display extrapolated annual growth
+            # or Sharpe as though they were established performance.
+            stats={**stats,"cagr_pct":None,"excess_sharpe":None,
+                   "annualized_volatility_pct":None}
         result.update(marks=marks, fills=fills, statistics=stats)
         if state["observed_sessions"] < 30:
             result["drift"]={"status":"insufficient_forward_sessions",
