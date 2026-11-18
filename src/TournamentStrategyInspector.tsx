@@ -48,7 +48,7 @@ export default function TournamentStrategyInspector({
   return <section className="tsi" aria-label={l("Detailed strategy explanation","详细策略说明")}>
     <header className="tsi-header">
       <div>
-        <h4>{l("Detailed strategy breakdown","详细策略拆解")}</h4>
+        <h4>{narrative ? explanationText(narrative.name,locale) : l("Detailed strategy breakdown","详细策略拆解")}</h4>
         <p>{narrative
           ?explanationText(narrative.goal,locale)
           :l("This model has no verified written explanation yet.","此模型暂时没有经核实的文字说明。")}</p>
