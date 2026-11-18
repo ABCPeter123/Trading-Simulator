@@ -258,3 +258,45 @@ def test_health_reports_active_errors_and_observed_age(local_data):
     stopped = client.get("/api/market-data/health").json()
     assert stopped["active"] == 0 and stopped["errors"] == 0
     assert stopped["last_updates"][0]["sync_state"] == "disabled"
+
+
+
+def test_collector_heartbeat_reports_stale_even_when_prior_sync_succeeded(local_data):
+    from datetime import datetime, timedelta, timezone
+    c = TestClient(app)
+    initial = c.get("/api/market-data/health")
+    assert initial.status_code == 200
+    assert initial.json()["collector"]["state"] == "unverified"
+    assert initial.json()["delivery_guaranteed"] is False
+
+    ingest.subscribe("spy", "5m")
+    with ingest.LOCK, ingest._db() as db:
+        db.execute("""UPDATE subscriptions SET last_success=?,
+                      last_bar=?,failure_code=NULL WHERE asset_id='spy'""",
+                   ("2026-11-17T17:30:00+00:00", 1794936600))
+        db.commit()
+    stale = datetime.now(timezone.utc) - timedelta(minutes=6)
+    ingest.record_heartbeat("idle", attempted=1, now=stale)
+    response = c.get("/api/market-data/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["collector"]["state"] == "stale"
+    assert data["last_updates"][0]["sync_state"] == "collector_unverified"
+    assert data["active"] == 1
+
+    ingest.record_heartbeat("polling")
+    running = c.get("/api/market-data/health").json()
+    assert running["collector"]["state"] == "polling"
+    assert running["last_updates"][0]["sync_state"] == "last_sync_succeeded"
+    assert running["delivery_guaranteed"] is False
+
+
+def test_collector_heartbeat_does_not_claim_delivery_while_idle(local_data):
+    c = TestClient(app)
+    ingest.record_heartbeat("idle", attempted=0)
+    data = c.get("/api/market-data/health").json()
+    assert data["collector"]["state"] == "idle"
+    assert data["collector"]["last_attempted"] == 0
+    assert data["active"] == 0
+    assert not data["delivery_guaranteed"]
+
