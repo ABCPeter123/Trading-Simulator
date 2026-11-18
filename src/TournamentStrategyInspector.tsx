@@ -11,6 +11,8 @@ export interface TournamentModelSpec {
   restricted_research?:boolean; short_proxy_research?:boolean; research_only?:boolean;
   target_investment_pct?:number;equity_class_cap_pct?:number;
   redistribute_excess?:boolean;
+  sleeves?:{model:string;weight_pct:number}[]|null;
+  base_currency?:"USD"|"CAD";slippage_bps?:number;commission_usd?:number;fx_conversion_bps?:number;
 }
 
 type ResearchCosts = {
@@ -35,7 +37,7 @@ const CASH_MODELS=new Set([
   "equal_weight","inverse_volatility","trend_filter",
   "relative_momentum","volatility_target",
 ]);
-const RESEARCH_ONLY_MODELS=new Set(["leveraged_trend","long_short_momentum","market_neutral"]);
+const RESEARCH_ONLY_MODELS=new Set(["leveraged_trend","long_short_momentum","market_neutral","blended_portfolio"]);
 
 export default function TournamentStrategyInspector({
   spec,costs,context="research",researchStudy=null,
@@ -74,6 +76,7 @@ export default function TournamentStrategyInspector({
           l("unused eligible allocation is redistributed.","未分配的合格仓位将重新配置。"):
           l("unused allocation remains as cash.","未分配的资金保留为现金。")}
       </p>}
+    {spec.sleeves&&<p className="tsi-intro">{l("Shared cash sleeves","共享现金策略权重")}: {" "}{spec.sleeves.map(x=>x.model.replaceAll("_"," ")+" "+x.weight_pct+"%").join(" + ")}</p>}
     <div className="tsi-fields">
       <div><small>{l("Portfolio basket","资产组合")}</small><strong>{spec.symbols.map(s=>s.toUpperCase()).join(" · ")}</strong></div>
       <div><small>{l("Maximum per asset","单项资产仓位上限")}</small><strong>{spec.max_position_pct}%</strong></div>
@@ -83,7 +86,8 @@ export default function TournamentStrategyInspector({
 
     {researchOnly&&<div className="tsi-notice" role="note">
       <strong>{l("Historical research only","仅限历史研究")}</strong>
-      <p>{l("This strategy can simulate borrowing, shorting or margin. It cannot be deployed to the current cash-only live engine or executed through Wealthsimple by the simulator.",
+      <p>{spec.model==="blended_portfolio"?l("This shared-cash long-only portfolio is supported for private historical and walk-forward studies. Live monitoring and historical interactive replay are not yet supported.","该共享现金的多头组合支持私人历史研究和滚动验证，暂不支持实时监控或交互式历史回放。"):
+        l("This strategy can simulate borrowing, shorting or margin. It cannot be deployed to the current cash-only live engine or executed through Wealthsimple by the simulator.",
         "本策略可能模拟借贷、卖空或保证金。当前仅支持现金账户的实时引擎不能部署此策略，模拟器也不会通过 Wealthsimple 自动执行。")}</p>
     </div>}
     {(spec.restricted_research||spec.short_proxy_research)&&<div className="tsi-notice" role="note">
@@ -129,7 +133,8 @@ export default function TournamentStrategyInspector({
           "策略只能看到此前已完成的收盘价，不能看到当前成交交易日的收盘价。普通延迟使用上一交易日之前的信息；两交易日延迟则额外滞后一个收盘数据。")}</li>
         <li>{l("At the scheduled rebalance, the allocation function calculates a target percentage for every asset. The engine estimates portfolio equity at the recorded opening prices, calculates target shares, sells excess holdings first, then buys subject to cash, position limits and costs.",
           "到达再平衡时点后，配置函数为每项资产计算目标比例。引擎以历史开盘价估计账户权益和目标股数，先卖出超额仓位，再按现金、仓位与费用约束进行买入。")}</li>
-        <li>{researchOnly
+        <li>{spec.model==="blended_portfolio"?l("The long-only blend nets all sleeve target changes in one cash account and pays fees once per net order.","多头混合策略在一个现金账户中合并各策略的目标仓位变动，每笔净订单只计算一次交易费用。"):
+          researchOnly
           ?l("The advanced research ledger permits negative share positions and borrowed funding. It charges daily modeled short-borrow fees and interest on negative cash and monitors the maintenance-margin threshold.",
             "高级研究账本允许负股数和借款，按日计提模拟借券费及负现金融资利息，并监控维持保证金门槛。")
           :l("The long-only research ledger cannot spend more cash than it has. Equity and ETF quantities are rounded down to whole shares, and the simulator records trade prices, fees, quantities and timestamps.",
