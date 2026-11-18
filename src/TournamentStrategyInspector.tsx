@@ -65,7 +65,8 @@ function algorithmFor(spec:TournamentModelSpec):string {
     volatility_target:[
       "raw[asset] = 1 / max(stdev(last_60_daily_returns), 0.002)",
       "estimated_risk = stdev(last_60_weighted_portfolio_returns) * sqrt(252)",
-      "gross = min(0.95, 0.12 / estimated_risk)  # if risk estimate available",
+      "gross = 0.95",
+      "if >= 25 returns and estimated_risk > 1e-8: gross = min(0.95, 0.12 / estimated_risk)",
     ],
   };
   const lines=[
@@ -123,11 +124,13 @@ export default function TournamentStrategyInspector({
       <a href={sourceLink} target="_blank" rel="noreferrer">{t("View actual Python allocation function")}</a>
     </header>
     <div className="tsi-fields">
-      <div><small>{t("Tradeable basket")}</small><strong>{spec.symbols.map(s=>s.toUpperCase()).join(" · ")}</strong></div>
+      <div><small>{t("Research asset basket")}</small><strong>{spec.symbols.map(s=>s.toUpperCase()).join(" · ")}</strong></div>
       <div><small>{t("Single-asset cap")}</small><strong>{spec.max_position_pct}%</strong></div>
       <div><small>{t("Rebalance cadence")}</small><strong>{spec.rebalance_sessions} {t("common sessions")}</strong></div>
       <div><small>{t("Execution assumption")}</small><strong>{spec.delay_sessions} {t("session(s)")}</strong></div>
     </div>
+    {(spec.restricted_research||spec.short_proxy_research)&&
+      <p className="tsi-note">{t("This basket includes leveraged or inverse ETFs. The result is for research and simulation only, not approved live monitoring.")}</p>}
     <h5>{t("Exact allocation decision rules")}</h5>
     <ol className="tsi-rules">
       {rules.map((line,i)=><li key={i}>{t(line)}</li>)}
