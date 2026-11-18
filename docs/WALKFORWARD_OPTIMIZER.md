@@ -1,0 +1,77 @@
+# Private rolling walk-forward optimizer
+
+This Research Lab feature advances the previous high-performance discovery mode
+without claiming that 50–60% CAGR or a Sharpe ratio of 2.0 is achievable.
+
+## Operation
+
+Within **Strategy Tournament**, open one ranked strategy and expand
+**Walk-forward optimization and unseen-period audit**.
+
+The selected strategy contributes a **fixed basket of actual historical assets**.
+For that basket, the optimizer tests a bounded public grid of model families and
+allocation limits, with user-selectable risk objectives and execution assumptions.
+
+Four expanding training windows end at approximately 50%, 60%, 70% and 80%
+of the shared trading-day history. At each boundary, the optimizer:
+
+1. Executes each candidate's historical training simulation entirely before
+   the boundary, using the same completed-candle and opening-fill assumptions
+   as the existing research engine.
+2. Chooses an eligible model/parameter configuration based solely on that
+   training history, including transaction costs and maximum-drawdown limits.
+3. Tests that frozen choice on the *subsequent* unseen shared-session block,
+   without feeding those prices into training or changing the choice.
+4. Repeats the process independently with an expanded training window.
+
+The first three out-of-sample blocks end at 80% of historical observations.
+The fourth selection is trained on the prior 80% and evaluated once on the
+sealed final 20%. The audit has at least 126 sessions or no audit is produced.
+There must also be at least 90 post-warmup initial training sessions and at
+least 30 sessions in each subsequent test block.
+
+The selected portfolio is **not continuously executed between blocks**.
+Each test starts with virtual $100,000 and zero holdings. The displayed
+walk-forward curve stitches *returns* into a normalized index, not a real
+rolling account or carry-forward position ledger. Costs on the first trade
+of every segment are explicitly modeled.
+
+## Optimization scope
+
+The optimizer searches at most 12 or 24 deterministic configurations.
+For standard and other long-only models it compares compatible allocation
+families and varying position caps, invested-capital targets, equity-category
+limits and redistribution choices. Signed research-only models search
+compatible synthetic borrowing/short models and position caps only.
+All historical candidates use the selected basket and configured daily
+execution-delay setting. No basket selection, AI-generated indicators,
+unlimited hyperparameter search or broker execution is included.
+
+A candidate is excluded from training selection if it lacks meaningful
+trades, has inadequate exposure or exceeds the configured maximum drawdown,
+or triggers a synthetic margin call. The held-out audit never changes
+selection. A slower-fill, higher-slippage audit stress run is reported too.
+
+For context only, a one-sided Gaussian-i.i.d. approximation for the
+walk-forward excess Sharpe is shown with a Bonferroni trial-count multiplier.
+This is **not** robust inference, Deflated Sharpe, PBO, or proof of an edge.
+The approximate p-value assumes independent stationary Gaussian daily
+returns and ignores autocorrelation, market regime drift, and user-driven
+repeat research. Repeated manual tuning after viewing an audit invalidates
+its claim to being an untouched test.
+
+## Privacy and limits
+
+All real market-archive inputs, selected private parameter values, risk reports,
+equity curves and job details remain in the local Git-ignored
+`data/walkforward_research.sqlite3`. The public GitHub repository contains
+only reusable engine code and independently synthetic fixtures.
+
+Provider-data availability and common-session alignment constrain each study.
+No synthetic fallback prices fill missing actual market history. FX uses the
+previous completed FX observation. Margin, borrow availability, taxes,
+corporate-action and dividend treatment remain approximate. Historical
+survivorship bias is not resolved by walk-forward alone.
+
+The research process sends no broker orders. Reports can inform paper
+forward testing, but do not automatically create deployed strategies.
