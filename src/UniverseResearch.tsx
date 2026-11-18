@@ -93,6 +93,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   const [jobs,setJobs]=useState<Job[]>([]);
   const [active,setActive]=useState<Job|null>(null);
   const [pick,setPick]=useState(0);
+  const [detailTab,setDetailTab]=useState<"overview"|"validation"|"risk"|"scenarios"|"tools">("overview");
   const [busy,setBusy]=useState(false);
   const [promotionTarget,setPromotionTarget]=useState<"simulation"|"live"|"research"|null>(null);
   const [researchJob,setResearchJob]=useState<{selection:string;job:CustomPeriodJob}|null>(null);
@@ -148,7 +149,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
           target_investment_pct:objective==="high_performance"?target_investment_pct:95,
           equity_class_cap_pct:objective==="high_performance"?equity_class_cap_pct:70,
           redistribute_excess:objective==="high_performance"&&redistributeUnused})});
-      setActive(job);setPick(0);await refresh();
+      setActive(job);setPick(0);setDetailTab("overview");await refresh();
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);}
   }
@@ -156,7 +157,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     setBusy(true);setError("");
     try{
       const job=await request<Job>("/live/research/universe/jobs/"+encodeURIComponent(id));
-      setActive(job);setPick(0);
+      setActive(job);setPick(0);setDetailTab("overview");
     }catch(e){setError(String(e));}
     finally{setBusy(false);}
   }
@@ -180,6 +181,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
         // cash-only replay, broker order, or live deployment.
         const job=await createCustomPeriodStudy({spec:selectedSpec});
         setResearchJob({selection:selectedKey,job});
+        setDetailTab("tools");
         window.requestAnimationFrame(()=>{
           document.getElementById("ur-custom-study")?.scrollIntoView({
             behavior:"smooth",block:"start",
@@ -244,22 +246,37 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
       <h1>{t("Strategy Tournament")}</h1>
       <p>{t("Scan actual instrument history, rank the top ten portfolio strategies, and inspect delay and scenario stress. Nothing trades automatically.")}</p>
     </div></header>
+    <details className="ur-workflow-help"><summary>{bilingual("How the research test works","研究测试如何进行")}</summary>
     <div className="ur-steps">{[
       ["1",t("Collect history"),t("Screen actual daily OHLCV, exclude unavailable assets.")],
       ["2",t("Compare methods"),bilingual("Test diversified baskets, advanced research models and shared-cash blends.","测试多元资产组合、进阶研究模型及共享现金的混合策略。")],
       ["3",t("Rank validation"),t("The held-out final 20% never determines the ranking.")],
       ["4",t("Stress test"),t("Inspect execution costs, extra delay and hypothetical paths.")],
     ].map(([n,title,desc])=><article key={n}><b>{n}. {title}</b><p>{desc}</p></article>)}</div>
+    </details>
     {error&&<p className="ops-error" role="alert">{error}</p>}
     {notice&&<p className="ops-message" role="status">{notice}</p>}
     <div className="ur-columns">
-      <section className="ur-panel"><h2>{t("Configure tournament")}</h2>
+      <section className="ur-panel ur-setup"><h2>{bilingual("Run a strategy test","运行策略测试")}</h2>
+        <p className="ur-subtitle">{bilingual("Use the defaults, or adjust the essentials below.","可以使用默认设置，也可以修改以下主要选项。")}</p>
         <label>{t("Universe")}
           <select value={scope} onChange={e=>setScope(e.target.value as typeof scope)}>
             <option value="all">{t("All stocks and ETFs")}</option>
             <option value="etfs">{t("ETFs only")}</option>
             <option value="stocks">{t("Stocks only")}</option>
           </select></label>
+        <label>{t("Research objective")}
+          <select value={objective} onChange={e=>setObjective(e.target.value as typeof objective)}>
+            <option value="high_performance">{t("High-performance discovery")}</option>
+            <option value="balanced">{t("Balanced risk-adjusted ranking")}</option>
+          </select></label>
+        <label>{t("Maximum validation drawdown (%)")}
+          <input type="number" min="5" max="60" value={drawdown} onChange={e=>setDrawdown(e.target.value)}/></label>
+        <label>{t("Maximum position weight (%)")}
+          <input type="number" min="10" max="50" value={weight} onChange={e=>setWeight(e.target.value)}/></label>
+        <details className="ur-advanced">
+          <summary>{bilingual("Advanced settings","高级设置")}</summary>
+          <p className="ur-subtitle">{bilingual("Basket selection, execution costs and research targets. Changes apply to your next scan.","资产组合筛选、执行成本及研究目标。修改后将在下一次扫描中生效。")}</p>
         <div className="ur-objective-panel">
           <strong>{bilingual("Portfolio search and selection","组合搜索及筛选方法")}</strong>
           <label>{bilingual("Asset basket search breadth","资产组合搜索范围")}
@@ -298,15 +315,6 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
           <p>{bilingual("USD funding avoids simulated USD-to-CAD conversion on USD orders. Models still use estimated spreads, delayed opens and financing, not broker fills.",
             "美元账户不对美元交易模拟加元换汇。价格仍基于估算价差、延迟开盘及融资成本，并非真实成交。")}</p>
         </div>
-        <label>{t("Maximum validation drawdown (%)")}
-          <input type="number" min="5" max="60" value={drawdown} onChange={e=>setDrawdown(e.target.value)}/></label>
-        <label>{t("Research objective")}
-          <select value={objective} onChange={e=>setObjective(e.target.value as typeof objective)}>
-            <option value="high_performance">{t("High-performance discovery")}</option>
-            <option value="balanced">{t("Balanced risk-adjusted ranking")}</option>
-          </select></label>
-        <label>{t("Maximum position weight (%)")}
-          <input type="number" min="10" max="50" value={weight} onChange={e=>setWeight(e.target.value)}/></label>
         {objective==="high_performance"&&<div className="ur-objective-panel">
           <strong>{t("High-performance research targets")}</strong>
           <p>{t("Targets are aspirational. Ranking uses validation data only. No historical strategy can promise these results.")}</p>
@@ -333,7 +341,9 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
           <p>{t("Full-investment settings apply only to the five standard long-only models; advanced leverage and hedge models retain their own limits.")}</p>
           <p>{t("Cash rate is held constant for metric calculations; it is not credited as portfolio income.")}</p>
         </div>}
+        </details>
         <button className="ur-primary" disabled={busy} onClick={()=>void run()}>{t("Run universe-wide scan")}</button>
+        <details className="ur-history"><summary>{bilingual("Previous scans and other research tools","历史扫描与其他研究工具")} ({jobs.length})</summary>
         <p>{t("The laptop research worker performs all calculations. Historical data availability determines how many symbols qualify.")}</p>
         <button className="ur-secondary" onClick={onOpenDiscovery}>{t("Open individual optimizers")}</button>
         <h3>{t("Previous scans")}</h3>
@@ -343,6 +353,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             <strong>{new Date(job.created_at).toLocaleString()}</strong>
             <span>{t(job.status)} · {job.eligible}/{job.scanned}</span>
           </button>)}
+        </details>
       </section>
       <section className="ur-panel ur-results">
         {!active?<div><h2>{t("Start your first scan")}</h2>
