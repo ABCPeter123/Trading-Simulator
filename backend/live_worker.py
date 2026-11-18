@@ -13,7 +13,7 @@ import signal
 import sys
 import time
 
-from . import live_machine, live_notifications, live_email_digest, paper_forward
+from . import live_machine, live_notifications, live_email_digest, paper_forward, execution_windows
 
 def main():
     parser=argparse.ArgumentParser()
@@ -34,6 +34,13 @@ def main():
     while not should_stop:
         try:
             live_machine.run_once(worker_heartbeat=True)
+            try:
+                # Private five-minute execution-window observations never
+                # create an order or modify confirmed broker journal rows.
+                execution_windows.process_all()
+            except Exception as exc:
+                logging.warning("Execution-window observer unavailable: %s",
+                                type(exc).__name__)
             # Paper-only observed-session fills use an independent SQLite
             # ledger and cannot mutate real broker confirmations.
             paper_results=paper_forward.process_all()
