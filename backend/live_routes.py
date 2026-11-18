@@ -238,6 +238,9 @@ class UniverseStudyBody(BaseModel):
     target_cagr_pct:float=Field(default=55,ge=10,le=100)
     target_sharpe:float=Field(default=2,ge=0.5,le=5)
     risk_free_pct:float=Field(default=3,ge=0,le=15)
+    target_investment_pct:float=Field(default=95,ge=5,le=100)
+    equity_class_cap_pct:float=Field(default=70,ge=10,le=100)
+    redistribute_excess:bool=False
 
 
 class TournamentSourceBody(BaseModel):
