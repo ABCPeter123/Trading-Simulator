@@ -164,7 +164,7 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
             target_sharpe=2., risk_free_pct=3.,
             target_investment_pct=95., equity_class_cap_pct=70.,
             redistribute_excess=False,base_currency="USD",slippage_bps=8.,
-            include_blends=True):
+            commission_usd=0.,fx_conversion_bps=150.,include_blends=True):
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
         raise HTTPException(403,detail="Owner research is unavailable in public demos.")
     if scope not in ("all","etfs","stocks") or delay_sessions not in (1,2):
@@ -187,6 +187,9 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
         raise HTTPException(422,detail="Invalid research account or strategy mix setting.")
     if type(slippage_bps) not in (int,float) or not math.isfinite(slippage_bps) or not 0<=slippage_bps<=100:
         raise HTTPException(422,detail="Invalid research slippage assumption.")
+    if any(type(x) not in (int,float) or not math.isfinite(x) or not 0<=x<=bound
+           for x,bound in ((commission_usd,30),(fx_conversion_bps,300))):
+        raise HTTPException(422,detail="Invalid commission or conversion assumption.")
     with LOCK,closing(_connection()) as c:
         c.execute("BEGIN IMMEDIATE")
         if c.execute("SELECT count(*) FROM universe_jobs WHERE status IN ('queued','running')").fetchone()[0]>=MAX_QUEUE:
@@ -204,6 +207,8 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
               "equity_class_cap_pct":float(equity_class_cap_pct),
               "redistribute_excess":redistribute_excess,
               "base_currency":base_currency,"slippage_bps":float(slippage_bps),
+              "commission_usd":float(commission_usd),
+              "fx_conversion_bps":float(fx_conversion_bps),
               "include_blends":include_blends}
         c.execute("""INSERT INTO universe_jobs
           (id,status,created_at,updated_at,progress,stage,params)
@@ -409,7 +414,9 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
     # Job-local broker assumptions never leak across research runs.
     broker_assumptions={**COST_ASSUMPTIONS,
                         "base_currency":params.get("base_currency","USD"),
-                        "slippage_bps":params.get("slippage_bps",8.)}
+                        "slippage_bps":params.get("slippage_bps",8.),
+                        "commission_usd":params.get("commission_usd",0.),
+                        "fx_conversion_bps":params.get("fx_conversion_bps",150.)}
     universe=_universe(params["scope"]);histories={};rejected={}
     for ix,sym in enumerate(universe):
         item=assets.get_instrument(sym)
@@ -644,7 +651,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                                  "long_only_target_investment_pct":investment if mode=="high_performance" else 95.,
                                  "long_only_equity_class_cap_pct":equity_cap if mode=="high_performance" else 70.,
                                  "long_only_redistribute_excess":redistribute if mode=="high_performance" else False,
-                                 "commission_note":"USD $0 listed-stock/ETF commission. FX 1.5% assumed on any cross-currency trade; this is conservative and account-dependent."},
+                                 "commission_note":"User-configured per-order commission and FX bps apply only when currency differs from the funding account. Estimates, not verified broker charges."},
         "test_used_for_selection":False,
         "limitations":[
             "Blended portfolios use one shared long-only cash and transaction ledger. They are research-only until supported by the strategy importer and live monitor.",
