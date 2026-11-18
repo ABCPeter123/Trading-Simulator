@@ -32,6 +32,56 @@ not dividend-adjusted total-return prices. Continuous futures may require
 roll adjustment before robust multi-year studies. Real-time executable
 quotes are not implied.
 
+## Download everything, without duplicate bars
+
+To download the maximum available real DAILY history for every built-in
+and locally imported catalog ticker, run:
+
+~~~powershell
+cd E:\Trading-Simulator
+git pull
+.\.venv\Scripts\python.exe scripts\backfill-market-history.py --all --dry-run
+.\.venv\Scripts\python.exe scripts\backfill-market-history.py --all
+~~~
+
+To also collect the widest supported historical intraday windows, including
+1-minute, 5-minute, 15-minute and 1-hour observations:
+
+~~~powershell
+.\.venv\Scripts\python.exe scripts\backfill-market-history.py --all --include-intraday --dry-run
+.\.venv\Scripts\python.exe scripts\backfill-market-history.py --all --include-intraday
+~~~
+
+This performs many real provider requests; historical availability and
+throttling depend on the source. Use the dry run to see the planned number of
+tasks. It does not contact market providers or write market archives.
+The default for --all is MAX daily data. For instruments with no valid actual
+ticker, such as option placeholders, the downloader skips the instrument.
+
+**Idempotent storage:** Each task has a unique instrument, exact interval and
+one widest requested time window. It does not download overlapping 10Y/15Y/20Y
+windows as separate copies during the same run. Before requesting a provider,
+it checks the existing local Parquet archive and skips any nonempty, readable
+window already present. It does this even when the progress file was lost.
+Completed task state is checkpointed atomically in the private
+data/market/_download_progress.json file. If interrupted, run the same
+command again: completed files are reused, failed or missing tasks are retried.
+
+The Parquet archive merges candle observations by their exact UNIX timestamp
+within each instrument/interval/window, retaining corrected source bars
+instead of appending a duplicate timestamp. Use --refresh only when you
+intentionally want to re-fetch the completed windows; a refresh never
+appends duplicate time rows. Existing different time windows created before
+this feature may hold overlapping content in separate files. This workflow
+does not delete or rewrite those prior archives or private replay snapshots.
+Unreadable archives are flagged for manual repair and never overwritten
+silently.
+
+Only actual recorded OHLCV is saved. No blank periods are extrapolated.
+For example, a newly listed ETF cannot have a 20-year history even if
+MAX was requested. The most extensive feasible historical resolution is
+not necessarily a live or licensed market-data feed.
+
 ## Batch download real daily data on E:
 
 The command below downloads actual observed historical OHLCV from external
