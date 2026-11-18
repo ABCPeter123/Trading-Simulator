@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from itertools import product
-from math import erfc, exp, isfinite, log, sqrt
+from math import erfc, isfinite, sqrt
 from fastapi import HTTPException
 
 from . import advanced_portfolio_research as adv
@@ -244,7 +244,8 @@ def analyze(payload, *, loader=None, report=None):
                 "reason":"No candidate qualified on the pre-audit training sample."}
     final=_execute(final_choice["config"],symbols,market,metadata,
                    test_start,n,settings["slippage_bps"])
-    stress=_execute(final_choice["config"],symbols,market,metadata,
+    stress_config={**final_choice["config"],"delay_sessions":2}
+    stress=_execute(stress_config,symbols,market,metadata,
                     test_start,n,max(20.,settings["slippage_bps"]))
     audit=objectives.performance(final["equity_curve"],
                                    risk_free_pct=settings["risk_free_pct"])
@@ -296,7 +297,7 @@ def analyze(payload, *, loader=None, report=None):
             "curve":final["equity_curve"],
         },
         "limitations":[
-            "Selections are retrained independently before each walk-forward fold. Each OOS fold and final audit are simulated with fresh capital and zero prior positions.",
+            "Models and allocation parameters are reselected before each walk-forward fold from prior-only training data. No predictive model is fitted; each OOS fold and audit reset capital and positions.",
             "The final audit is never used to rank, select or retune candidates; do not manually retune based on this audit and still call it unseen.",
             "A fixed public grid of compatible models and bounded capital/position parameters is searched; no unlimited parameter fitting, learned indicators or multi-basket model synthesis is implemented.",
             "Bonferroni-adjusted p is an illustrative Gaussian-i.i.d. approximation conditional on the tested grid, not a Deflated Sharpe Ratio, Probability of Backtest Overfitting, or robust statistical significance.",
