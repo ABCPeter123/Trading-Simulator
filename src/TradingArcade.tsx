@@ -16,6 +16,7 @@ import type { WorkspaceTab } from "./WorkspaceTabs";
 import StochasticResearch from "./StochasticResearch";
 import MarketDesk from "./MarketDesk";
 import StrategyLibrary from "./StrategyLibrary";
+import {SINGLE_PRESETS} from "./strategyPresets";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { PriceChart } from "./components/PriceChart";
 import { REPLAY_WINDOWS, RESOLUTIONS, aggregateBars, chartTrades as mapChartTrades, chartViewsFor, showReplayTime } from "./replayIntervals";
@@ -431,7 +432,11 @@ export default function TradingArcade({onOpenPortfolio}: {onOpenPortfolio:()=>vo
            <div className="arc-bot-summary"><div className="arc-bot-icon"><Code2 size={21}/></div><div><strong>{t("Define algorithmic trading rules")}</strong><p>{t("Write safe deterministic strategy rules. Signals evaluate on revealed candle closes, and orders enter the next available trading candle.")}</p></div></div>
            {editorOpen&&<div className="arc-editor">
              <VisualStrategyBuilder onAdd={rule=>{setCode(prev=>prev.trim()?prev.trim()+"\n"+rule:rule);setCodeError("");}}/>
-             <div className="arc-template-row"><span>{t("TRY A TEMPLATE")}</span>{game.examples.map(sample=><button key={sample.title} onClick={()=>{setCode(sample.code);setCodeError("");}}>{t(sample.title)}</button>)}</div>
+             <div className="arc-template-row"><span>{t("STARTER STRATEGIES, EDITABLE")}</span>{SINGLE_PRESETS.map(sample=>
+               <button type="button" key={sample.id} title={sample.description}
+                 onClick={()=>{setCode(sample.code);setCodeError("");}}>
+                 {t(sample.title)}</button>)}</div>
+             <p className="arc-editor-help">{t("Templates are untested starting points. Selecting one only edits the draft. Use Validate and Save to run it in your historical replay.")}</p>
              <div className="arc-code-head"><span><Terminal size={14}/> strategy.tradesim</span><span>{t(codeSaved?"SAVED TO SESSION":"UNSAVED CHANGES")}</span></div>
              <textarea spellCheck={false} aria-label={t("Trading strategy rules")} value={code} onChange={e=>{setCode(e.target.value);setCodeError("");}} rows={5} placeholder="WHEN SMA(10) CROSSES ABOVE SMA(30) BUY 25%" maxLength={1800}/>
              <div className="arc-editor-help">
