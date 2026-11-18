@@ -721,6 +721,7 @@ async def stream_advice(mode: str, run_id: str, question: str,
     chunks = 0
     prompt_tokens = None
     completion_tokens = None
+    timings = {}
     try:
         yield _sse("status", {"phase": "waiting", "model": resolved})
         timeout = httpx.Timeout(connect=5.0, read=ollama_timeout_seconds(),
@@ -743,6 +744,9 @@ async def stream_advice(mode: str, run_id: str, question: str,
                         continue
                     if not isinstance(part, dict):
                         continue
+                    measured = part.get("timings")
+                    if isinstance(measured, dict):
+                        timings = measured
                     usage = part.get("usage")
                     if isinstance(usage, dict):
                         if isinstance(usage.get("prompt_tokens"), int):
@@ -784,6 +788,12 @@ async def stream_advice(mode: str, run_id: str, question: str,
                 "first_output_ms": first_output_ms,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
+                "prompt_ms": timings.get("prompt_ms"),
+                "generation_ms": timings.get("predicted_ms"),
+                "prompt_tokens_per_second": timings.get("prompt_per_second"),
+                "generation_tokens_per_second": timings.get("predicted_per_second"),
+                "reused_prompt_tokens": timings.get("cache_n"),
+                "new_prompt_tokens": timings.get("prompt_n"),
             },
         })
     except (httpx.HTTPError, HTTPException, ValueError, TypeError, KeyError):
