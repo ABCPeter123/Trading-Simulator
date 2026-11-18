@@ -390,3 +390,46 @@ Borrowed cash can make this number negative and short proceeds can make
 it exceed 100%; this is a signed ledger ratio, not a guarantee of freely
 withdrawable money. As before, daily exposure averages and rebalance
 snapshot metrics are distinct.
+
+
+### Hard growth qualification, exposure-aware selection and controlled risk frontier
+
+Walk-forward optimization distinguishes between **aspirational scoring targets**
+and **minimum training-only eligibility requirements**. The default
+minimums for newly submitted jobs are 10% annualized training CAGR,
+0 percentage points of CAGR above the user-configured cash-rate assumption,
+and 50% daily average invested exposure. All three settings are editable
+(including zero to disable a minimum), and must be satisfied **together**
+with trading, drawdown and margin gates before a candidate can be selected.
+A 55% target CAGR still contributes to the scoring function but is **not**
+silently interpreted as a hard minimum.
+
+The exposure requirement is a **selection filter**, never an instruction
+to borrow or buy assets against a model's cash signal. A configuration
+that cannot qualify causes the study to return no_eligible_candidate
+with an explicit, prioritized breakdown of training rejection reasons
+and no final-audit performance claim. The original tournament-selected
+source model is also checked retrospectively against the same training
+growth and exposure rules.
+
+To diagnose the effect of a strict risk constraint, the optimizer runs
+a bounded **drawdown-frontier comparison** with 25%, 35%, 45%, 55%
+and the exact configured drawdown limit, deduplicated. It changes only
+the *training* drawdown gate and caches model-specific training ledgers
+per cutoff so multiple risk thresholds do not require repeated
+history downloads or redundant indicator execution. Each constraint
+chooses from that fold's **older training data only**, then computes
+its three chronological validation-fold results strictly before the
+final-audit start. The frontier reports eligible folds, selected model
+per fold, pre-audit stitched CAGR, Sharpe and drawdown only when **all
+three** folds qualify. Partial results are labeled incomplete. The
+frontier never computes or ranks alternative settings using final-audit
+dates. Even when the main study has no eligible candidate, it still
+produces this pre-audit-only diagnostic and **does not open the audit**.
+
+All frontier results are diagnostic comparisons of already available
+historical folds. They are not newly independent evidence once seen,
+do not select a new winner, and cannot be used to claim that a retuned
+strategy passed an untouched audit. A modified strategy needs future
+forward-paper observations. This feature cannot guarantee a high
+return or prevent drawdowns beyond the selected limits.
