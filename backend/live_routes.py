@@ -274,6 +274,8 @@ class UniverseStudyBody(BaseModel):
     commission_usd:float=Field(default=0,ge=0,le=30)
     fx_conversion_bps:float=Field(default=150,ge=0,le=300)
     include_blends:bool=True
+    basket_search:Literal["focused","expanded"]="focused"
+    selection_policy:Literal["return_risk","execution_robust"]="return_risk"
 
 
 class TournamentSourceBody(BaseModel):
