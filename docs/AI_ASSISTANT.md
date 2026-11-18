@@ -337,6 +337,62 @@ Older CPU or low VRAM systems may benefit from fewer CPU threads or
 switching between NVIDIA Vulkan and CPU. The SSD speeds cold weight
 loading but cannot substitute for RAM or GPU memory during inference.
 
+## Live local AI responses, cancellation, and timing
+
+The floating AI research chat now streams from a localhost llama.cpp HTTP
+endpoint through an authenticated FastAPI SSE route:
+POST /api/ai/ask/stream. On a local build, Vite proxies requests to the
+password-free loopback backend. The private bridge still enforces its bearer
+authentication and exact HTTPS origins when it is explicitly enabled.
+The public demo cannot connect to local or paid AI.
+
+Qwen4B streams JSON chat completions from 127.0.0.1:8081. The browser gets
+periodic progress and a decoded preview of the top-level answer field only
+when the JSON begins with that field. The backend NEVER streams raw reasoning,
+raw model output, an unvalidated strategy, owner financial context, or
+a prompt. When the model finishes, the backend parses its complete answer
+and runs any proposed trading DSL through the same validators as before.
+Only then does the UI show the result and its insert-for-review action.
+A partially generated answer is not an approved strategy and is discarded
+on cancellation or request error.
+
+Click **Stop generation** to abort the in-flight fetch. The server-side
+async generator is cancelled when the browser connection closes, which
+closes the local llama.cpp HTTP response stream. If the external model
+server is slow to acknowledge cancellation, some computation may briefly
+continue; abort is best-effort, not a kill signal. The unfinished result
+is not appended to saved chat or to a simulator strategy. Your draft
+question is restored for editing.
+
+For each completed streamed reply, the UI displays total elapsed time,
+time to first output, output token count and, if llama.cpp emits timing
+metadata, generation rate, prompt-processing time, generation time and
+cached prompt tokens. Time to first output includes any cold model loading
+and prompt prefill. It is not a separate measurement of load time.
+If the provider does not supply timing fields, they remain hidden rather
+than estimated from unrelated measurements.
+
+Only the local llama.cpp provider uses this streaming route. Ollama and
+optional remote provider requests still use the existing read-only,
+non-streaming endpoint. No remote paid API is required for Qwen4B.
+
+After pulling new source and restarting the local backend, open the
+floating AI chat and submit a performance or risk question. The model's
+partial answer and Stop button will appear during generation; a
+validated strategy proposal appears only after completion:
+
+~~~powershell
+cd E:\Trading-Simulator
+git pull
+.\stop-local.ps1
+.\start-local.ps1 -NoBrowser
+~~~
+
+The streaming tests use synthetic answers and deliberately invalid
+strategies to verify that no private or unvalidated candidate appears
+in preview events. Nothing in these tests contacts a paid API or
+owner-specific saved games.
+
 ## Legacy: troubleshooting slow or timed-out Ollama responses
 
 The original local Ollama integration had a 45-second response timeout. It
