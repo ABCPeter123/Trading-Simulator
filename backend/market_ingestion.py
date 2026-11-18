@@ -230,8 +230,20 @@ def _merge_verified(asset_id, resolution, bars, window):
         }[resolution]
     for span in aliases:
         alias = span if resolution == "1d" else f"{span}_{resolution}"
-        if alias != key and archive_path(asset_id,alias).exists():
-            record_history({"asset_id":asset_id,"range":alias,"bars":bars})
+        if alias != key:
+            alias_path = archive_path(asset_id,alias)
+            if not alias_path.exists():
+                continue
+            # Never turn an existing short-window chart into MAX history by
+            # copying 20 years of bootstrap candles into its Parquet file.
+            existing_start = pl.scan_parquet(alias_path).select(
+                pl.col("time").min()).collect().item()
+            if existing_start is None:
+                continue
+            within_window = [bar for bar in bars if int(bar["time"]) >= existing_start]
+            if within_window:
+                record_history({"asset_id":asset_id,"range":alias,
+                                "bars":within_window})
     return {"verified_bars":len(readings),"verified_through":max(readings)}
 
 
