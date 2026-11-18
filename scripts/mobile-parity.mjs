@@ -311,13 +311,20 @@ try {
       await visible(page,target,width+" "+main+" / "+section);
       const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
       if(overflow>3){
-        const offenders=await page.evaluate(()=>[...document.querySelectorAll("*")].flatMap(el=>{
-          const box=el.getBoundingClientRect();
-          if(box.right<=innerWidth+3||box.width===0)return [];
-          return [{tag:el.tagName,cls:String(el.className).slice(0,90),
-            right:Math.round(box.right),left:Math.round(box.left),
-            width:Math.round(box.width),scroll:el.scrollWidth}];
-        }).sort((a,b)=>b.right-a.right).slice(0,10));
+        const offenders=await page.evaluate(()=>({
+          viewport:innerWidth,
+          roots:[document.documentElement,document.body,document.getElementById("root")].filter(Boolean).map(el=>{
+            const cs=getComputedStyle(el);return {name:el.tagName,client:el.clientWidth,scroll:el.scrollWidth,
+              width:el.getBoundingClientRect().width,overflow:cs.overflowX};
+          }),
+          boxes:[...document.querySelectorAll("*")].flatMap(el=>{
+            const box=el.getBoundingClientRect();
+            if((box.right<=innerWidth+2&&el.scrollWidth<=el.clientWidth+4)||box.width===0)return [];
+            return [{tag:el.tagName,cls:typeof el.className==="string"?el.className.slice(0,75):"",
+              right:Math.round(box.right),left:Math.round(box.left),client:el.clientWidth,
+              scroll:el.scrollWidth,overflow:getComputedStyle(el).overflowX}];
+          }).sort((a,b)=>(b.scroll-b.client)-(a.scroll-a.client)).slice(0,13)
+        }));
         throw new Error(width+" "+main+" / "+section+" overflows by "+overflow+
           "px. Elements: "+JSON.stringify(offenders));
       }
