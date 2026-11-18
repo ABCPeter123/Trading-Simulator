@@ -295,21 +295,27 @@ try {
       throw new Error(width + "px unhandled page error: " + error.message);
     });
     await page.goto(base,{waitUntil:"domcontentloaded"});
-    for(const [name,target] of [
-      ["Dashboard",".ops-shell"],
-      ["Live Strategy Machine",".ops-shell"],
-      ["Strategy Discovery",".disc-shell"],
-      ["Trade Journal",".ops-shell"],
-      ["Alerts & Health",".ops-shell"],
-      ["Strategy Lab & Backtesting",".arc-layout"],
+    for(const [main,section,target] of [
+      ["Research Lab","Strategy Tournament",".ur-shell"],
+      ["Research Lab","Single-asset Research",".arc-layout"],
+      ["Research Lab","Portfolio Research",".port-layout"],
+      ["Research Lab","Optimization & Discovery",".disc-shell"],
+      ["Live Engine","Overview & Actions",".ops-shell"],
+      ["Live Engine","Live Data & Coverage",".market-desk"],
+      ["Live Engine","Strategy Engine",".ops-shell"],
+      ["Live Engine","Execution History",".ops-shell"],
+      ["Live Engine","Alerts & Health",".ops-shell"],
     ]){
-      await page.locator(".ops-main-tabs").getByRole("button",{name,exact:true}).click();
-      await visible(page,target,width+" main navigation "+name);
-      const horizontal=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
-      if(horizontal>3)throw new Error(width+" "+name+" main navigation overflows by "+horizontal+"px");
+      await page.locator(".ops-main-tabs").getByRole("button",{name:main,exact:true}).click();
+      await page.locator(".sim-mode-tabs").getByRole("button",{name:section,exact:true}).click();
+      await visible(page,target,width+" "+main+" / "+section);
+      const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
+      if(overflow>3)throw new Error(width+" "+main+" / "+section+" overflows by "+overflow+"px");
     }
+    await page.locator(".ops-main-tabs").getByRole("button",{name:"Research Lab",exact:true}).click();
+    await page.locator(".sim-mode-tabs").getByRole("button",{name:"Single-asset Research",exact:true}).click();
     await verifyMode(page,"single",width);
-    await page.locator(".sim-mode-tabs").getByRole("button",{name:"Portfolio Simulator",exact:true}).click();
+    await page.locator(".sim-mode-tabs").getByRole("button",{name:"Portfolio Research",exact:true}).click();
     await verifyMode(page,"portfolio",width);
     const intervalPicker=page.locator(".port-interval-bar select");
     await visible(page,".port-interval-bar select",width+" portfolio interval controls");
