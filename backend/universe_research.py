@@ -23,7 +23,7 @@ import time
 
 from fastapi import HTTPException
 
-from . import assets, portfolio_research as pr, advanced_portfolio_research as adv
+from . import assets, portfolio_research as pr, advanced_portfolio_research as adv, performance_objectives as objectives
 from .archive import load_archived_history
 from .market import history
 
@@ -98,13 +98,29 @@ def _public(row, detail=False):
     return out
 
 
-def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct=35):
+def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct=35,
+            research_objective="balanced", target_cagr_pct=55.,
+            target_sharpe=2., risk_free_pct=3.,
+            target_investment_pct=95., equity_class_cap_pct=70.,
+            redistribute_excess=False):
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
         raise HTTPException(403,detail="Owner research is unavailable in public demos.")
     if scope not in ("all","etfs","stocks") or delay_sessions not in (1,2):
         raise HTTPException(422, detail="Invalid research scope or fill latency.")
     if not 5<=max_drawdown_pct<=60 or not 10<=max_position_pct<=50:
         raise HTTPException(422,detail="Invalid research risk parameters.")
+    if research_objective not in ("balanced","high_performance"):
+        raise HTTPException(422,detail="Unsupported research objective.")
+    if (not all(isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+                for x in (target_cagr_pct,target_sharpe,risk_free_pct))
+        or not 10<=target_cagr_pct<=100 or not .5<=target_sharpe<=5
+        or not 0<=risk_free_pct<=15):
+        raise HTTPException(422,detail="Invalid performance targets or risk-free assumption.")
+    if (not all(isinstance(x,(int,float)) and not isinstance(x,bool) and math.isfinite(x)
+                for x in (target_investment_pct,equity_class_cap_pct))
+        or not 5<=target_investment_pct<=100 or not 10<=equity_class_cap_pct<=100
+        or type(redistribute_excess) is not bool):
+        raise HTTPException(422,detail="Invalid investment or asset-class concentration settings.")
     with LOCK,closing(_connection()) as c:
         c.execute("BEGIN IMMEDIATE")
         if c.execute("SELECT count(*) FROM universe_jobs WHERE status IN ('queued','running')").fetchone()[0]>=MAX_QUEUE:
@@ -113,7 +129,14 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
             raise HTTPException(409,detail="Archive old universe research before adding more jobs.")
         identity=str(uuid4()); now=_now()
         args={"scope":scope,"delay_sessions":delay_sessions,
-              "max_drawdown_pct":max_drawdown_pct,"max_position_pct":max_position_pct}
+              "max_drawdown_pct":max_drawdown_pct,"max_position_pct":max_position_pct,
+              "research_objective":research_objective,
+              "target_cagr_pct":float(target_cagr_pct),
+              "target_sharpe":float(target_sharpe),
+              "risk_free_pct":float(risk_free_pct),
+              "target_investment_pct":float(target_investment_pct),
+              "equity_class_cap_pct":float(equity_class_cap_pct),
+              "redistribute_excess":redistribute_excess}
         c.execute("""INSERT INTO universe_jobs
           (id,status,created_at,updated_at,progress,stage,params)
           VALUES (?,'queued',?,?,0,'Awaiting local research worker',?)""",
@@ -298,6 +321,23 @@ def _scenarios(curve,seed=9):
 def run_study(params, *, loader=None, report=None, pause=time.sleep):
     """Return a transparent top-ten ranking without using held-out for selection."""
     report=report or (lambda *args:None)
+    mode=params.get("research_objective","balanced")
+    if mode not in ("balanced","high_performance"):
+        raise ValueError("Invalid research objective")
+    risk_free=float(params.get("risk_free_pct",3.))
+    target_cagr=float(params.get("target_cagr_pct",55.))
+    target_sharpe=float(params.get("target_sharpe",2.))
+    if (not all(math.isfinite(v) for v in (risk_free,target_cagr,target_sharpe))
+        or not 0<=risk_free<=15 or not 10<=target_cagr<=100
+        or not .5<=target_sharpe<=5):
+        raise ValueError("Invalid objective targets")
+    investment=float(params.get("target_investment_pct",95.))
+    equity_cap=float(params.get("equity_class_cap_pct",70.))
+    redistribute=params.get("redistribute_excess",False)
+    if (not all(math.isfinite(v) for v in (investment,equity_cap))
+        or not 5<=investment<=100 or not 10<=equity_cap<=100
+        or type(redistribute) is not bool):
+        raise ValueError("Invalid capital allocation settings")
     universe=_universe(params["scope"]);histories={};rejected={}
     for ix,sym in enumerate(universe):
         item=assets.get_instrument(sym)
@@ -340,6 +380,10 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                 evaluated+=1
                 broker={**COST_ASSUMPTIONS,
                         "delay_sessions":params["delay_sessions"]}
+                if mode=="high_performance" and model in pr.MODELS:
+                    broker.update(target_investment_pct=investment,
+                                  equity_class_cap_pct=equity_cap,
+                                  redistribute_excess=redistribute)
                 researcher=adv.segment if model in adv.MODELS else pr._segment
                 try:
                     train=researcher(model,symbols,market,metadata,pr.WARMUP,
@@ -363,15 +407,27 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                 # explicit penalizers rather than return alone.
                 worst=regimes["worst_regime_return_pct"]
                 volatility=valid.get("annualized_volatility_pct") or 0.
-                score=round(valid["return_pct"]
-                            -1.7*abs(valid["max_drawdown_pct"])
-                            -.025*valid["turnover_pct"]
-                            -.08*volatility
-                            -.12*abs(min(0,worst))
-                            -(4 if valid["trades"]<2 else 0),4)
-                if passes:
+                if mode=="high_performance":
+                    score,quality,stability=objectives.score(
+                        valid,valid["equity_curve"],risk_free,
+                        drawdown_limit=params["max_drawdown_pct"],
+                        target_cagr_pct=target_cagr,target_sharpe=target_sharpe)
+                else:
+                    score=round(valid["return_pct"]
+                                -1.7*abs(valid["max_drawdown_pct"])
+                                -.025*valid["turnover_pct"]
+                                -.08*volatility
+                                -.12*abs(min(0,worst))
+                                -(4 if valid["trades"]<2 else 0),4)
+                    quality=objectives.performance(valid["equity_curve"],
+                                                   risk_free_pct=risk_free)
+                    stability=objectives.validation_windows(
+                        valid["equity_curve"],risk_free_pct=risk_free)
+                if passes and score>-1e5:
                     ranked.append({"basket_type":label,"symbols":symbols,
                                    "model":model,"score":score,
+                                   "validation_objectives":quality,
+                                   "validation_stability":stability,
                                    "train":pr._compact(train),
                                    "validation":pr._compact(valid),
                                    "regime_validation":regimes,
@@ -386,6 +442,16 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         except (HTTPException,ValueError,ArithmeticError,TypeError,KeyError) as exc:
             discarded.append({"basket":label,"reason":type(exc).__name__})
     ranked.sort(key=lambda x:(-x["score"],x["basket_type"],x["model"]))
+    # The Pareto frontier is diagnostic only. Neither it nor the held-out test
+    # can override the explicitly validation-only ranking.
+    if mode=="high_performance":
+        for item in ranked:
+            quality=item["validation_objectives"]
+            item["pareto_optimal"]=(
+                quality["cagr_pct"] is not None and
+                quality["excess_sharpe"] is not None and
+                not any(other is not item and objectives.dominates(other,item)
+                        for other in ranked))
     # Expose the best qualifying representative of each model family before
     # filling additional spots by validation score. This is a *diversity-
     # constrained shortlist*, never mislabel it as global top-ten by score.
@@ -404,6 +470,10 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
     leaders=[]
     for i,item in enumerate(chosen):
         broker={**COST_ASSUMPTIONS,"delay_sessions":params["delay_sessions"]}
+        if mode=="high_performance" and item["model"] in pr.MODELS:
+            broker.update(target_investment_pct=investment,
+                          equity_class_cap_pct=equity_cap,
+                          redistribute_excess=redistribute)
         slow={**broker,"delay_sessions":2,"slippage_bps":20}
         researcher=adv.segment if item["model"] in adv.MODELS else pr._segment
         test=researcher(item["model"],item["symbols"],item["_market"],
@@ -412,8 +482,27 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         stress=researcher(item["model"],item["symbols"],item["_market"],
                            item["_metadata"],item["_test_start"],item["_n"],
                            params["max_position_pct"]/100,broker=slow)
+        validation_quality=item["validation_objectives"]
+        heldout_quality=objectives.performance(
+            test["equity_curve"],risk_free_pct=risk_free)
+        stress_quality=objectives.performance(
+            stress["equity_curve"],risk_free_pct=risk_free)
+        sufficient_test=heldout_quality["sessions"]>=126
+        targets_observed=(sufficient_test and
+            heldout_quality["cagr_pct"] is not None and
+            heldout_quality["excess_sharpe"] is not None and
+            heldout_quality["cagr_pct"]>=target_cagr and
+            heldout_quality["excess_sharpe"]>=target_sharpe and
+            abs(test["max_drawdown_pct"])<=params["max_drawdown_pct"])
         leaders.append({
-            "rank":i+1,"basket_type":item["basket_type"],"symbols":item["symbols"],
+            "rank":i+1,
+            "validation_objectives":validation_quality,
+            "validation_stability":item["validation_stability"],
+            "held_out_objectives":heldout_quality,
+            "delayed_stress_objectives":stress_quality,
+            "pareto_optimal_validation":bool(item.get("pareto_optimal",False)),
+            "held_out_target_observed":bool(targets_observed),
+            "held_out_target_evaluable":sufficient_test,"basket_type":item["basket_type"],"symbols":item["symbols"],
             "model":item["model"],"validation_score":item["score"],
             "training":item["train"],"validation":item["validation"],
             "validation_regimes":item["regime_validation"],
@@ -450,13 +539,38 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             for h in histories.values() if h.get("bars")),default=None),
             "method":"Maximum available provider or locally recorded daily history; overlap depends on each basket"},
         "qualified_candidates":len(ranked),"rejected_baskets":discarded,
+        "research_objective":mode,
+        "objective_targets":{"cagr_pct":target_cagr,
+                             "excess_sharpe":target_sharpe,
+                             "risk_free_pct":risk_free,
+                             "max_drawdown_pct":params["max_drawdown_pct"]},
+        "pareto_candidate_count":sum(bool(item.get("pareto_optimal",False)) for item in ranked),
+        "shortlist_targets_observed":sum(bool(item["held_out_target_observed"]) for item in leaders),
         "top10":leaders,
-        "selection_method":"Validation-only family-diversified shortlist: include best qualifying representative of distinct models, then fill remaining places by score. Sort selected finalists by validation return minus drawdown, turnover, volatility and weak historical regimes. This is not the unrestricted global top ten. Held-out tests and future scenarios never determine selection.",
+        "selection_method":(
+            "High-performance discovery: shortlist candidates using validation-only "
+            "annualized compound growth and cash-rate-adjusted Sharpe with caps, "
+            "penalties for drawdowns, turnover and negative validation subperiods. "
+            "The final 20% is evaluated only AFTER ranking. A three-window stability "
+            "diagnostic is not a trained walk-forward model. Top ten retain family "
+            "diversity and are not the unrestricted ten highest scores."
+            if mode=="high_performance" else
+            "Validation-only family-diversified shortlist: include best qualifying "
+            "representative of distinct models, then fill remaining places by score. "
+            "Sort selected finalists by validation return minus drawdown, turnover, "
+            "volatility and weak historical regimes. This is not the unrestricted "
+            "global top ten. Held-out tests and future scenarios never determine selection."),
         "shortlist_is_global_top_ten":False,
         "execution_assumptions":{**COST_ASSUMPTIONS,"configured_delay_sessions":params["delay_sessions"],
+                                 "long_only_target_investment_pct":investment if mode=="high_performance" else 95.,
+                                 "long_only_equity_class_cap_pct":equity_cap if mode=="high_performance" else 70.,
+                                 "long_only_redistribute_excess":redistribute if mode=="high_performance" else False,
                                  "commission_note":"USD $0 listed-stock/ETF commission. FX 1.5% assumed on any cross-currency trade; this is conservative and account-dependent."},
         "test_used_for_selection":False,
         "limitations":[
+            "The high-performance goal is an optimization target, not a return guarantee. A three-window validation diagnostic does not constitute walk-forward model refitting, a deflated Sharpe ratio, or a live forward trial.",
+            "The risk-free rate for excess Sharpe is a constant user-specified annual assumption, not a historical cash yield series; the simulator does not credit cash interest.",
+            "Observed held-out target achievements are descriptive only and require at least 126 held-out sessions. They cannot establish yearly consistency or a replicable investment edge.",
             "The current provider-backed universe covers available USD/CAD stocks and ETFs. Futures, currencies, crypto and option contracts need separate historical pricing and execution models; excluded instruments are reported.",
             "Only symbols with sufficient actual valid historical daily data are evaluated. Exclusions are reported, not backfilled with synthetic observations.",
             "Research-only short and margin models use synthetic negative holdings, 6% annual short borrow and 8.5% margin funding assumptions, with 25% maintenance margin. These are approximations and cannot be deployed as Wealthsimple share shorts.",

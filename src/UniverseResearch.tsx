@@ -16,7 +16,18 @@ type Scenario={name:string;horizon_sessions:number;p05_return_pct:number;median_
 type RegimeMetrics={samples:number;worst_regime_return_pct:number;
   regimes:Record<string,{observations:number;return_pct:number;positive_day_pct:number;worst_day_pct:number}>};
 type ExecutionSample={time:number;symbol:string;side:string;quantity:number;price:number;fee:number;notional:number};
+type ObjectiveMetrics={cagr_pct:number|null;excess_sharpe:number|null;
+  annualized_volatility_pct:number|null;sessions:number};
+type ValidationWindow={start:number;end:number;sessions:number;return_pct:number;
+  cagr_pct:number|null;excess_sharpe:number|null};
+type ValidationStability={windows:ValidationWindow[];positive_windows:number;
+  window_count:number;worst_window_return_pct:number|null;
+  all_windows_positive:boolean;sufficient_history:boolean};
 type Winner={rank:number;basket_type:string;symbols:string[];model:string;validation_score:number;training:Metric;
+  validation_objectives?:ObjectiveMetrics;held_out_objectives?:ObjectiveMetrics;
+  delayed_stress_objectives?:ObjectiveMetrics;
+  validation_stability?:ValidationStability;pareto_optimal_validation?:boolean;
+  held_out_target_observed?:boolean;held_out_target_evaluable?:boolean;
   validation:Metric;held_out:Metric;delayed_execution_stress:Metric;restricted_research:boolean;
   short_proxy_research:boolean;research_only?:boolean;
   validation_regimes?:RegimeMetrics;held_out_regimes?:RegimeMetrics;
@@ -24,6 +35,9 @@ type Winner={rank:number;basket_type:string;symbols:string[];model:string;valida
   coverage?:{first_session:string;last_session:string;common_sessions:number};
   hypothetical_scenarios:{paths:Scenario[]};execution_model:string;scenario_calibration?:string};
 type Outcome={universe_count:number;eligible_count:number;excluded_count:number;qualified_candidates:number;
+  research_objective?:"balanced"|"high_performance";
+  objective_targets?:{cagr_pct:number;excess_sharpe:number;risk_free_pct:number;max_drawdown_pct:number};
+  pareto_candidate_count?:number;shortlist_targets_observed?:number;
   basket_count:number;candidates_evaluated:number;top10:Winner[];limitations:string[];
   selection_method:string;execution_assumptions:Record<string,string|number>;
   candidate_model_counts?:Record<string,number>;
@@ -32,7 +46,11 @@ type Outcome={universe_count:number;eligible_count:number;excluded_count:number;
   shortlist_is_global_top_ten?:boolean};
 type Job={id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";created_at:string;
   progress:number;stage:string;scanned:number;eligible:number;error_code:string|null;
-  params:{scope:string;delay_sessions:1|2;max_drawdown_pct:number;max_position_pct:number};result:Outcome|null};
+  params:{scope:string;delay_sessions:1|2;max_drawdown_pct:number;max_position_pct:number;
+    research_objective?:"balanced"|"high_performance";target_cagr_pct?:number;
+    target_sharpe?:number;risk_free_pct?:number;
+    target_investment_pct?:number;equity_class_cap_pct?:number;
+    redistribute_excess?:boolean};result:Outcome|null};
 import {validatedPercent} from "./validatedPercent";
 
 const pct=(x:number)=>Number.isFinite(x)?x.toFixed(2)+"%":"N/A";
@@ -45,6 +63,13 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   const [delay,setDelay]=useState<1|2>(1);
   const [drawdown,setDrawdown]=useState("30");
   const [weight,setWeight]=useState("35");
+  const [objective,setObjective]=useState<"balanced"|"high_performance">("high_performance");
+  const [targetCagr,setTargetCagr]=useState("55");
+  const [targetSharpe,setTargetSharpe]=useState("2");
+  const [riskFree,setRiskFree]=useState("3");
+  const [targetInvestment,setTargetInvestment]=useState("100");
+  const [equityLimit,setEquityLimit]=useState("100");
+  const [redistributeUnused,setRedistributeUnused]=useState(true);
   const [jobs,setJobs]=useState<Job[]>([]);
   const [active,setActive]=useState<Job|null>(null);
   const [pick,setPick]=useState(0);
@@ -85,9 +110,18 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     try{
       const max_drawdown_pct=validatedPercent(drawdown,"Maximum validation drawdown",5,60);
       const max_position_pct=validatedPercent(weight,"Maximum position weight",10,50);
+      const target_cagr_pct=validatedPercent(targetCagr,"Annual growth objective",10,100);
+      const target_sharpe=validatedPercent(targetSharpe,"Excess Sharpe objective",.5,5);
+      const risk_free_pct=validatedPercent(riskFree,"Risk-free annual return assumption",0,15);
+      const target_investment_pct=validatedPercent(targetInvestment,"Target invested percentage",5,100);
+      const equity_class_cap_pct=validatedPercent(equityLimit,"Equity class exposure limit",10,100);
       const job=await request<Job>("/live/research/universe/jobs",{method:"POST",
         body:JSON.stringify({scope,delay_sessions:delay,
-          max_drawdown_pct,max_position_pct})});
+          max_drawdown_pct,max_position_pct,research_objective:objective,
+          target_cagr_pct,target_sharpe,risk_free_pct,
+          target_investment_pct:objective==="high_performance"?target_investment_pct:95,
+          equity_class_cap_pct:objective==="high_performance"?equity_class_cap_pct:70,
+          redistribute_excess:objective==="high_performance"&&redistributeUnused})});
       setActive(job);setPick(0);await refresh();
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);}
@@ -150,6 +184,12 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   }
   const result=active?.result;
   const chosen=result?.top10[pick];
+  const standardModel=Boolean(chosen&&["equal_weight","inverse_volatility",
+    "trend_filter","relative_momentum","volatility_target"].includes(chosen.model));
+  const customResearchExposure=Boolean(standardModel&&active?.params.research_objective==="high_performance"&&(
+    (active.params.target_investment_pct??95)!==95||
+    (active.params.equity_class_cap_pct??70)!==70||
+    Boolean(active.params.redistribute_excess)));
   const selectedKey=active&&chosen?`${active.id}:${chosen.rank}`:"";
   const selectedSpec:TournamentModelSpec|null=active&&chosen?{
     version:(["leveraged_trend","long_short_momentum","market_neutral",
@@ -160,6 +200,10 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     restricted_research:chosen.restricted_research,
     short_proxy_research:chosen.short_proxy_research,
     research_only:chosen.research_only,
+    ...(standardModel&&active.params.research_objective==="high_performance"?{
+      target_investment_pct:active.params.target_investment_pct??95,
+      equity_class_cap_pct:active.params.equity_class_cap_pct??70,
+      redistribute_excess:Boolean(active.params.redistribute_excess)}:{}),
   }:null;
   return <main className="ur-shell">
     <header className="ur-header"><div>
@@ -190,8 +234,39 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
           </select></label>
         <label>{t("Maximum validation drawdown (%)")}
           <input type="number" min="5" max="60" value={drawdown} onChange={e=>setDrawdown(e.target.value)}/></label>
+        <label>{t("Research objective")}
+          <select value={objective} onChange={e=>setObjective(e.target.value as typeof objective)}>
+            <option value="high_performance">{t("High-performance discovery")}</option>
+            <option value="balanced">{t("Balanced risk-adjusted ranking")}</option>
+          </select></label>
         <label>{t("Maximum position weight (%)")}
           <input type="number" min="10" max="50" value={weight} onChange={e=>setWeight(e.target.value)}/></label>
+        {objective==="high_performance"&&<div className="ur-objective-panel">
+          <strong>{t("High-performance research targets")}</strong>
+          <p>{t("Targets are aspirational. Ranking uses validation data only. No historical strategy can promise these results.")}</p>
+          <label>{t("Target annual compound growth (%)")}
+            <input type="number" min="10" max="100" step="1" value={targetCagr}
+              onChange={e=>setTargetCagr(e.target.value)}/></label>
+          <label>{t("Target excess Sharpe ratio")}
+            <input type="number" min="0.5" max="5" step="0.1" value={targetSharpe}
+              onChange={e=>setTargetSharpe(e.target.value)}/></label>
+          <label>{t("Assumed annual risk-free rate (%)")}
+            <input type="number" min="0" max="15" step="0.25" value={riskFree}
+              onChange={e=>setRiskFree(e.target.value)}/></label>
+          <label>{t("Target invested capital (%)")}
+            <input type="number" min="5" max="100" step="1" value={targetInvestment}
+              onChange={e=>setTargetInvestment(e.target.value)}/></label>
+          <label>{t("Equity category exposure cap (%)")}
+            <input type="number" min="10" max="100" step="1" value={equityLimit}
+              onChange={e=>setEquityLimit(e.target.value)}/></label>
+          <label className="ur-checkbox-label">
+            <input type="checkbox" checked={redistributeUnused}
+              onChange={e=>setRedistributeUnused(e.target.checked)}/>
+            {t("Redistribute unused weight among eligible assets")}
+          </label>
+          <p>{t("Full-investment settings apply only to the five standard long-only models; advanced leverage and hedge models retain their own limits.")}</p>
+          <p>{t("Cash rate is held constant for metric calculations; it is not credited as portfolio income.")}</p>
+        </div>}
         <button className="ur-primary" disabled={busy} onClick={()=>void run()}>{t("Run universe-wide scan")}</button>
         <p>{t("The laptop research worker performs all calculations. Historical data availability determines how many symbols qualify.")}</p>
         <button className="ur-secondary" onClick={onOpenDiscovery}>{t("Open individual optimizers")}</button>
@@ -223,6 +298,21 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 <div key={String(name)}><small>{name}</small><strong>{n}</strong></div>)}
             </div>
             <p>{result.selection_method}</p>
+            {result.research_objective==="high_performance"&&result.objective_targets&&<div className="ur-objective-results">
+              <h3>{t("High-performance discovery results")}</h3>
+              <p>{t("The target is an objective, not a prediction. Training, validation and held-out results are distinct.")}</p>
+              <div className="ur-kpis">
+                <div><small>{t("Annual compound growth target")}</small>
+                  <strong>{pct(result.objective_targets.cagr_pct)}</strong></div>
+                <div><small>{t("Excess Sharpe target")}</small>
+                  <strong>{result.objective_targets.excess_sharpe.toFixed(2)}</strong></div>
+                <div><small>{t("Candidates on validation Pareto frontier")}</small>
+                  <strong>{result.pareto_candidate_count??0}</strong></div>
+                <div><small>{t("Shortlisted candidates reaching held-out targets")}</small>
+                  <strong>{result.shortlist_targets_observed??0} / {result.top10.length}</strong></div>
+              </div>
+              <p>{t("Held-out observations are descriptive only. A qualifying candidate needs at least 126 held-out trading sessions; meeting a target is not proof of annual consistency.")}</p>
+            </div>}
             {result.historical_coverage&&<p>{t("Available historical coverage")}: {
               result.historical_coverage.universe_earliest_session??t("Unknown")} · {
               result.historical_coverage.universe_latest_session??t("Unknown")}.
@@ -273,10 +363,11 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                       t("Load this strategy into simulation")}
                   </button>}
                 <button type="button" className="ur-secondary"
-                  disabled={busy||chosen.research_only||chosen.restricted_research||chosen.short_proxy_research}
+                  disabled={busy||chosen.research_only||chosen.restricted_research||chosen.short_proxy_research||customResearchExposure}
                   aria-busy={busy&&promotionTarget==="live"}
                   onClick={()=>void promote("live")}>
                   {chosen.research_only?t("Live engine unavailable for short or margin models"):
+                    customResearchExposure?t("Live engine unavailable for custom research exposure"):
                     (chosen.restricted_research||chosen.short_proxy_research)?
                       t("Live engine unavailable for restricted ETFs"):
                     (busy&&promotionTarget==="live")?t("Opening Live Engine..."):
@@ -285,7 +376,45 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               </div>
               <p>{chosen.research_only?
                 t("Short and margin strategies can run in the historical signed-position research engine. Click Run this strategy in historical research to see simulated fills, equity changes and risk. Cash-only replay and live broker monitoring do not support these exposures."):
-                t("Supported cash-funded models can be loaded into simulation and paper monitoring. Leveraged and inverse ETFs are separately restricted for live monitoring.")}</p>
+                customResearchExposure?
+                  t("Custom investment and equity caps are preserved when saving and replaying this long-only strategy. Live monitoring is disabled until it can reproduce those research exposure rules."):
+                  t("Supported cash-funded models can be loaded into simulation and paper monitoring. Leveraged and inverse ETFs are separately restricted for live monitoring.")}</p>
+              {result.research_objective==="high_performance"&&chosen.validation_objectives&&<div className="ur-objective-results">
+                <h4>{t("Return and risk objectives")}</h4>
+                <div className="ur-kpis">
+                  <div><small>{t("Validation CAGR")}</small>
+                    <strong>{pct(chosen.validation_objectives.cagr_pct??NaN)}</strong></div>
+                  <div><small>{t("Validation excess Sharpe")}</small>
+                    <strong>{chosen.validation_objectives.excess_sharpe?.toFixed(2)??"N/A"}</strong></div>
+                  <div><small>{t("Held-out CAGR")}</small>
+                    <strong>{pct(chosen.held_out_objectives?.cagr_pct??NaN)}</strong></div>
+                  <div><small>{t("Held-out excess Sharpe")}</small>
+                    <strong>{chosen.held_out_objectives?.excess_sharpe?.toFixed(2)??"N/A"}</strong></div>
+                  <div><small>{t("Held-out annualized volatility")}</small>
+                    <strong>{pct(chosen.held_out_objectives?.annualized_volatility_pct??NaN)}</strong></div>
+                  <div><small>{t("Validation Pareto frontier")}</small>
+                    <strong>{chosen.pareto_optimal_validation?t("Yes"):t("No")}</strong></div>
+                  <div><small>{t("Held-out target reached")}</small>
+                    <strong>{!chosen.held_out_target_evaluable?t("Insufficient sessions"):
+                      chosen.held_out_target_observed?t("Observed"):t("No")}</strong></div>
+                </div>
+                {chosen.validation_stability&&<>
+                  <h4>{t("Validation subperiod stability")}</h4>
+                  <p>{chosen.validation_stability.positive_windows} / {chosen.validation_stability.window_count} {t("positive subperiods")}.
+                    {" "}{t("These are sequential diagnostics from one validation run, not independently retrained walk-forward models.")}</p>
+                  <div className="ur-scroll"><table><thead><tr>
+                    <th>{t("From")}</th><th>{t("To")}</th>
+                    <th>{t("Sessions")}</th><th>{t("Return")}</th>
+                    <th>{t("Annualized CAGR")}</th><th>{t("Excess Sharpe")}</th>
+                  </tr></thead><tbody>{chosen.validation_stability.windows.map((part,i)=><tr key={i}>
+                    <td>{new Date(part.start*1000).toLocaleDateString()}</td>
+                    <td>{new Date(part.end*1000).toLocaleDateString()}</td>
+                    <td>{part.sessions}</td><td>{pct(part.return_pct)}</td>
+                    <td>{pct(part.cagr_pct??NaN)}</td>
+                    <td>{part.excess_sharpe?.toFixed(2)??"N/A"}</td>
+                  </tr>)}</tbody></table></div>
+                </>}
+              </div>}
               <div className="ur-kpis">
                 {[[t("Training return"),pct(chosen.training.return_pct)],
                   [t("Validation return"),pct(chosen.validation.return_pct)],
@@ -293,7 +422,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                   [t("Held-out drawdown"),pct(chosen.held_out.max_drawdown_pct)],
                   [t("Slower fill stress"),pct(chosen.delayed_execution_stress.return_pct)],
                   [t("Simulated costs"),chosen.held_out.fees.toFixed(2)],
-                  [t("Validation Sharpe"),chosen.validation.sharpe?.toFixed(2)??"N/A"],
+                  [t("Validation Sharpe (zero cash rate)"),chosen.validation.sharpe?.toFixed(2)??"N/A"],
                   [t("Validation Sortino"),chosen.validation.sortino?.toFixed(2)??"N/A"],
                   [t("Peak gross leverage"),chosen.held_out.peak_gross_leverage?.toFixed(2)??"N/A"],
                   [t("Margin interest"),chosen.held_out.margin_interest?.toFixed(2)??"N/A"],
