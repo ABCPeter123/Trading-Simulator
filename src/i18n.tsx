@@ -13,6 +13,11 @@ const STORAGE_KEY = "trading-simulator-language";
  */
 const zh: Record<string, string> = {
   "Generating answer": "正在生成回答",
+  "Prompt processing": "提示词处理",
+  "Generation": "生成",
+  "tokens/sec": "token/秒",
+  "Cached tokens": "缓存 token",
+
   "Waiting for model output": "等待模型输出",
   "First output": "首次输出",
   "Total": "总耗时",
