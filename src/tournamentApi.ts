@@ -2,7 +2,7 @@ import {request} from "./api";
 import type {PortfolioSeason} from "./portfolioApi";
 
 export interface TournamentVersion {
-  id:string;name:string;mode:"portfolio_model";source_job_id:string;source_rank:number;
+  id:string;name:string;mode:"portfolio_model";version:1|2;source_job_id:string;source_rank:number;
   symbols:string[];model:string;max_position_pct:number;delay_sessions:1|2;
   research_only?:boolean;
   rebalance_sessions:number;restricted_research:boolean;short_proxy_research:boolean;
