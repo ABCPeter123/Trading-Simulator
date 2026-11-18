@@ -20,7 +20,7 @@ type Winner={rank:number;basket_type:string;symbols:string[];model:string;valida
   validation_regimes?:RegimeMetrics;held_out_regimes?:RegimeMetrics;
   held_out_execution_sample?:ExecutionSample[];
   coverage?:{first_session:string;last_session:string;common_sessions:number};
-  hypothetical_scenarios:{paths:Scenario[]};execution_model:string};
+  hypothetical_scenarios:{paths:Scenario[]};execution_model:string;scenario_calibration?:string};
 type Outcome={universe_count:number;eligible_count:number;excluded_count:number;qualified_candidates:number;
   basket_count:number;candidates_evaluated:number;top10:Winner[];limitations:string[];
   selection_method:string;execution_assumptions:Record<string,string|number>;
@@ -279,16 +279,17 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                   <td>{x.price.toFixed(2)}</td><td>{x.fee.toFixed(2)}</td></tr>)}</tbody></table></div>
               </details>}
               <p>{chosen.execution_model}</p>
-              <h4>{t("Hypothetical 30-session scenarios")}</h4>
+              {chosen.scenario_calibration&&<p>{chosen.scenario_calibration}</p>}
+              <h4>{t("Hypothetical 10-120 session scenarios")}</h4>
               <div className="ur-scroll"><table><thead><tr><th>{t("Scenario")}</th>
-                <th>5%</th><th>{t("Median")}</th><th>95%</th><th>{t("Median drawdown")}</th>
-              </tr></thead><tbody>{chosen.hypothetical_scenarios.paths.map(row=><tr key={row.name}>
-                <td>{label(row.name)}</td><td>{pct(row.p05_return_pct)}</td><td>{pct(row.median_return_pct)}</td>
+                <th>{t("Sessions")}</th><th>5%</th><th>{t("Median")}</th><th>95%</th><th>{t("Median drawdown")}</th>
+              </tr></thead><tbody>{chosen.hypothetical_scenarios.paths.map(row=><tr key={`${row.name}-${row.horizon_sessions}`}>
+                <td>{label(row.name)}</td><td>{row.horizon_sessions}</td><td>{pct(row.p05_return_pct)}</td><td>{pct(row.median_return_pct)}</td>
                 <td>{pct(row.p95_return_pct)}</td><td>{pct(row.median_max_drawdown_pct)}</td>
               </tr>)}</tbody></table></div>
               <h4>{t("Daily scenario trajectory")}</h4>
               {chosen.hypothetical_scenarios.paths.filter(x=>x.daily?.length).map(path=>
-                <details key={path.name}><summary>{label(path.name)} · {t("Day-by-day percentile bands")}</summary>
+                <details key={`${path.name}-${path.horizon_sessions}`}><summary>{label(path.name)} · {path.horizon_sessions} {t("Sessions")} · {t("Day-by-day percentile bands")}</summary>
                   <div className="ur-scroll"><table><thead><tr>
                     <th>{t("Trading session")}</th><th>{t("Downside 5%")}</th>
                     <th>{t("Median")}</th><th>{t("Upside 95%")}</th>
