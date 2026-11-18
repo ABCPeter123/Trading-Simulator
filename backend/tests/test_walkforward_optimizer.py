@@ -241,3 +241,28 @@ def test_exposure_recovers_cash_from_signed_snapshot_not_just_explicit_fields():
     measured=diagnostics.exposure(test_ledger,["spy","ief"],metadata)
     assert measured["position_snapshots"]==2
     assert measured["average_rebalance_cash_pct"]==55.0
+
+
+
+def test_reference_preserves_advanced_and_multi_sleeve_models():
+    from backend import tournament_reference
+    signed=spec("leveraged_trend")
+    signed_config=tournament_reference.source_config(signed)
+    assert signed_config["model"]=="leveraged_trend"
+    assert "target_investment_pct" not in signed_config
+    assert "redistribute_excess" not in signed_config
+
+    blend=spec()
+    blend.update(model="blended_portfolio",sleeves=[
+        {"model":"equal_weight","weight_pct":45},
+        {"model":"trend_filter","weight_pct":55},
+    ],target_investment_pct=86,equity_class_cap_pct=67,
+                 redistribute_excess=True)
+    blend_config=tournament_reference.source_config(blend)
+    assert blend_config["model"]=="blended_portfolio"
+    assert blend_config["target_investment_pct"]==86
+    assert blend_config["equity_class_cap_pct"]==67
+    assert blend_config["redistribute_excess"] is True
+    assert blend_config["sleeves"]==[
+        {"model":"equal_weight","weight_pct":45.0},
+        {"model":"trend_filter","weight_pct":55.0}]
