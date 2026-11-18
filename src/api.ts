@@ -92,8 +92,18 @@ export interface MarketCollectorHealth {
   collector: {state:"polling"|"idle"|"stale"|"unverified";
     last_heartbeat:string|null;heartbeat_age_seconds:number|null;last_attempted:number};
   active:number;subscriptions:number;errors:number;delivery_guaranteed:boolean;
+  reconciliation_jobs:number;
   last_updates:{asset_id:string;resolution:string;active:boolean;sync_state:string;
-    failure_code:string|null;last_success:string|null;last_bar:number|null}[];
+    failure_code:string|null;last_success:string|null;last_bar:number|null;
+    bootstrap:MarketReconciliationJob|null;
+    reconciliation:MarketReconciliationJob|null}[];
+}
+export interface MarketReconciliationJob {
+  asset_id:string;resolution:string;kind:"bootstrap"|"reconcile";
+  due_at:string;last_attempt:string|null;last_success:string|null;
+  failures:number;error_code:string|null;verified_bars:number;
+  verified_through:number|null;status:"pending"|"retry_pending"|"provider_checked";
+}
 }
 export const getMarketCollectorHealth=()=>request<MarketCollectorHealth>("/market-data/health");
 export const getMarketSubscriptions=()=>request<MarketSubscription[]>("/market-data/subscriptions");
