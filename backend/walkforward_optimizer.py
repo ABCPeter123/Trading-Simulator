@@ -17,6 +17,7 @@ from . import blended_portfolio_research as blended
 from . import performance_objectives as objectives
 from . import selection_diagnostics as selection_bias
 from . import walkforward_diagnostics as explanation
+from . import research_review
 from . import portfolio_research as pr
 from . import tournament_strategies as tournament
 from . import universe_research as universe
@@ -399,13 +400,30 @@ def analyze(payload, *, loader=None, report=None):
             "audit_drawdown_pct":observed["max_drawdown_pct"],
             "audit_trades":observed["trades"],
         })
+    # This independent market reference is loaded AFTER the final model was
+    # selected, all historical fold choices were locked and its audit executed.
+    # It cannot affect selection, eligibility, score or attempted trials.
+    spy_source=None
+    try:
+        spy_source=histories["spy"] if "spy" in histories else load("spy")
+        if spy_source.get("is_demo") or not universe._quality(spy_source.get("bars")):
+            spy_source=None
+    except (ValueError,OSError,KeyError,TypeError,HTTPException):
+        spy_source=None
+    spy_spread=pr.get_instrument("spy").spread_bps
+    for index,fold in enumerate(folds):
+        fold["unseen_spy_price_benchmark"]=explanation.spy_price_reference(
+            spy_source,market,symbols,points[index],points[index+1],
+            settings,spread_bps=spy_spread)
+    audit_spy=explanation.spy_price_reference(
+        spy_source,market,symbols,test_start,n,settings,spread_bps=spy_spread)
     targets=(audit["cagr_pct"] is not None and audit["excess_sharpe"] is not None
              and audit["cagr_pct"]>=settings["target_cagr_pct"]
              and audit["excess_sharpe"]>=settings["target_sharpe"]
              and abs(final["max_drawdown_pct"])<=settings["max_drawdown_pct"])
     # Do not select a different model after looking at the final audit.
     report(96,"Saving independently audited historical report")
-    return {
+    result={
         "status":"completed",
         "research_only":True,"no_real_orders":True,
         "symbols":symbols,
@@ -440,6 +458,7 @@ def analyze(payload, *, loader=None, report=None):
             "selected":final_choice["config"],
             "selection_score_breakdown":final_choice["score_breakdown"],
             "benchmark_comparison":audit_comparison,
+            "market_benchmark":audit_spy,
             "exposure_and_costs":audit_exposure,
             "prior_selected_comparison":comparison,
             "selection_score":final_choice["score"],
@@ -474,6 +493,7 @@ def analyze(payload, *, loader=None, report=None):
             "A fixed public grid of compatible models and bounded capital/position parameters is searched; no unlimited parameter fitting, learned indicators or multi-basket model synthesis is implemented.",
             "Bonferroni-adjusted p is an illustrative Gaussian-i.i.d. approximation conditional on the tested grid, not robust statistical significance.",
             "The separate estimated Deflated Sharpe uses an independent-normal expected maximum and i.i.d. skew/kurtosis correction. The CSCV PBO uses nonchronological splits of pre-audit candidate returns; both are approximations, not proof of performance or substitutes for real walk-forward evidence.",
+            "SPY buy-and-hold uses exact matched daily sessions and a modeled opening purchase. It is a price-only comparison; dividends are not explicitly reinvested and historical provider adjustments may vary. A missing session yields unavailable, never a silent forward-fill.",
             "Same-basket equal-weight benchmarks and a fixed cash-rate hurdle are diagnostic, not additional reselectable candidates. Neither validates a market-index-relative edge.",
             "Exposure by category and cash is measured at discrete rebalance snapshots; daily average gross exposure is reported separately. Turnover is based on gross executed notional, not an annualized figure.",
             "Parameter sensitivity uses only pre-audit prices and does not change model selection; it is not a fresh unseen validation period.",
@@ -483,3 +503,5 @@ def analyze(payload, *, loader=None, report=None):
             "An observed annualized return over less than multiple full years is not evidence of consistent 50-60% annual performance.",
         ],
     }
+    result["research_review"]=research_review.review(result)
+    return result
