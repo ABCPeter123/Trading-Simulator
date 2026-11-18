@@ -189,7 +189,7 @@ export default function PortfolioArcade({onExit,initialRunId}: {onExit:()=>void;
       if(!eligible(newAsset)) {
         setError(symbol+" is available for research but is not eligible for USD cash portfolio trading.");
       } else {
-        setBasket(prev=>prev.includes(newAsset.id)?prev:prev.length<5?[...prev,newAsset.id]:prev);
+        setBasket(prev=>prev.includes(newAsset.id)?prev:prev.length<16?[...prev,newAsset.id]:prev);
         setNotice(symbol+" imported and saved locally.");
       }
       setExternal([]);
@@ -228,11 +228,11 @@ export default function PortfolioArcade({onExit,initialRunId}: {onExit:()=>void;
     {setup || !season ? <main className="port-setup">
       <span className="arc-upper">{t("MULTI-ASSET RESEARCH")}</span>
       <h1>{t("Multi-asset Historical Simulator")}</h1>
-      <p>{t("Select 2 to 5 instruments using a shared $100,000 simulated USD account. Historical candles are synchronized and upcoming market data remain hidden.")}</p>
+      <p>{t("Select 2 to 16 instruments using a shared $100,000 simulated USD account. Historical candles are synchronized and upcoming market data remain hidden.")}</p>
       {basket.some(id=>catalog.find(i=>i.id===id)?.currency==="CAD")&&
         <p>{t("Canadian asset prices and simulated fills are converted to USD using the previous completed USD/CAD FX close. Results use a shared USD cash account and are indicative.")}</p>}
       <div className="port-picker">
-        <div className="port-selected"><strong>{t("YOUR BASKET")} ({basket.length}/5)</strong>
+        <div className="port-selected"><strong>{t("YOUR BASKET")} ({basket.length}/16)</strong>
           <div>{basket.map(id=><button key={id} onClick={()=>setBasket(prev=>prev.filter(x=>x!==id))}>{assetName(id)} ×</button>)}</div>
         </div>
         <label htmlFor="port-search"><Search size={15}/> {t("Search instruments")}</label>
@@ -246,7 +246,7 @@ export default function PortfolioArcade({onExit,initialRunId}: {onExit:()=>void;
         </div>)}</div>}
         <div className="port-catalog">{filtered.map(a=><button key={a.id}
           className={basket.includes(a.id)?"selected":""}
-          disabled={!basket.includes(a.id)&&basket.length>=5}
+          disabled={!basket.includes(a.id)&&basket.length>=16}
           onClick={()=>setBasket(prev=>prev.includes(a.id)?prev.filter(x=>x!==a.id):[...prev,a.id])}>
           <strong>{a.symbol}</strong><small>{a.name}</small><span>{basket.includes(a.id)?t("Added"):"+"}</span>
         </button>)}</div>
