@@ -165,7 +165,18 @@ export interface WalkForwardResult {
   reason?:string;fold_failed?:number|string;
   coverage?:{first_date:string;last_date:string;shared_sessions:number;warmup_sessions:number};
   targets?:{cagr_pct:number;excess_sharpe:number;max_drawdown_pct:number;risk_free_pct:number};
-  model_search?:{width:string;candidate_count:number;total_train_evaluations:number;candidate_scope:string};
+  model_search?:{width:string;candidate_count:number;total_train_evaluations:number;
+    candidate_scope:string;
+    pre_audit_selection_diagnostics?:{
+      basis:string;valid_candidate_curves:number;attempted_candidates:number;
+      deflated_sharpe:{status:string;probability_pct:number|null;
+        expected_max_sharpe:number|null;annualized_selected_sharpe:number|null;
+        sessions:number;assumed_trials:number;valid_competitors?:number;method?:string};
+      pbo:{status:string;estimated_pbo_pct:number|null;
+        negative_logit_splits:number;evaluated_splits:number;
+        distinct_candidates:number;blocks:number;median_oos_rank_logit?:number;method?:string};
+    };
+  };
   walk_forward?:{
     folds:WalkForwardFold[];positive_folds:number;fold_count:number;
     stitch_method:string;aggregate_objectives:WalkForwardQuality;aggregate_drawdown_pct:number;

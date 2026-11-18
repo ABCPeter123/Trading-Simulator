@@ -97,6 +97,15 @@ def test_expanding_walkforward_seals_final_audit():
     assert normal["final_audit"]["return_pct"]!=revised["final_audit"]["return_pct"]
     assert normal["no_real_orders"] is True
     assert normal["walk_forward"]["multiplicity_approximation"]["assumed_trials"]==normal["model_search"]["candidate_count"]
+    diagnostic=normal["model_search"]["pre_audit_selection_diagnostics"]
+    assert diagnostic==revised["model_search"]["pre_audit_selection_diagnostics"]
+    assert diagnostic["attempted_candidates"]==normal["model_search"]["candidate_count"]
+    assert diagnostic["valid_candidate_curves"]>=1
+    assert diagnostic["pbo"]["status"] in (
+        "estimated_nonchronological_cscv","insufficient_distinct_trials",
+        "unidentifiable","insufficient_evidence")
+    assert diagnostic["deflated_sharpe"]["status"] in (
+        "estimated_iid_only","insufficient_evidence")
 
 
 def test_insufficient_history_report_does_not_invent_a_favorable_result():

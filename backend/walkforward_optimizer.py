@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from . import advanced_portfolio_research as adv
 from . import blended_portfolio_research as blended
 from . import performance_objectives as objectives
+from . import selection_diagnostics as selection_bias
 from . import portfolio_research as pr
 from . import tournament_strategies as tournament
 from . import universe_research as universe
@@ -280,6 +281,25 @@ def analyze(payload, *, loader=None, report=None):
                 "candidate_count":len(configs),"research_only":True,
                 "no_real_orders":True,
                 "reason":"No candidate qualified on the pre-audit training sample."}
+    # All competing curves are calculated entirely in the pre-audit period.
+    # They remain in memory, and only aggregate diagnostics enter the local
+    # private report. Retain attempted trials even when a model cannot run.
+    report(89,"Evaluating pre-audit multiple-testing diagnostics")
+    pre_audit_curves=[]
+    for config in configs:
+        try:
+            historical=_execute(config,symbols,market,metadata,
+                                pr.WARMUP,test_start,settings["slippage_bps"])
+            pre_audit_curves.append(historical["equity_curve"])
+        except (ValueError,ArithmeticError,ZeroDivisionError):
+            continue
+    selected_training=_execute(final_choice["config"],symbols,market,metadata,
+                               pr.WARMUP,test_start,settings["slippage_bps"])
+    selection_diagnostics=selection_bias.diagnose(
+        selected_training["equity_curve"],pre_audit_curves,
+        risk_free_pct=settings["risk_free_pct"],
+        attempted_trials=len(configs))
+    report(91,"Evaluating sealed final audit")
     final=_execute(final_choice["config"],symbols,market,metadata,
                    test_start,n,settings["slippage_bps"])
     stress_config={**final_choice["config"],"delay_sessions":2}
@@ -329,7 +349,8 @@ def analyze(payload, *, loader=None, report=None):
         "model_search":{"width":settings["search_width"],
                         "candidate_count":len(configs),
                         "total_train_evaluations":sum(x["trials_evaluated"] for x in folds)+attempted,
-                        "candidate_scope":"Compatible models on the selected fixed basket. No symbol selection, intraday signals or unrestricted model synthesis."},
+                        "candidate_scope":"Compatible models on the selected fixed basket. No symbol selection, intraday signals or unrestricted model synthesis.",
+                        "pre_audit_selection_diagnostics":selection_diagnostics},
         "walk_forward":{
             "folds":folds,
             "positive_folds":sum(x["out_of_sample_return_pct"]>0 for x in folds),
@@ -364,7 +385,8 @@ def analyze(payload, *, loader=None, report=None):
             "The final audit is never used to rank, select or retune candidates; do not manually retune based on this audit and still call it unseen.",
             "Long-only candidates include 2-3 strategy sleeves mixed before netted trades in a single shared-cash ledger. This is not a portfolio of independently realized strategy returns. Short and margin sleeves are excluded from these blends.",
             "A fixed public grid of compatible models and bounded capital/position parameters is searched; no unlimited parameter fitting, learned indicators or multi-basket model synthesis is implemented.",
-            "Bonferroni-adjusted p is an illustrative Gaussian-i.i.d. approximation conditional on the tested grid, not a Deflated Sharpe Ratio, Probability of Backtest Overfitting, or robust statistical significance.",
+            "Bonferroni-adjusted p is an illustrative Gaussian-i.i.d. approximation conditional on the tested grid, not robust statistical significance.",
+            "The separate estimated Deflated Sharpe uses an independent-normal expected maximum and i.i.d. skew/kurtosis correction. The CSCV PBO uses nonchronological splits of pre-audit candidate returns; both are approximations, not proof of performance or substitutes for real walk-forward evidence.",
             "Actual instrument history remains susceptible to survivorship bias, incomplete corporate-action adjustment and limited historical coverage.",
             "Slippage, borrowing costs, spreads, commissions, FX and fills are assumed, not actual future broker executions. No paper-forward evidence is included.",
             "Rolling 252-session returns overlap and do not represent independent years. Calendar years only count when nearly complete; incomplete audit windows must show insufficient evidence instead of a made-up worst annual return.",
