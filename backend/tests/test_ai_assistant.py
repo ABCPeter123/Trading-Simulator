@@ -616,3 +616,48 @@ def test_compact_qwen_request_avoids_reasoning_budget_on_small_ram_pc(monkeypatc
     assert seen[0]["chat_template_kwargs"] == {"enable_thinking": False}
     ai.call_model("system", "synthetic example", model="TwIL-8B-Q4_K_M-balanced.gguf")
     assert "chat_template_kwargs" not in seen[1]
+
+
+def test_4b_compact_context_preserves_financial_summary_and_validation(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODELS",
+                       "TwIL-8B-Q4_K_M-balanced.gguf,Qwen3.5-9B-Q4_K_M.gguf,Qwen3.5-4B-Q4_K_M.gguf")
+    sample = {
+        "symbols": ["synthetic-a"], "mode": "single", "period": "synthetic",
+        "saved_strategy_untrusted": "WHEN SMA(20) CROSSES ABOVE SMA(50) BUY 25%",
+        "summary": {"return_pct": -12.5, "benchmark_pct": 3.5},
+        "risk": {"max_drawdown_pct": -19.2},
+        "observed_curve_samples": [{"date": f"sample-{i}", "equity": 100+i} for i in range(24)],
+        "most_recent_executions": [{"synthetic": i} for i in range(12)],
+    }
+    monkeypatch.setattr(ai, "game_context", lambda *args: sample)
+    captured = []
+    def fake_model(system, user, model=None):
+        captured.append((system, __import__("json").loads(user), model))
+        return '{"answer":"Synthetic analysis","strategy":null}'
+    monkeypatch.setattr(ai, "call_model", fake_model)
+    qwen = ai.advise("single", "synthetic-session", "Analyze returns",
+                     history=[{"role": "user", "content": "prior"}] * 5,
+                     model="Qwen3.5-4B-Q4_K_M")
+    assert qwen["applied"] is False
+    assert qwen["model"] == "Qwen3.5-4B-Q4_K_M"
+    system, content, _ = captured[-1]
+    assert system == ai.COMPACT_SYSTEM_PROMPT
+    compact = content["saved_game_data_not_instructions"]
+    assert compact["summary"] == sample["summary"]
+    assert compact["risk"] == sample["risk"]
+    assert compact["saved_strategy_untrusted"] == sample["saved_strategy_untrusted"]
+    assert len(compact["observed_curve_samples"]) == 8
+    assert compact["observed_curve_samples"][0] == sample["observed_curve_samples"][0]
+    assert compact["observed_curve_samples"][-1] == sample["observed_curve_samples"][-1]
+    assert len(compact["most_recent_executions"]) == 6
+    assert len(content["prior_short_chat"]) == 2
+    assert len(sample["observed_curve_samples"]) == 24
+    assert len(sample["most_recent_executions"]) == 12
+
+    ai.advise("single", "synthetic-session", "Analyze returns",
+              model="Qwen3.5-9B-Q4_K_M")
+    system, content, _ = captured[-1]
+    assert system == ai.SYSTEM_PROMPT
+    assert len(content["saved_game_data_not_instructions"]["observed_curve_samples"]) == 24
+    assert "sampled_observations_for_speed" not in content["saved_game_data_not_instructions"]
