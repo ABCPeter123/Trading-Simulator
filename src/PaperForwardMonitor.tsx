@@ -8,6 +8,23 @@ import "./paperForward.css";
 const display=(n:number|null|undefined,suffix="")=>
   n==null||!Number.isFinite(n)?"N/A":n.toLocaleString(undefined,{maximumFractionDigits:2})+suffix;
 
+function EquityChart({marks,label}:{marks:PaperForwardDetail["marks"];label:string}){
+  if(marks.length<2)return null;
+  const values=marks.map(m=>m.value);
+  const bottom=Math.min(...values),top=Math.max(...values);
+  const span=Math.max(1,top-bottom);
+  const path=values.map((value,index)=>{
+    const x=8+684*index/(values.length-1);
+    const y=149-136*(value-bottom)/span;
+    return (index===0?"M":"L")+x.toFixed(2)+","+y.toFixed(2);
+  }).join(" ");
+  return <svg viewBox="0 0 704 165" className="pf-plot" role="img" aria-label={label}>
+    <title>{label}</title>
+    <path d={path} stroke="#6dd3ba" strokeWidth="2.5" fill="none"
+      strokeLinejoin="round" strokeLinecap="round"/>
+  </svg>;
+}
+
 export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string}){
   const {locale}=useI18n();
   const say=(en:string,zh:string)=>locale==="zh-CN"?zh:en;
@@ -119,6 +136,8 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
           onClick={()=>void update(()=>changePaperForwardState(selected.id,"retired"))}>
           {say("Retire study","归档本次研究")}</button>
       </div>}
+      <EquityChart marks={selected.marks}
+        label={say("Observed forward-paper equity, USD","观察到的前向模拟净值（美元）")}/>
       <div className="pf-scroll"><table><thead><tr>
         <th>{say("Session","日期")}</th><th>{say("Equity USD","净值（美元）")}</th>
         <th>{say("Drawdown","回撤")}</th><th>{say("Gross exposure","总敞口")}</th>
