@@ -222,10 +222,13 @@ def _basket_candidates(histories, eligible):
     # Group-screen every instrument. These baskets are formed from training
     # and validation only. Do not screen using held-out returns.
     by_group=defaultdict(list)
-    latest=min(int(histories[s]["bars"][-1]["time"]) for s in eligible)
-    # Fixed absolute training cutoff shared by every asset. Selection of
-    # basket membership cannot use the validation or test calendar years.
-    training_cutoff=latest-2*365*86400
+    # Earlier than the 60% training boundary of *every* screened symbol.
+    # An absolute two-year lookback could leak held-out years once MAX
+    # data spans decades, so anchor screening to actual observed history.
+    training_cutoff=min(
+        int(histories[s]["bars"][max(1,int(len(histories[s]["bars"])*.60)-1)]["time"])
+        for s in eligible
+    )
     for sym in eligible:
         item=assets.get_instrument(sym)
         group=pr._group(sym,item.kind)
