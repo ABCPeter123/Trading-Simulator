@@ -135,6 +135,21 @@ def test_multiple_unobserved_sessions_stop_instead_of_backfilling(isolated):
     assert detail["fills"]==[]
 
 
+def test_synthetic_short_sleeve_accumulates_borrow_costs(isolated,monkeypatch):
+    monkeypatch.setitem(globals(),"SYMBOLS",["spy","qqq","pltr","nvda"])
+    job=paper_job()
+    job["result"]["final_audit"]["selected"]["model"]="long_short_momentum"
+    monkeypatch.setattr(paper.walkforward_queue,"get_job",lambda uid:job)
+    created=paper.create("synthetic-signed",now=asof(510),loader=provider(510))
+    result=paper.process_one(created["id"],now=asof(511),loader=provider(511))
+    detail=paper.get_study(created["id"])
+    assert result["observed_sessions"]==1
+    assert any(fill["action"]=="short_sell" for fill in detail["fills"])
+    assert detail["financing_paid"]>0
+    assert detail["gross_exposure_pct"]>0
+    assert result["research_only"] and result["simulated_fills_only"]
+
+
 def test_private_http_endpoints_and_demo_isolation(isolated,monkeypatch):
     monkeypatch.setattr(paper,"create",lambda job_id,**kw:{"source_job_id":job_id,"status":"active"})
     client=TestClient(app)
