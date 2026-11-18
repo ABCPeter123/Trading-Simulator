@@ -29,6 +29,7 @@ export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>
   const [error,setError]=useState("");
   const refresh=useCallback(async()=>{
     const rows=await request<Job[]>("/live/research/universe/jobs");
+    if(!Array.isArray(rows))throw new Error("Research queue returned an invalid response.");
     setJobs(rows);
     return rows;
   },[]);
