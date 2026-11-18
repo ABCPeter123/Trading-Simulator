@@ -31,14 +31,18 @@ RANGE_CONFIG = {
     "2Y": ("2y", "1d", 800),
     "5Y": ("5y", "1d", 1600),
     "10Y": ("10y", "1d", 2800),
+    "15Y": ("15y", "1d", 4500),
+    "20Y": ("20y", "1d", 6000),
     "MAX": ("max", "1d", 30000),
 }
 COINBASE_SECONDS = {"1D": 300, "1W": 3600, "1M": 21600,
                     "3M": 86400, "6M": 86400, "1Y": 86400,
-                    "2Y": 86400, "5Y": 86400, "10Y": 86400, "MAX": 86400}
+                    "2Y": 86400, "5Y": 86400, "10Y": 86400,
+                    "15Y": 86400, "20Y": 86400, "MAX": 86400}
 COINBASE_DAYS = {"1D": 1, "1W": 7, "1M": 30, "3M": 90,
                  "6M": 183, "1Y": 365, "2Y": 730, "5Y": 1827,
-                 "10Y": 3653, "MAX": 365*13}
+                 "10Y": 3653, "15Y": 5479, "20Y": 7305,
+                 "MAX": 365*25}
 _client = httpx.Client(timeout=13, headers={"User-Agent": "TradingSimLocal/0.2"})
 _logger = logging.getLogger(__name__)
 _lock = Lock()
@@ -72,7 +76,7 @@ def coinbase_candles(asset: Instrument, window: str) -> list[dict[str, float | i
     chunk_end = end
     # Exchange endpoint caps pages at 300 bars. Paginate backward to cover
     # entire years; no fabricated candles for gaps in the source feed.
-    while chunk_end > start and len(rows_by_time) < 6500:
+    while chunk_end > start and len(rows_by_time) < 12000:
         chunk_start = max(start, chunk_end - timedelta(seconds=step * 290))
         try:
             resp = _client.get(
@@ -97,14 +101,30 @@ def coinbase_candles(asset: Instrument, window: str) -> list[dict[str, float | i
             except (TypeError, ValueError, OverflowError):
                 continue
         chunk_end = chunk_start - timedelta(seconds=1)
-        if len(rows_by_time) >= 6490:
+        if len(rows_by_time) >= 11990:
             break
-    return sorted(rows_by_time.values(), key=lambda bar: bar["time"])[-6500:]
+    return sorted(rows_by_time.values(), key=lambda bar: bar["time"])[-12000:]
 
 def yahoo_candles(asset: Instrument, window: str) -> list[dict[str, float | int]]:
     period, interval, limit = RANGE_CONFIG[window]
     try:
-        data = yf.Ticker(asset.ticker).history(period=period, interval=interval, auto_adjust=False, timeout=12)
+        # Yahoo/yfinance has no 15y/20y period labels. Use explicit UTC
+        # start/end dates, with the end exclusive, to request those windows.
+        # The provider can return less if the instrument listed later.
+        ticker = yf.Ticker(asset.ticker)
+        if window in ("15Y", "20Y"):
+            end = datetime.now(timezone.utc) + timedelta(days=1)
+            years = 15 if window == "15Y" else 20
+            try:
+                start = end.replace(year=end.year - years)
+            except ValueError:
+                start = end.replace(year=end.year - years, day=28)
+            data = ticker.history(start=start.date().isoformat(),
+                                  end=end.date().isoformat(), interval="1d",
+                                  auto_adjust=False, timeout=18)
+        else:
+            data = ticker.history(period=period, interval=interval,
+                                  auto_adjust=False, timeout=12)
     except Exception as exc:
         raise HTTPException(503, detail=f"Yahoo Finance price service unavailable: {type(exc).__name__}") from exc
     result = []
