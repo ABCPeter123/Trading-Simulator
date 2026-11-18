@@ -95,7 +95,8 @@ def test_private_version_rejects_unexecutable_margin_or_short(monkeypatch,tmp_pa
     with pytest.raises(HTTPException):
         versions.validate_spec({**config,"version":1})
     # Never permit a signed model to pass as an ordinary cash model.
-    monkeypatch.setattr(versions,"get",lambda x:{"id":x,"code":__import__("json").dumps(config),"name":"fixture"})
+    monkeypatch.setattr(versions,"get",lambda x:{"id":x,"code":__import__("json").dumps(config),"name":"fixture",
+                                              "mode":"portfolio_model","symbols":config["symbols"]})
     with pytest.raises(HTTPException):
         cash.create_tournament_season("fictional")
     with pytest.raises(HTTPException):
