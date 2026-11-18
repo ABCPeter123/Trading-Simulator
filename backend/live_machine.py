@@ -193,6 +193,21 @@ def deployments():
     with LOCK, db() as conn:
         return [_public_deploy(x) for x in _rows(conn,"SELECT * FROM deployments ORDER BY created_at DESC")]
 
+def get_deployment_source(deployment_id):
+    """Owner-only frozen source snapshot. Keep code out of ordinary status payloads."""
+    with LOCK, db() as conn:
+        row = _one(conn, "SELECT id,strategy_id,name,mode,code,symbols,resolution "
+                   "FROM deployments WHERE id=?", (deployment_id,))
+    if row is None:
+        raise HTTPException(404, detail="Deployment not found.")
+    if row["mode"] == "portfolio_model":
+        tournament.validate_spec(json.loads(row["code"]))
+    return {
+        **row, "symbols": json.loads(row["symbols"]),
+        "model_config": (json.loads(row["code"]) if row["mode"] == "portfolio_model" else None),
+    }
+
+
 def change_state(deployment_id, state):
     if state not in ("paper","live-monitor","paused","retired"):
         raise HTTPException(422, detail="Invalid deployment state.")
