@@ -235,6 +235,9 @@ def _public(row, details=False):
         "fx_conversion_fee_usd":round(state.get("fx_conversion_fee_usd",0.),2),
         "paper_pnl_cad":round(state["equity"]*state["fx_rate"]-state["initial_amount"],2)
             if state.get("capital_currency")=="CAD" and state.get("fx_rate") else None,
+        "current_drawdown_cad_pct":round(
+            (state["equity"]*state["fx_rate"]/state["peak_cad"]-1)*100,3)
+            if state.get("peak_cad") and state.get("fx_rate") else None,
     }
     if details:
         with closing(_db()) as c:
@@ -317,10 +320,6 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
     try:
         profile=broker_model.normalize(execution)
         broker_model.check_model(profile,config["model"])
-        if profile["broker"]=="wealthsimple" and any(
-                sym in __import__("backend.universe_research",fromlist=["LEVERAGED_IDS"]).LEVERAGED_IDS
-                for sym in symbols):
-            raise ValueError("Restricted leveraged and inverse ETF products need separate broker verification.")
         days, market, meta, fx = _portfolio(
             symbols, at, loader,need_fx=profile["capital_currency"]=="CAD"
         )
@@ -345,16 +344,21 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
            "financing_paid":0.,"transaction_fees_paid":0.,
            "broker":profile,"capital_currency":profile["capital_currency"],
            "initial_amount":float(capital),"fx_rate":spot,
-           "fx_conversion_fee_usd":fx_fee}
+           "fx_conversion_fee_usd":fx_fee,
+           "peak_cad":float(capital) if spot else None}
     with LOCK, closing(_db()) as c:
         c.execute("BEGIN IMMEDIATE")
         if c.execute("SELECT COUNT(*) FROM paper_studies").fetchone()[0]>=MAX_STUDIES:
             raise HTTPException(409,"Forward-paper study limit reached.")
-        existing = c.execute("SELECT * FROM paper_studies WHERE source_job=?",
-                             (job_id,)).fetchone()
-        if existing and existing["status"] == "active":
-            c.commit()
-            return _public(existing)
+        existing_rows=c.execute("SELECT * FROM paper_studies WHERE source_job=? "
+                                "AND status='active'",(job_id,)).fetchall()
+        for existing in existing_rows:
+            previous=json.loads(existing["state"])
+            if (previous.get("broker")==profile
+                and previous.get("initial_amount")==float(capital)
+                and float(existing["max_drawdown"])==max_drawdown_pct):
+                c.commit()
+                return _public(existing)
         uid = str(uuid4())
         c.execute("""INSERT INTO paper_studies(
             id,source_job,created_at,updated_at,status,config,symbols,capital,
@@ -476,6 +480,12 @@ def _advance(c, row, days, market, meta, fx_rates, at):
         gross=sum(abs(state["positions"][s]*closes[s]) for s in symbols)
         state["gross_pct"]=100*gross/state["equity"]
         drawdown=(state["equity"]/state["peak"]-1)*100
+        if rate is not None:
+            value_cad=state["equity"]*rate
+            state["peak_cad"]=max(state.get("peak_cad") or value_cad,value_cad)
+            funding_drawdown=(value_cad/state["peak_cad"]-1)*100
+        else:
+            funding_drawdown=drawdown
         if gross > 0 and state["equity"]/gross < MAINTENANCE:
             raise PaperRiskError("Margin maintenance floor breached; no future paper execution.")
         # Everything for this day is committed atomically with the state.
@@ -493,7 +503,7 @@ def _advance(c, row, days, market, meta, fx_rates, at):
         row=dict(row)
         row["last_session"]=day
         state["since_signal"]+=1
-        if drawdown <= -float(row["max_drawdown"]):
+        if funding_drawdown <= -float(row["max_drawdown"]):
             row["status"]="paused"
             row["last_error"]="Paper drawdown stop reached. Inspect the paper ledger."
             break
