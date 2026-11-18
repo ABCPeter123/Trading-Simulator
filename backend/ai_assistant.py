@@ -110,7 +110,7 @@ _FAST_PATTERNS = {
     "allocation": r"\b(allocation|allocations|exposure|holdings?|positions?|concentration|diversif(?:y|ication)|weights?|portfolio|cash|invested)\b|仓位|持仓|配置|资产|现金|集中度|分散",
     "risk": r"\b(risk|drawdown|volatility|downside|loss|losing|stop.loss|take.profit|worst|stress)\b|风险|回撤|亏损|波动|止损|止盈",
     "curve": r"\b(curve|graph|chart|timeline|trajectory|trend|over.time|period|monthly|weekly|rolling)\b|曲线|图表|走势|时间|月度|周度|滚动",
-    "performance": r"\b(performance|return|profit|benchmark|underperform|outperform|gain|compare|comparison|why|analy[sz]e|review)\b|表现|收益|跑输|跑赢|回报|对比|分析|复盘",
+    "performance": r"\b(performance|returns?|profits?|benchmark|underperform(?:ed|ing)?|outperform(?:ed|ing)?|gains?|compare|comparison|excess)\b|表现|收益|跑输|跑赢|回报|对比|分析|复盘",
 }
 
 
@@ -126,8 +126,14 @@ def _fast_question_topics(question, history=()):
             if item.get("role") == "user" and isinstance(item.get("content"), str):
                 text += " " + item["content"][:200]
                 break
-    return {name for name, pattern in _FAST_PATTERNS.items()
-            if re.search(pattern, text, flags=re.I)}
+    topics = {name for name, pattern in _FAST_PATTERNS.items()
+              if re.search(pattern, text, flags=re.I)}
+    # A generic "why?" merits the performance overview. A specific
+    # portfolio/risk/trade question should not acquire unrelated data just
+    # because it starts with "why" or "review".
+    if not topics and re.search(r"\b(why|analy[sz]e|review)\b", text, flags=re.I):
+        topics.add("performance")
+    return topics
 
 
 def _fast_curve_selection(samples, limit):
