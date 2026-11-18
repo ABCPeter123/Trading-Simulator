@@ -13,7 +13,7 @@ import signal
 import sys
 import time
 
-from . import research_queue, universe_research
+from . import research_queue, universe_research, strategy_period_queue
 
 
 def main(argv=None):
@@ -34,7 +34,9 @@ def main(argv=None):
     if hasattr(signal,"SIGTERM"):signal.signal(signal.SIGTERM,shutdown)
     while not stop:
         try:
-            job=universe_research.process_one()
+            job=strategy_period_queue.process_one()
+            if job is None:
+                job=universe_research.process_one()
             if job is None:
                 job=research_queue.process_one()
             if job is not None:
