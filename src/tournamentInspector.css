@@ -1,0 +1,20 @@
+.tsi{margin:16px 0;padding:16px;border-radius:10px;background:#101e2a;border:1px solid #36556a;min-width:0;color:#e4eff6;font-size:12px}
+.tsi-header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:start;gap:12px}
+.tsi-header h4{font-size:15px;margin:0 0 6px;color:#e5f5ff}
+.tsi-header p{margin:0;max-width:660px;line-height:1.65;color:#afc6d6}
+.tsi-header>a{color:#89d8e7;text-decoration:underline;font-size:11px;line-height:1.5}
+.tsi-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:15px 0}
+.tsi-fields>div{background:#1a3040;border:1px solid #385466;border-radius:7px;padding:10px;min-width:0}
+.tsi-fields small{display:block;color:#9cb6c8;font-size:10px;margin-bottom:6px}
+.tsi-fields strong{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.tsi h5{font-size:13px;margin:16px 0 8px}
+.tsi-rules{list-style:decimal;padding:0 0 0 20px;margin:0;display:flex;flex-direction:column;gap:9px}
+.tsi-rules li{padding-left:3px;line-height:1.65;color:#cedce8}
+.tsi .tsi-note{font-size:11px;line-height:1.65;color:#aec3d2;margin:12px 0}
+.tsi .tsi-code{margin:13px 0 0;border:1px solid #385468;border-radius:8px;overflow:hidden}
+.tsi .tsi-code summary{padding:11px 13px;background:#213749;color:#e1eef7;font-size:12px;cursor:pointer;font-weight:700}
+.tsi-code-actions{padding:9px 11px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:9px;border-bottom:1px solid #263d50;color:#9cb8c8;font-size:10px}
+.tsi-code-actions button{background:#224f60;color:#e3faff;border:1px solid #488c9d;border-radius:6px;padding:7px 10px;cursor:pointer;font-size:11px}
+.tsi pre{margin:0;background:#0b1824;color:#d5e8f4;padding:13px;font-family:ui-monospace,Consolas,monospace;font-size:11px;line-height:1.7;white-space:pre;max-width:100%;overflow-x:auto}
+.tsi-copy-status{color:#8fe7b7!important;font-size:11px}
+@media(max-width:600px){.tsi{padding:11px}.tsi-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.tsi pre{font-size:10px}}
