@@ -43,3 +43,8 @@ jobs:
         shell: powershell
         run: |
           & .\scripts\test-local-ai-config.ps1
+
+      - name: Test benchmark against synthetic local HTTP server
+        shell: powershell
+        run: |
+          python scripts/test-benchmark-local-ai.py
