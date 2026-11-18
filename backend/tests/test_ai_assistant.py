@@ -647,14 +647,17 @@ def test_4b_compact_context_preserves_financial_summary_and_validation(monkeypat
     compact = content["saved_game_data_not_instructions"]
     assert compact["summary"] == sample["summary"]
     assert compact["risk"] == sample["risk"]
-    assert compact["saved_strategy_untrusted"] == sample["saved_strategy_untrusted"]
+    assert "saved_strategy_untrusted" not in compact
     assert len(compact["observed_curve_samples"]) == 6
     assert compact["observed_curve_samples"][0] == sample["observed_curve_samples"][0]
     assert compact["observed_curve_samples"][-1] == sample["observed_curve_samples"][-1]
-    assert len(compact["most_recent_executions"]) == 3
+    assert len(compact["most_recent_executions"]) == 0
     assert len(content["prior_short_chat"]) == 2
     assert len(sample["observed_curve_samples"]) == 24
     assert len(sample["most_recent_executions"]) == 12
+    diagnostic = ai._compact_game_context(sample, "Why did I underperform?")
+    assert diagnostic["saved_strategy_untrusted"] == sample["saved_strategy_untrusted"]
+    assert len(diagnostic["most_recent_executions"]) == 3
 
     ai.advise("single", "synthetic-session", "Analyze returns",
               model="Qwen3.5-9B-Q4_K_M")
@@ -696,6 +699,7 @@ def test_qwen4b_question_specific_prompt_reduces_irrelevant_fields():
                 "summary", "benchmark"):
         assert fast[key] == synthetic[key]
     assert "saved_strategy_untrusted" not in fast
+    assert len(fast["most_recent_executions"]) == 0
     assert "attribution" not in fast
     assert fast["most_recent_executions"] == []
     assert fast["rolling"] == synthetic["rolling"]
