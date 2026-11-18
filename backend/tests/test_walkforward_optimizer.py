@@ -86,6 +86,15 @@ def test_expanding_walkforward_seals_final_audit():
     assert [x["out_of_sample_return_pct"] for x in normal["walk_forward"]["folds"]]==[
         x["out_of_sample_return_pct"] for x in revised["walk_forward"]["folds"]]
     assert normal["final_audit"]["selected"]==revised["final_audit"]["selected"]
+    # Alternative drawdown limits MUST NOT depend on final-audit candles.
+    assert normal["model_search"]["pre_audit_risk_frontier"]==revised["model_search"]["pre_audit_risk_frontier"]
+    frontier=normal["model_search"]["pre_audit_risk_frontier"]
+    assert {25.,35.,45.,55.}.issubset(set(frontier["risk_limits_pct"]))
+    assert frontier["cannot_reselect_final_audit"] is True
+    assert all(x["no_final_audit_replay"] and x["not_used_for_selection"]
+               for x in frontier["experiments"])
+    assert normal["eligibility_policy"]["min_average_invested_pct"]==50
+
     # The previously tournament-selected source is a retrospective reference.
     # Comparing it must NOT affect prior-only walk-forward selections.
     source=normal["final_audit"]["original_tournament_reference"]
@@ -266,3 +275,77 @@ def test_reference_preserves_advanced_and_multi_sleeve_models():
     assert blend_config["sleeves"]==[
         {"model":"equal_weight","weight_pct":45.0},
         {"model":"trend_filter","weight_pct":55.0}]
+
+
+
+def test_growth_excess_and_investment_are_hard_training_gates():
+    settings=optimizer.validate_request(request())
+    ledger={"trades":5,"average_invested_pct":65.,"max_drawdown_pct":-10.,
+            "margin_calls":0}
+    row={"train":ledger,"quality":{"cagr_pct":4.},
+         "score_details":{"total":10.}}
+    assert optimizer._gate(row,settings)=="minimum_training_growth_not_met"
+    row["quality"]["cagr_pct"]=12.
+    ledger["average_invested_pct"]=35.
+    assert optimizer._gate(row,settings)=="minimum_investment_exposure_not_met"
+    ledger["average_invested_pct"]=65.
+    assert optimizer._gate(row,settings)=="qualified"
+    ledger["max_drawdown_pct"]=-27.
+    assert optimizer._gate(row,{**settings,"max_drawdown_pct":25.})=="max_drawdown_limit"
+    assert optimizer._gate(row,{**settings,"max_drawdown_pct":35.})=="qualified"
+    ledger["max_drawdown_pct"]=-10.
+    assert optimizer._gate(
+        row,{**settings,"risk_free_pct":10.,"minimum_excess_cagr_pct_points":5.}
+    )=="minimum_excess_growth_not_met"
+
+
+def test_no_candidate_returns_rejection_report_without_opening_final_audit():
+    settings=request(minimum_training_cagr_pct=100.,
+                     min_average_invested_pct=100.)
+    recorded=[]
+    def loader(symbol):
+        recorded.append(symbol)
+        return {"bars":synthetic(days=1200),
+                "source":"Independent synthetic market fixture"}
+    study=optimizer.analyze(settings,loader=loader)
+    assert study["status"]=="no_eligible_candidate"
+    assert study["no_final_audit_performed"] is True
+    assert study["selection_outcome"]=="no_qualified_strategy"
+    assert study["rejection_diagnostics"]["eligible_count"]==0
+    assert "minimum_training_growth_not_met" in study["rejection_diagnostics"]["rejection_reasons"]
+    frontier=study["model_search"]["pre_audit_risk_frontier"]
+    assert len(frontier["experiments"])>=4
+    assert all(x["pre_audit_final_training_eligible_count"]==0 for x in frontier["experiments"])
+    assert all(x["status"]=="incomplete_pre_audit_folds"
+               for x in frontier["experiments"])
+    assert "final_audit" not in study
+    assert recorded==["spy","qqq","ief"]
+
+
+def test_configuration_rejects_out_of_bounds_training_gates():
+    for bad in (
+        request(minimum_training_cagr_pct=101),
+        request(min_average_invested_pct=-1),
+        request(minimum_excess_cagr_pct_points=-2),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            optimizer.validate_request(bad)
+        assert exc.value.status_code==422
+
+
+def test_original_source_reference_uses_exact_updated_training_gates():
+    from backend import tournament_reference
+    cfg={"max_drawdown_pct":35,"risk_free_pct":3,
+         "minimum_training_cagr_pct":10,
+         "minimum_excess_cagr_pct_points":0,
+         "min_average_invested_pct":50}
+    snapshot={"trades":7,"average_invested_pct":45.,
+              "max_drawdown_pct":-5.,"margin_calls":0}
+    scoring={"total":10.}
+    assert tournament_reference.training_eligibility(
+        snapshot,scoring,cfg,{"cagr_pct":12.}
+    )=="minimum_investment_exposure_not_met"
+    snapshot["average_invested_pct"]=60.
+    assert tournament_reference.training_eligibility(
+        snapshot,scoring,cfg,{"cagr_pct":12.}
+    )=="qualified"
