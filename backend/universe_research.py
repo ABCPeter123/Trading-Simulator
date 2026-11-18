@@ -446,9 +446,12 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
     # can override the explicitly validation-only ranking.
     if mode=="high_performance":
         for item in ranked:
-            item["pareto_optimal"]=not any(
-                other is not item and objectives.dominates(other,item)
-                for other in ranked)
+            quality=item["validation_objectives"]
+            item["pareto_optimal"]=(
+                quality["cagr_pct"] is not None and
+                quality["excess_sharpe"] is not None and
+                not any(other is not item and objectives.dominates(other,item)
+                        for other in ranked))
     # Expose the best qualifying representative of each model family before
     # filling additional spots by validation score. This is a *diversity-
     # constrained shortlist*, never mislabel it as global top-ten by score.
