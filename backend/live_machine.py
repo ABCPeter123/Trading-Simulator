@@ -23,7 +23,7 @@ from fastapi import HTTPException
 from .arcade_dsl import compile_rules, matches, indicator
 from .portfolio_dsl import compile_portfolio_rules
 from .strategy_library import get as get_saved_strategy
-from . import portfolio_research as pr, tournament_strategies as tournament
+from . import portfolio_research as pr, tournament_strategies as tournament, advanced_portfolio_research as adv
 from .stochastic import probability_up
 
 logger = logging.getLogger(__name__)
@@ -148,6 +148,8 @@ def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
         spec=tournament.validate_spec(json.loads(item["code"]))
         if resolution!="1d":
             raise HTTPException(422, detail="Tournament models support daily monitoring only.")
+        if spec.get("research_only"):
+            raise HTTPException(422, detail="Synthetic short-share and margin strategies are historical research only, not deployable to the current live machine.")
         if spec.get("restricted_research") or spec.get("short_proxy_research"):
             raise HTTPException(422, detail="Leveraged and inverse ETF research is not approved for live signal monitoring.")
         if max_allocation_pct < spec["max_position_pct"]:
@@ -528,8 +530,11 @@ def _evaluate_portfolio_model(dep, now, source):
         if len(observable)<pr.WARMUP:
             raise ValueError("Not enough observations for delayed allocation")
         closes={s:[float(by_symbol[s][d]["close"]) for d in observable] for s in symbols}
-        weights=pr._weights(spec["model"],symbols,closes,len(observable),
-                            metadata,spec["max_position_pct"]/100)
+        allocation=(adv.weights if spec["model"] in adv.MODELS else pr._weights)
+        weights=allocation(spec["model"],symbols,closes,len(observable),
+                           metadata,spec["max_position_pct"]/100)
+        if any(weight<0 for weight in weights.values()):
+            raise ValueError("A short allocation is not a supported live broker signal")
         marks={s:float(by_symbol[s][shared[-1]]["close"]) for s in symbols}
         with LOCK,db() as conn:
             history_rows=_rows(conn,"SELECT f.asset_id,f.side,f.quantity FROM fills f "
