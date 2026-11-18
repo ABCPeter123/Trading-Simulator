@@ -43,6 +43,7 @@ def coverage(asset_id:str,window:str=Query("1Y"),resolution:str=Query("1d")):
 def health():
     _private()
     entries=market_ingestion.list_subscriptions()
+    worker = market_ingestion.collector_health()
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).timestamp()
     updates = []
@@ -62,11 +63,14 @@ def health():
             "age_seconds": age_seconds,
             "interval_seconds": expected_seconds,
             "sync_state": ("disabled" if not entry["active"] else
+                           "collector_unverified" if worker["state"] in ("unverified","stale") else
                            "error" if entry["failure_code"] else
                            "not_started" if entry["last_success"] is None else
-                           "healthy"),
+                           "last_sync_succeeded"),
         })
     return {"subscriptions":len(entries),
+            "collector": worker,
+            "delivery_guaranteed": False,
             "active":sum(bool(x["active"]) for x in entries),
             "errors":sum(bool(x["active"] and x["failure_code"]) for x in entries),
             "last_updates":updates}
