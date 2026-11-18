@@ -50,11 +50,29 @@ def validate_request(payload):
         raise HTTPException(422, "Execution delay must be one or two shared sessions.")
     if type(slippage) not in (int, float) or not math.isfinite(slippage) or not 0 <= slippage <= 100:
         raise HTTPException(422, "Slippage must be between zero and 100 basis points.")
+    standard = spec["model"] in pr.MODELS
+    exposure_supplied = any(k in payload for k in
+                            ("target_investment_pct","equity_class_cap_pct","redistribute_excess"))
+    if exposure_supplied and not standard:
+        raise HTTPException(422,"Custom investment and equity concentration targets currently apply to long-only standard models. Advanced models retain their own leverage and hedge budgets.")
+    target = payload.get("target_investment_pct",95.)
+    equity = payload.get("equity_class_cap_pct",70.)
+    redistribute = payload.get("redistribute_excess",False)
+    if standard:
+        if type(target) not in (int,float) or not math.isfinite(target) or not 5<=target<=100:
+            raise HTTPException(422,"Investment target must be between 5% and 100%.")
+        if type(equity) not in (int,float) or not math.isfinite(equity) or not 10<=equity<=100:
+            raise HTTPException(422,"Equity category cap must be between 10% and 100%.")
+        if type(redistribute) is not bool:
+            raise HTTPException(422,"Redistribution setting must be a boolean.")
     return {
         "spec": spec, "start_date": start_date.isoformat() if start_date else None,
         "end_date": end_date.isoformat() if end_date else None,
         "max_position_pct": float(cap), "delay_sessions": delay,
         "slippage_bps": float(slippage),
+        **({"target_investment_pct":float(target),
+            "equity_class_cap_pct":float(equity),
+            "redistribute_excess":redistribute} if standard else {}),
     }
 
 
@@ -71,13 +89,16 @@ def _period_metrics(curve, capital):
             if monthly:
                 previous = monthly[-1]
                 previous["return_pct"] = round((previous["ending_equity"] / base - 1)*100, 4)
+                previous["pnl_usd"] = round(previous["ending_equity"]-base,2)
                 base = previous["ending_equity"]
             monthly.append({"month": month, "ending_equity": float(bar["value"]),
-                            "return_pct": None, "observed_sessions": 0})
+                            "return_pct": None, "pnl_usd":None,
+                            "observed_sessions": 0})
             period = month
         monthly[-1]["ending_equity"] = float(bar["value"])
         monthly[-1]["observed_sessions"] += 1
     monthly[-1]["return_pct"] = round((monthly[-1]["ending_equity"] / base - 1)*100, 4)
+    monthly[-1]["pnl_usd"] = round(monthly[-1]["ending_equity"]-base,2)
     # Only full rolling market-session windows are eligible for a worst-case value.
     amounts = [float(bar["value"]) for bar in curve]
     observed = [capital, *amounts]
@@ -149,6 +170,10 @@ def analyze(params, *, loader=None, report=None):
     broker={**universe.COST_ASSUMPTIONS,
             "delay_sessions":params["delay_sessions"],
             "slippage_bps":params["slippage_bps"]}
+    if spec["model"] in pr.MODELS:
+        broker.update(target_investment_pct=params["target_investment_pct"],
+                      equity_class_cap_pct=params["equity_class_cap_pct"],
+                      redistribute_excess=params["redistribute_excess"])
     segment=adv.segment if spec["model"] in adv.MODELS else pr._segment
     metrics=segment(spec["model"],symbols,market,metadata,start,end,
                     params["max_position_pct"]/100,broker=broker)
