@@ -366,7 +366,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               <p>{chosen.research_only?
                 t("Short and margin strategies can run in the historical signed-position research engine. Click Run this strategy in historical research to see simulated fills, equity changes and risk. Cash-only replay and live broker monitoring do not support these exposures."):
                 t("Supported cash-funded models can be loaded into simulation and paper monitoring. Leveraged and inverse ETFs are separately restricted for live monitoring.")}</p>
-              {chosen.validation_objectives&&<div className="ur-objective-results">
+              {result.research_objective==="high_performance"&&chosen.validation_objectives&&<div className="ur-objective-results">
                 <h4>{t("Return and risk objectives")}</h4>
                 <div className="ur-kpis">
                   <div><small>{t("Validation CAGR")}</small>
