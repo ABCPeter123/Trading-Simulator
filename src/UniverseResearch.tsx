@@ -48,7 +48,9 @@ type Job={id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";c
   progress:number;stage:string;scanned:number;eligible:number;error_code:string|null;
   params:{scope:string;delay_sessions:1|2;max_drawdown_pct:number;max_position_pct:number;
     research_objective?:"balanced"|"high_performance";target_cagr_pct?:number;
-    target_sharpe?:number;risk_free_pct?:number};result:Outcome|null};
+    target_sharpe?:number;risk_free_pct?:number;
+    target_investment_pct?:number;equity_class_cap_pct?:number;
+    redistribute_excess?:boolean};result:Outcome|null};
 import {validatedPercent} from "./validatedPercent";
 
 const pct=(x:number)=>Number.isFinite(x)?x.toFixed(2)+"%":"N/A";
@@ -65,6 +67,9 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   const [targetCagr,setTargetCagr]=useState("55");
   const [targetSharpe,setTargetSharpe]=useState("2");
   const [riskFree,setRiskFree]=useState("3");
+  const [targetInvestment,setTargetInvestment]=useState("100");
+  const [equityLimit,setEquityLimit]=useState("100");
+  const [redistributeUnused,setRedistributeUnused]=useState(true);
   const [jobs,setJobs]=useState<Job[]>([]);
   const [active,setActive]=useState<Job|null>(null);
   const [pick,setPick]=useState(0);
@@ -108,10 +113,15 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
       const target_cagr_pct=validatedPercent(targetCagr,"Annual growth objective",10,100);
       const target_sharpe=validatedPercent(targetSharpe,"Excess Sharpe objective",.5,5);
       const risk_free_pct=validatedPercent(riskFree,"Risk-free annual return assumption",0,15);
+      const target_investment_pct=validatedPercent(targetInvestment,"Target invested percentage",5,100);
+      const equity_class_cap_pct=validatedPercent(equityLimit,"Equity class exposure limit",10,100);
       const job=await request<Job>("/live/research/universe/jobs",{method:"POST",
         body:JSON.stringify({scope,delay_sessions:delay,
           max_drawdown_pct,max_position_pct,research_objective:objective,
-          target_cagr_pct,target_sharpe,risk_free_pct})});
+          target_cagr_pct,target_sharpe,risk_free_pct,
+          target_investment_pct:objective==="high_performance"?target_investment_pct:95,
+          equity_class_cap_pct:objective==="high_performance"?equity_class_cap_pct:70,
+          redistribute_excess:objective==="high_performance"&&redistributeUnused})});
       setActive(job);setPick(0);await refresh();
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);}
@@ -233,6 +243,18 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
           <label>{t("Assumed annual risk-free rate (%)")}
             <input type="number" min="0" max="15" step="0.25" value={riskFree}
               onChange={e=>setRiskFree(e.target.value)}/></label>
+          <label>{t("Target invested capital (%)")}
+            <input type="number" min="5" max="100" step="1" value={targetInvestment}
+              onChange={e=>setTargetInvestment(e.target.value)}/></label>
+          <label>{t("Equity category exposure cap (%)")}
+            <input type="number" min="10" max="100" step="1" value={equityLimit}
+              onChange={e=>setEquityLimit(e.target.value)}/></label>
+          <label className="ur-checkbox-label">
+            <input type="checkbox" checked={redistributeUnused}
+              onChange={e=>setRedistributeUnused(e.target.checked)}/>
+            {t("Redistribute unused weight among eligible assets")}
+          </label>
+          <p>{t("Full-investment settings apply only to the five standard long-only models; advanced leverage and hedge models retain their own limits.")}</p>
           <p>{t("Cash rate is held constant for metric calculations; it is not credited as portfolio income.")}</p>
         </div>}
         <button className="ur-primary" disabled={busy} onClick={()=>void run()}>{t("Run universe-wide scan")}</button>
