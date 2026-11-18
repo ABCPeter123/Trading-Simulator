@@ -23,6 +23,7 @@ from fastapi import HTTPException
 from .arcade_dsl import compile_rules, matches, indicator
 from .portfolio_dsl import compile_portfolio_rules
 from .strategy_library import get as get_saved_strategy
+from . import portfolio_research as pr, tournament_strategies as tournament
 from .stochastic import probability_up
 
 logger = logging.getLogger(__name__)
@@ -134,18 +135,33 @@ def deploy(strategy_id: str, state: str = "paper", capital: float = 100000.,
         raise HTTPException(422, detail="Start in paper or live-monitor mode only.")
     if not (math.isfinite(capital) and 100 <= capital <= 1e10):
         raise HTTPException(422, detail="Reference capital must be between 100 and 10 billion.")
-    if not (math.isfinite(max_allocation_pct) and 0 < max_allocation_pct <= 25):
-        raise HTTPException(422, detail="Allocation cap must be between 0 and 25%.")
+    if not (math.isfinite(max_allocation_pct) and 0 < max_allocation_pct <= 50):
+        raise HTTPException(422, detail="Allocation cap must be between 0 and 50%.")
     if not 1 <= max_daily_signals <= 20:
         raise HTTPException(422, detail="Daily signal cap must be 1-20.")
     if not math.isfinite(max_realized_loss_pct) or not 0.5<=max_realized_loss_pct<=25:
         raise HTTPException(422,detail="Realized-loss stop must be between 0.5% and 25%.")
     if resolution not in ("1d","1h","15m"):
         raise HTTPException(422,detail="Monitoring interval must be 1d, 1h or 15m.")
-    item = get_saved_strategy(strategy_id)
-    if item["mode"] == "single":
+    item = tournament.get(strategy_id) if strategy_id.startswith("tm-") else get_saved_strategy(strategy_id)
+    if item["mode"] == "portfolio_model":
+        spec=tournament.validate_spec(json.loads(item["code"]))
+        if resolution!="1d":
+            raise HTTPException(422, detail="Tournament models support daily monitoring only.")
+        if spec.get("restricted_research") or spec.get("short_proxy_research"):
+            raise HTTPException(422, detail="Leveraged and inverse ETF research is not approved for live signal monitoring.")
+        if max_allocation_pct < spec["max_position_pct"]:
+            raise HTTPException(422, detail="Increase the live position cap to match the imported model, or test a more conservative model.")
+        if max_daily_signals < len(spec["symbols"]):
+            raise HTTPException(422, detail="Daily signal limit must cover every asset in the tournament basket.")
+        rules = [spec]
+    elif item["mode"] == "single":
+        if max_allocation_pct>25:
+            raise HTTPException(422, detail="Rule-based strategies allow at most 25% per signal.")
         rules = compile_rules(item["code"])
     else:
+        if max_allocation_pct>25:
+            raise HTTPException(422, detail="Rule-based strategies allow at most 25% per signal.")
         rules = compile_portfolio_rules(item["code"], set(item["symbols"]))
     if not rules:
         raise HTTPException(422, detail="Strategy must include at least one rule.")
@@ -422,9 +438,146 @@ def _set_heartbeat():
         conn.execute("INSERT INTO runtime(name,value) VALUES('worker_heartbeat',?) "
           "ON CONFLICT(name) DO UPDATE SET value=excluded.value",(now,))
 
+def _evaluate_portfolio_model(dep, now, source):
+    """One portfolio-wide rebalance using the exact research weight algorithm.
+
+    Generates proposed orders only. Confirmed journal fills tied to this
+    deployment provide the known quantities; no brokerage account is queried.
+    A stale or incomplete member blocks the *entire* portfolio decision.
+    """
+    from .market import history
+    from .assets import get_instrument
+    from . import universe_research as universe
+    spec=tournament.validate_spec(json.loads(dep["code"]))
+    symbols=spec["symbols"]
+    now_iso=now.isoformat()
+    try:
+        with LOCK,db() as conn:
+            last=_one(conn,"SELECT bar_time,evaluated_at FROM evaluations WHERE deployment_id=? "
+                      "AND symbol='portfolio' ORDER BY bar_time DESC LIMIT 1",(dep["id"],))
+        # One decision per latest shared candle, including after a worker restart.
+        if last and datetime.fromisoformat(last["evaluated_at"]).astimezone(NY).date()==now.astimezone(NY).date():
+            return
+        if last and (now-datetime.fromisoformat(last["evaluated_at"]))<timedelta(hours=18):
+            return
+        if any(s in universe.LEVERAGED_IDS or s in universe.SHORT_PROXY_IDS for s in symbols):
+            raise ValueError("Restricted product in live model")
+        by_symbol={}
+        metadata={}
+        for symbol in symbols:
+            item=get_instrument(symbol)
+            if item.kind not in ("Stocks","ETFs") or item.currency!="USD" or not item.tradable:
+                raise ValueError("Unsupported cash-market instrument")
+            response=(source or history)(symbol,"5Y")
+            if response.get("is_demo") or response.get("offline_cache"):
+                raise ValueError("Unverified price history")
+            valid=_last_complete(response["bars"],now)
+            if len(valid)<pr.WARMUP+1:
+                raise ValueError("Insufficient completed daily price history")
+            series={}
+            previous=-1
+            for bar in valid:
+                timestamp=int(bar["time"])
+                day=datetime.fromtimestamp(timestamp,NY).date().isoformat()
+                values=[float(bar[k]) for k in ("open","close","high","low")]
+                if timestamp<=previous or not all(math.isfinite(v) and v>0 for v in values):
+                    raise ValueError("Invalid daily market data")
+                if values[3]>min(values[0],values[1]) or values[2]<max(values[0],values[1]):
+                    raise ValueError("Invalid daily candle")
+                previous=timestamp
+                series[day]=bar
+            last_day=max(series)
+            age=(now.astimezone(NY).date()-datetime.fromisoformat(last_day).date()).days
+            if not 1<=age<=5:
+                raise ValueError("Missing a fresh completed daily candle")
+            by_symbol[symbol]=series
+            metadata[symbol]={"group":pr._group(symbol,item.kind),"kind":item.kind,
+                              "currency":item.currency,"spread_bps":float(item.spread_bps)}
+        latest_days={max(b) for b in by_symbol.values()}
+        if len(latest_days)!=1:
+            raise ValueError("Portfolio symbols have unequal latest completed sessions")
+        shared=sorted(set.intersection(*(set(rows) for rows in by_symbol.values())))
+        if len(shared)<pr.WARMUP or shared[-1]!=next(iter(latest_days)):
+            raise ValueError("Insufficient synchronized completed sessions")
+        bar_time=max(int(by_symbol[s][shared[-1]]["time"]) for s in symbols)
+        if last:
+            if int(last["bar_time"])==bar_time:
+                return
+            previous_days=[d for d in shared if max(int(by_symbol[s][d]["time"])
+                                                   for s in symbols)==int(last["bar_time"])]
+            if previous_days and len(shared)-1-shared.index(previous_days[0])<spec["rebalance_sessions"]:
+                return
+        # delay_sessions=2 intentionally lags the information set by one
+        # extra common close. Future bar prices are never used.
+        observable=shared if spec["delay_sessions"]==1 else shared[:-1]
+        if len(observable)<pr.WARMUP:
+            raise ValueError("Not enough observations for delayed allocation")
+        closes={s:[float(by_symbol[s][d]["close"]) for d in observable] for s in symbols}
+        weights=pr._weights(spec["model"],symbols,closes,len(observable),
+                            metadata,spec["max_position_pct"]/100)
+        marks={s:float(by_symbol[s][shared[-1]]["close"]) for s in symbols}
+        with LOCK,db() as conn:
+            history_rows=_rows(conn,"SELECT f.asset_id,f.side,f.quantity FROM fills f "
+                                "JOIN signals g ON g.id=f.signal_id "
+                                "WHERE g.deployment_id=?",(dep["id"],))
+        quantities={s:0. for s in symbols}
+        for fill in history_rows:
+            if fill["asset_id"] in quantities:
+                quantities[fill["asset_id"]]+=(1 if fill["side"]=="buy" else -1)*float(fill["quantity"])
+        recommendations=[]
+        for symbol in symbols:
+            target_shares=math.floor(float(dep["capital"])*weights[symbol]/marks[symbol])
+            held=max(0,round(quantities[symbol],8))
+            change=target_shares-held
+            if abs(change)<1 or abs(change)*marks[symbol]<1:
+                continue
+            recommendations.append((symbol,"buy" if change>0 else "sell",
+                                    abs(change)*marks[symbol],weights[symbol]*100,held,target_shares))
+        # Sells first. The UI makes no assumptions about the broker's
+        # available cash and manual fills remain the sole source of holdings.
+        recommendations.sort(key=lambda x:(x[1]!="sell",x[0]))
+        with LOCK,db() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if _one(conn,"SELECT id FROM evaluations WHERE deployment_id=? AND symbol='portfolio' "
+                    "AND bar_time=?",(dep["id"],bar_time)):
+                conn.rollback()
+                return
+            evaluation_id=str(uuid4())
+            conn.execute("INSERT INTO evaluations VALUES(?,?,?,?,?,?,?)",
+                         (evaluation_id,dep["id"],"portfolio",bar_time,now_iso,
+                          "signal" if recommendations else "no-action",
+                          _json({"model":spec["model"],"target_weights":weights,
+                                 "confirmed_holdings":quantities,
+                                 "price_date":shared[-1],"delay_sessions":spec["delay_sessions"]})))
+            for symbol,side,notional,target,held,desired in recommendations[:dep["max_daily_signals"]]:
+                allocation=min(float(dep["max_allocation_pct"]),notional/float(dep["capital"])*100)
+                conn.execute("INSERT INTO signals VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (str(uuid4()),dep["id"],evaluation_id,"portfolio",symbol,side,
+                     allocation,round(notional,2),marks[symbol],bar_time,now_iso,
+                     _next_expiry(now),"pending",
+                     f"Portfolio rebalance ({spec['model']}): target {target:.2f}% / "
+                     f"{desired:g} shares; {held:g} shares confirmed from this deployment. "
+                     "Indicative only. Verify broker holdings, cash, spreads, FX, "
+                     "actual open price and order suitability before manually trading.",None))
+            conn.execute("UPDATE deployments SET last_evaluated_at=?,last_error=NULL WHERE id=?",
+                         (now_iso,dep["id"]))
+            conn.commit()
+        resolve_alert("feed:"+dep["id"]+":portfolio")
+    except Exception as exc:
+        detail=type(exc).__name__+": portfolio data unavailable, stale or unsupported"
+        with LOCK,db() as conn:
+            conn.execute("UPDATE deployments SET last_error=? WHERE id=?",(detail,dep["id"]))
+        record_alert("feed:"+dep["id"]+":portfolio","critical",
+                     "Portfolio model evaluation unavailable",
+                     "No new portfolio signals. Verify freshness and compatibility of every asset.")
+        logger.warning("Private portfolio model evaluation failed: %s",type(exc).__name__)
+
+
 def _evaluate_deployment(dep,now,source):
     from .market import history
     from .assets import get_instrument
+    if dep["mode"]=="portfolio_model":
+        return _evaluate_portfolio_model(dep,now,source)
     allowed=set(json.loads(dep["symbols"]))
     if dep["mode"]=="single":
         symbol=json.loads(dep["symbols"])[0]
