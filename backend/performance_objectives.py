@@ -112,6 +112,58 @@ def score(validation, curve, risk_free_pct=3., *, drawdown_limit=30.,
     return round(value,4),metrics,stability
 
 
+def consistency(curve,*,capital=100000.,target_cagr_pct=55.,year_sessions=252):
+    """Observed rolling 252-session and sufficiently complete calendar-year returns.
+
+    Rolling windows are heavily overlapping diagnostics, not independent
+    annual trials. Calendar-year return excludes partial years, requiring
+    first observed session by Jan 15, final by Dec 15, and >=200 sessions.
+    Do not extrapolate a short held-out window to claim calendar consistency.
+    """
+    from datetime import datetime, timezone
+    if (not isinstance(curve,list) or not math.isfinite(float(capital))
+        or capital<=0 or not 0<target_cagr_pct<=100 or year_sessions<=0):
+        raise ValueError("Invalid annual consistency inputs")
+    vals=[float(capital)]+[float(x["value"]) for x in curve]
+    if any(not math.isfinite(x) or x<=0 for x in vals):
+        raise ValueError("Invalid observed equity curve")
+    count=len(curve)
+    returns=[(vals[i+year_sessions]/vals[i]-1)*100
+             for i in range(count-year_sessions+1)] if count>=year_sessions else []
+    groups={}
+    for i,point in enumerate(curve):
+        dt=datetime.fromtimestamp(int(point["time"]),timezone.utc).date()
+        groups.setdefault(dt.year,[]).append((i,dt))
+    years=[]
+    for year,observations in sorted(groups.items()):
+        a,first=observations[0]
+        b,last=observations[-1]
+        complete=(len(observations)>=200 and first.month==1
+                  and first.day<=15 and last.month==12 and last.day>=15)
+        first_value=vals[a]
+        end_value=vals[b+1]
+        years.append({"year":year,"sessions":len(observations),
+                      "complete":complete,
+                      "return_pct":round((end_value/first_value-1)*100,4)})
+    eligible=[x for x in years if x["complete"]]
+    return {"rolling_window_sessions":year_sessions,
+            "rolling_windows":len(returns),
+            "worst_rolling_12m_pct":round(min(returns),4) if returns else None,
+            "best_rolling_12m_pct":round(max(returns),4) if returns else None,
+            "positive_rolling_window_pct":round(sum(x>0 for x in returns)/len(returns)*100,2)
+                if returns else None,
+            "target_hit_rolling_window_pct":round(
+                sum(x>=target_cagr_pct for x in returns)/len(returns)*100,2)
+                if returns else None,
+            "calendar_years":years,
+            "complete_calendar_years":len(eligible),
+            "worst_complete_calendar_year_pct":min(
+                (x["return_pct"] for x in eligible),default=None),
+            "all_complete_years_positive":all(x["return_pct"]>0 for x in eligible)
+                if eligible else None,
+            "interpretation":"Rolling periods overlap; partial years are excluded from worst full-year results."}
+
+
 def dominates(a,b):
     """True if A is no worse on either validation objective and better on one."""
     ag, asr=a["validation_objectives"]["cagr_pct"],a["validation_objectives"]["excess_sharpe"]

@@ -33,7 +33,13 @@ function Plot({data,description}:{data:{time:number;value:number}[];description:
 function Selection({value,locale}:{value:WalkForwardSelection;locale:"en"|"zh-CN"}){
   const zh=locale==="zh-CN";
   return <span className="wfo-selection">
-    <strong>{name(value.model)}</strong>
+    <strong>{value.model==="blended_portfolio"?
+      (zh?"组合策略":"Blended portfolio"):name(value.model)}</strong>
+    {value.sleeves&&<span className="wfo-sleeves">
+      {value.sleeves.map((s,i)=><span key={s.model}>
+        {i>0?" + ":""}{name(s.model)} {pct(s.weight_pct)}
+      </span>)}
+    </span>}
     {" · "}{zh?"单项上限":"Position cap"} {pct(value.max_position_pct)}
     {value.target_investment_pct!==undefined&&<>
       {" · "}{zh?"目标投资":"Invest"} {pct(value.target_investment_pct)}
@@ -187,6 +193,36 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           <div><small>{l("Untouched audit excess Sharpe","独立审计期超额夏普")}</small>
             <strong>{dec(audit.objectives.excess_sharpe)}</strong></div>
         </div>
+        <h5>{l("Annual consistency diagnostics","年度收益一致性诊断")}</h5>
+        <p>{l("Rolling 252-session returns overlap and are not independent annual observations. Partial calendar years are excluded from the full-year worst-case statistic.",
+          "滚动252个交易日收益区间相互重叠，并非独立年度观测。未满整年的日历年度不会计入完整年度最差收益。")}</p>
+        <div className="wfo-headline">
+          <div><small>{l("Worst rolling 12-month return","最差滚动12个月收益")}</small>
+            <strong>{pct(study.consistency?.worst_rolling_12m_pct)}</strong></div>
+          <div><small>{l("Rolling windows meeting growth target","滚动窗口达到增长目标比例")}</small>
+            <strong>{pct(study.consistency?.target_hit_rolling_window_pct)}</strong></div>
+          <div><small>{l("Worst complete calendar year","最差完整日历年")}</small>
+            <strong>{pct(study.consistency?.worst_complete_calendar_year_pct)}</strong></div>
+          <div><small>{l("Complete years evaluated","已评估的完整年份")}</small>
+            <strong>{study.consistency?.complete_calendar_years??0}</strong></div>
+          <div><small>{l("Final audit worst rolling year","最终审计最差滚动年度")}</small>
+            <strong>{pct(audit.consistency?.worst_rolling_12m_pct)}</strong></div>
+          <div><small>{l("Final audit complete calendar years","最终审计完整日历年")}</small>
+            <strong>{audit.consistency?.complete_calendar_years??0}</strong></div>
+        </div>
+        {(study.consistency?.calendar_years?.length??0)>0&&
+          <details className="wfo-limit">
+            <summary>{l("Calendar-year breakdown, partial years flagged","日历年收益明细，标注不完整年份")}</summary>
+            <div className="wfo-scroll"><table className="wfo-year-table"><thead><tr>
+              <th>{l("Year","年份")}</th><th>{l("Observed sessions","已观察交易日")}</th>
+              <th>{l("Return","收益率")}</th><th>{l("Coverage","覆盖情况")}</th>
+            </tr></thead><tbody>
+              {study.consistency?.calendar_years.map(y=><tr key={y.year}>
+                <td>{y.year}</td><td>{y.sessions}</td><td>{pct(y.return_pct)}</td>
+                <td>{y.complete?l("Near-complete year","接近完整年度"):l("Partial year","不完整年度")}</td>
+              </tr>)}
+            </tbody></table></div>
+          </details>}
         <h5>{l("Training selections and unseen validation","训练期选择与未见数据验证")}</h5>
         <div className="wfo-scroll"><table><thead><tr>
           <th>{l("Fold","折")}</th><th>{l("Unseen period","未见数据区间")}</th>
@@ -220,6 +256,29 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
               l("Not met","未达标")}</strong></div>
         </div>
         <Plot data={audit.curve} description={l("Untouched final audit equity curve","独立最终审计净值曲线")}/>
+        {(audit.prior_selected_comparison?.length??0)>0&&<>
+          <h5>{l("Three portfolios selected before the final audit","在最终审计前选定的三类组合")}</h5>
+          <p>{l("Highest training growth, highest training Sharpe and balanced risk-adjusted score are selected using pre-audit prices only. Audit outcomes below do not reselect the winning portfolio.",
+            "最高训练期增长率、最高训练期夏普及均衡风险收益评分都只使用审计前价格选定。下方审计结果不会重新选择获胜组合。")}</p>
+          <div className="wfo-objective-grid">
+            {audit.prior_selected_comparison?.map(item=><article key={item.objective}>
+              <strong>{item.objective==="highest_growth"?l("Highest growth","最高增长"):
+                item.objective==="highest_sharpe"?l("Highest Sharpe","最高夏普"):
+                l("Balanced risk and return","均衡风险收益")}</strong>
+              <p><Selection value={item.selected} locale={locale}/></p>
+              <div><small>{l("Training CAGR","训练期复合增长率")}</small>
+                <b>{pct(item.training_objectives.cagr_pct)}</b></div>
+              <div><small>{l("Training excess Sharpe","训练期超额夏普")}</small>
+                <b>{dec(item.training_objectives.excess_sharpe)}</b></div>
+              <div><small>{l("Audit CAGR","审计期复合增长率")}</small>
+                <b>{pct(item.audit_objectives.cagr_pct)}</b></div>
+              <div><small>{l("Audit excess Sharpe","审计期超额夏普")}</small>
+                <b>{dec(item.audit_objectives.excess_sharpe)}</b></div>
+              <div><small>{l("Audit drawdown","审计期回撤")}</small>
+                <b>{pct(item.audit_drawdown_pct)}</b></div>
+            </article>)}
+          </div>
+        </>}
         <h5>{l("Multiple testing and confidence","多重测试与结果可信度")}</h5>
         <p>{l("Configurations tested per selection","每次选择尝试的配置")}: {result.model_search?.candidate_count}.
           {" "}{l("Total training evaluations","训练期累计评估次数")}: {result.model_search?.total_train_evaluations}.</p>

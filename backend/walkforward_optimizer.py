@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from itertools import product
+import json
 from math import erfc, isfinite, sqrt
 from fastapi import HTTPException
 
 from . import advanced_portfolio_research as adv
+from . import blended_portfolio_research as blended
 from . import performance_objectives as objectives
 from . import portfolio_research as pr
 from . import tournament_strategies as tournament
@@ -66,13 +68,23 @@ def candidates(spec, width="focused"):
         for weight,target,equity,redistribute in product(
             caps, (base_target,100.), (base_equity,100.), (base_redistribute,True))
     ]
-    # All advanced strategies use their own fixed class-level budgets.
+    # Put strategy combinations in the FIRST bounded search, instead of
+    # exhausting the entire trial budget on minor settings of one model.
+    # Signed short/margin portfolios remain on the original separate ledger.
+    mixes=(
+        (("relative_momentum",50),("trend_filter",50)),
+        (("relative_momentum",60),("inverse_volatility",40)),
+        (("trend_filter",50),("inverse_volatility",50)),
+        (("relative_momentum",60),("defensive_rotation",40)),
+        (("trend_filter",60),("equity_hedge",40)),
+        (("relative_momentum",40),("trend_filter",35),("inverse_volatility",25)),
+        (("relative_momentum",55),("diversified_risk_parity",45)),
+    ) if spec["model"] not in adv.RESEARCH_ONLY else ()
     seen=set()
-    for variant in variants:
+    for variant_index,variant in enumerate(variants):
         for model in models:
             key=(model,variant) if model in pr.MODELS else (model,variant[0])
-            if key in seen:
-                continue
+            if key in seen:continue
             seen.add(key)
             config={"model":model,"max_position_pct":variant[0],
                     "delay_sessions":spec["delay_sessions"]}
@@ -81,18 +93,33 @@ def candidates(spec, width="focused"):
                               equity_class_cap_pct=variant[2],
                               redistribute_excess=variant[3])
             yield config
-            if len(seen)>=MAX_CANDIDATES[width]:
-                return
+            if len(seen)>=MAX_CANDIDATES[width]:return
+        if variant_index==0:
+            for mix in mixes:
+                key=("blended_portfolio",mix,variant)
+                if key in seen:continue
+                seen.add(key)
+                yield {"model":"blended_portfolio",
+                       "sleeves":[{"model":m,"weight_pct":w} for m,w in mix],
+                       "max_position_pct":variant[0],
+                       "delay_sessions":spec["delay_sessions"],
+                       "target_investment_pct":variant[1],
+                       "equity_class_cap_pct":variant[2],
+                       "redistribute_excess":variant[3]}
+                if len(seen)>=MAX_CANDIDATES[width]:return
 
 
 def _execute(config,symbols,market,metadata,start,end,slippage):
     broker={**universe.COST_ASSUMPTIONS,
             "delay_sessions":config["delay_sessions"],
             "slippage_bps":slippage}
-    if config["model"] in pr.MODELS:
+    if config["model"] in pr.MODELS or config["model"]=="blended_portfolio":
         broker.update(target_investment_pct=config["target_investment_pct"],
                       equity_class_cap_pct=config["equity_class_cap_pct"],
                       redistribute_excess=config["redistribute_excess"])
+    if config["model"]=="blended_portfolio":
+        return blended.segment(config["sleeves"],symbols,market,metadata,start,end,
+                               config["max_position_pct"]/100,broker=broker)
     segment=pr._segment if config["model"] in pr.MODELS else adv.segment
     return segment(config["model"],symbols,market,metadata,start,end,
                    config["max_position_pct"]/100,broker=broker)
@@ -123,7 +150,16 @@ def _choose(configs,symbols,market,metadata,train_end,settings):
         return None,attempted,0
     # Stable ties: the fixed trial order is the deterministic tiebreaker.
     best=max(valid,key=lambda item:item[0])
-    return {"score":best[0],"config":best[1],"training":best[2]},attempted,len(valid)
+    high_growth=max(valid,key=lambda item:
+                    item[2]["cagr_pct"] if item[2]["cagr_pct"] is not None else float("-inf"))
+    high_sharpe=max(valid,key=lambda item:
+                    item[2]["excess_sharpe"] if item[2]["excess_sharpe"] is not None else float("-inf"))
+    leaders={name:{"config":entry[1],"score":entry[0],"training":entry[2]}
+             for name,entry in (("highest_growth",high_growth),
+                                ("highest_sharpe",high_sharpe),
+                                ("balanced",best))}
+    return {"score":best[0],"config":best[1],"training":best[2],
+            "training_leaders":leaders},attempted,len(valid)
 
 
 def _chain_segments(segments):
@@ -233,6 +269,8 @@ def analyze(payload, *, loader=None, report=None):
     report(82,"Computing forward-only stitched validation index")
     stitched=_chain_segments(realized)
     walkforward=objectives.performance(stitched,risk_free_pct=settings["risk_free_pct"])
+    walkforward_consistency=objectives.consistency(stitched,
+                                                  target_cagr_pct=settings["target_cagr_pct"])
     test_start=points[3]
     report(88,"Training final choice without seeing the audit period")
     final_choice,attempted,eligible=_choose(configs,symbols,market,metadata,
@@ -251,6 +289,27 @@ def analyze(payload, *, loader=None, report=None):
                                    risk_free_pct=settings["risk_free_pct"])
     stress_quality=objectives.performance(stress["equity_curve"],
                                             risk_free_pct=settings["risk_free_pct"])
+    audit_consistency=objectives.consistency(final["equity_curve"],
+                                              target_cagr_pct=settings["target_cagr_pct"])
+    # Compare three PRIOR-SELECTED research objectives on the same sealed
+    # historical audit. No one is re-ranked or promoted using audit outcomes.
+    comparison=[]
+    audit_cache={json.dumps(final_choice["config"],sort_keys=True):final}
+    for objective_name,leader in final_choice["training_leaders"].items():
+        config=leader["config"];key=json.dumps(config,sort_keys=True)
+        if key not in audit_cache:
+            audit_cache[key]=_execute(config,symbols,market,metadata,
+                                      test_start,n,settings["slippage_bps"])
+        observed=audit_cache[key]
+        comparison.append({
+            "objective":objective_name,"selected":config,
+            "training_objectives":leader["training"],
+            "audit_objectives":objectives.performance(
+                observed["equity_curve"],risk_free_pct=settings["risk_free_pct"]),
+            "audit_return_pct":observed["return_pct"],
+            "audit_drawdown_pct":observed["max_drawdown_pct"],
+            "audit_trades":observed["trades"],
+        })
     targets=(audit["cagr_pct"] is not None and audit["excess_sharpe"] is not None
              and audit["cagr_pct"]>=settings["target_cagr_pct"]
              and audit["excess_sharpe"]>=settings["target_sharpe"]
@@ -278,12 +337,14 @@ def analyze(payload, *, loader=None, report=None):
             "stitch_method":"Normalized compound index of independently reset fold returns. Each fold starts with virtual $100,000 and zero positions; there is no continuous executable ledger.",
             "aggregate_objectives":walkforward,
             "aggregate_drawdown_pct":_max_drawdown(stitched),
+            "consistency":walkforward_consistency,
             "curve":stitched,
             "multiplicity_approximation":_trial_adjustment(
                 walkforward["excess_sharpe"],walkforward["sessions"],len(configs)),
         },
         "final_audit":{
             "selected":final_choice["config"],
+            "prior_selected_comparison":comparison,
             "selection_score":final_choice["score"],
             "trials_evaluated":attempted,"eligible_trials":eligible,
             "start_date":days[test_start],"end_date":days[-1],
@@ -291,6 +352,7 @@ def analyze(payload, *, loader=None, report=None):
             "objectives":audit,"return_pct":final["return_pct"],
             "drawdown_pct":final["max_drawdown_pct"],
             "stress_objectives":stress_quality,
+            "consistency":audit_consistency,
             "stress_return_pct":stress["return_pct"],
             "observed_targets_met":bool(targets),
             "trades":final["trades"],"fees":final["fees"],
@@ -298,11 +360,14 @@ def analyze(payload, *, loader=None, report=None):
         },
         "limitations":[
             "Models and allocation parameters are reselected before each walk-forward fold from prior-only training data. No predictive model is fitted; each OOS fold and audit reset capital and positions.",
+            "Three objective leaders (highest training growth, highest training Sharpe and balanced) are all chosen exclusively before the audit. Their final audit outcomes are comparison diagnostics, never a held-out selection mechanism.",
             "The final audit is never used to rank, select or retune candidates; do not manually retune based on this audit and still call it unseen.",
+            "Long-only candidates include 2-3 strategy sleeves mixed before netted trades in a single shared-cash ledger. This is not a portfolio of independently realized strategy returns. Short and margin sleeves are excluded from these blends.",
             "A fixed public grid of compatible models and bounded capital/position parameters is searched; no unlimited parameter fitting, learned indicators or multi-basket model synthesis is implemented.",
             "Bonferroni-adjusted p is an illustrative Gaussian-i.i.d. approximation conditional on the tested grid, not a Deflated Sharpe Ratio, Probability of Backtest Overfitting, or robust statistical significance.",
             "Actual instrument history remains susceptible to survivorship bias, incomplete corporate-action adjustment and limited historical coverage.",
             "Slippage, borrowing costs, spreads, commissions, FX and fills are assumed, not actual future broker executions. No paper-forward evidence is included.",
+            "Rolling 252-session returns overlap and do not represent independent years. Calendar years only count when nearly complete; incomplete audit windows must show insufficient evidence instead of a made-up worst annual return.",
             "An observed annualized return over less than multiple full years is not evidence of consistent 50-60% annual performance.",
         ],
     }

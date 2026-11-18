@@ -86,6 +86,14 @@ def test_expanding_walkforward_seals_final_audit():
     assert [x["out_of_sample_return_pct"] for x in normal["walk_forward"]["folds"]]==[
         x["out_of_sample_return_pct"] for x in revised["walk_forward"]["folds"]]
     assert normal["final_audit"]["selected"]==revised["final_audit"]["selected"]
+    comparison=normal["final_audit"]["prior_selected_comparison"]
+    amended=revised["final_audit"]["prior_selected_comparison"]
+    assert [x["objective"] for x in comparison]==[
+        "highest_growth","highest_sharpe","balanced"]
+    assert [x["selected"] for x in comparison]==[x["selected"] for x in amended]
+    assert comparison[-1]["selected"]==normal["final_audit"]["selected"]
+    assert normal["final_audit"]["consistency"]["rolling_window_sessions"]==252
+    assert "consistency" in normal["walk_forward"]
     assert normal["final_audit"]["return_pct"]!=revised["final_audit"]["return_pct"]
     assert normal["no_real_orders"] is True
     assert normal["walk_forward"]["multiplicity_approximation"]["assumed_trials"]==normal["model_search"]["candidate_count"]

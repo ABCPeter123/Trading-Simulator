@@ -137,6 +137,7 @@ export interface WalkForwardQuality {
 }
 export interface WalkForwardSelection {
   model:string;max_position_pct:number;delay_sessions:1|2;
+  sleeves?:{model:string;weight_pct:number}[];
   target_investment_pct?:number;equity_class_cap_pct?:number;
   redistribute_excess?:boolean;
 }
@@ -147,6 +148,15 @@ export interface WalkForwardFold {
   training_objectives:WalkForwardQuality;out_of_sample_objectives:WalkForwardQuality;
   out_of_sample_return_pct:number;out_of_sample_drawdown_pct:number;
   trades:number;fees:number;
+}
+export interface WalkForwardConsistency {
+  rolling_window_sessions:number;rolling_windows:number;
+  worst_rolling_12m_pct:number|null;best_rolling_12m_pct:number|null;
+  positive_rolling_window_pct:number|null;
+  target_hit_rolling_window_pct:number|null;
+  calendar_years:{year:number;sessions:number;complete:boolean;return_pct:number}[];
+  complete_calendar_years:number;worst_complete_calendar_year_pct:number|null;
+  all_complete_years_positive:boolean|null;interpretation:string;
 }
 export interface WalkForwardResult {
   status:"completed"|"insufficient_history"|"no_eligible_candidate";
@@ -159,12 +169,20 @@ export interface WalkForwardResult {
   walk_forward?:{
     folds:WalkForwardFold[];positive_folds:number;fold_count:number;
     stitch_method:string;aggregate_objectives:WalkForwardQuality;aggregate_drawdown_pct:number;
+    consistency?:WalkForwardConsistency;
     curve:{time:number;value:number}[];
     multiplicity_approximation:{raw_approx_p:number|null;bonferroni_approx_p:number|null;assumed_trials:number};
   };
   final_audit?:{
     selected:WalkForwardSelection;selection_score:number;trials_evaluated:number;eligible_trials:number;
     start_date:string;end_date:string;sessions:number;objectives:WalkForwardQuality;
+    consistency?:WalkForwardConsistency;
+    prior_selected_comparison?:{
+      objective:"highest_growth"|"highest_sharpe"|"balanced";
+      selected:WalkForwardSelection;training_objectives:WalkForwardQuality;
+      audit_objectives:WalkForwardQuality;audit_return_pct:number;
+      audit_drawdown_pct:number;audit_trades:number;
+    }[];
     return_pct:number;drawdown_pct:number;stress_objectives:WalkForwardQuality;
     stress_return_pct:number;observed_targets_met:boolean;trades:number;fees:number;
     curve:{time:number;value:number}[];
