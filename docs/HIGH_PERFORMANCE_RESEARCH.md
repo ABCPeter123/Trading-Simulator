@@ -33,6 +33,13 @@ training/validation/held-out partition. It never sends broker orders.
   redistribute unused allocation while honoring maximum position size,
   other asset-class ceilings, and the model's eligible-asset signals.
   Advanced borrowing, short and hedging models keep their own budgets.
+- A shortlisted standard long-only strategy imported into the private strategy
+  library retains its research investment target, equity cap and
+  redistribution preference. Historical portfolio replay reads those
+  exact allocation parameters, although its separate fill/accounting
+  ledger can still produce different realized results.
+- Live monitoring currently rejects custom exposure configurations it
+  cannot reproduce. Saving a strategy does not constitute live approval.
 - Existing owner research results and strategy versions remain in local
   Git-ignored SQLite storage. No private results are published to GitHub,
   CI artifacts, or the public demonstration.
