@@ -587,3 +587,32 @@ def test_optional_small_qwen_is_selected_only_when_allowlisted_and_installed(mon
     monkeypatch.setenv("TRADING_SIM_AI_MODELS",
                        "TwIL-8B-Q4_K_M-balanced.gguf,Qwen3.5-9B-Q4_K_M.gguf")
     assert client.get("/api/ai/status?model=Qwen3.5-4B-Q4_K_M").status_code == 422
+
+
+def test_compact_qwen_request_avoids_reasoning_budget_on_small_ram_pc(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODELS",
+                       "TwIL-8B-Q4_K_M-balanced.gguf,Qwen3.5-9B-Q4_K_M.gguf,Qwen3.5-4B-Q4_K_M.gguf")
+    monkeypatch.setenv("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "512")
+    seen = []
+    class FakeReply:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"choices": [{"message": {"content": '{"answer":"OK","strategy":null}'}}]}
+    class FakeClient:
+        def __init__(self, **kwargs):
+            assert kwargs["trust_env"] is False
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def post(self, url, json):
+            assert url == "http://127.0.0.1:8081/v1/chat/completions"
+            seen.append(json)
+            return FakeReply()
+    monkeypatch.setattr(ai.httpx, "Client", FakeClient)
+    ai.call_model("system", "synthetic example", model="Qwen3.5-4B-Q4_K_M.gguf")
+    assert seen[0]["model"] == "Qwen3.5-4B-Q4_K_M"
+    assert seen[0]["max_tokens"] == 512
+    assert seen[0]["chat_template_kwargs"] == {"enable_thinking": False}
+    ai.call_model("system", "synthetic example", model="TwIL-8B-Q4_K_M-balanced.gguf")
+    assert "chat_template_kwargs" not in seen[1]
