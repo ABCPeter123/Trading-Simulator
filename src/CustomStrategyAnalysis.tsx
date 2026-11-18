@@ -47,7 +47,7 @@ function EquityChart({result,title}:{result:CustomPeriodResult;title:string}){
   </div>;
 }
 
-export default function CustomStrategyAnalysis({spec}: {spec:TournamentSourceSpec}){
+export default function CustomStrategyAnalysis({spec,initialJob=null}: {spec:TournamentSourceSpec;initialJob?:CustomPeriodJob|null}){
   const {locale}=useI18n();
   const l=(english:string,chinese:string)=>locale==="zh-CN"?chinese:english;
   const key=JSON.stringify([spec.model,spec.symbols,spec.max_position_pct,
@@ -68,6 +68,9 @@ export default function CustomStrategyAnalysis({spec}: {spec:TournamentSourceSpe
     setJob(null);setError("");setPosition(String(spec.max_position_pct));
     setDelay(spec.delay_sessions);setInvestment("95");setEquityCap("70");setRedistribute(false);
   },[key]);
+  useEffect(()=>{
+    if(initialJob)setJob(initialJob);
+  },[initialJob?.id]);
   useEffect(()=>{
     if(!job||!["queued","running"].includes(job.status))return;
     let alive=true;
@@ -153,6 +156,12 @@ export default function CustomStrategyAnalysis({spec}: {spec:TournamentSourceSpe
     </div>
     {error&&<p className="csa-error" role="alert">{error}</p>}
     {job&&!result&&<p className="csa-status" role="status">{l("Study","分析任务")}: {job.status} · {job.stage} · {job.progress}% {job.error_code?("· "+job.error_code):""}</p>}
+    {job?.status==="queued"&&<p className="csa-small">{l(
+      "The local research worker must be running to process queued studies. Start the local app with start-local.ps1 and keep it running; this is not a live brokerage order.",
+      "排队任务需要本地研究工作进程运行。请使用 start-local.ps1 启动本地程序并保持运行；这不是实际券商订单。")}</p>}
+    {job?.status==="failed"&&<p className="csa-error" role="alert">{l(
+      "The study could not complete. Check the available common historical dates, selected instruments and local market data. You can adjust the settings and rerun.",
+      "研究任务未能完成。请检查共同历史日期、所选资产和本地行情数据。可以调整设置后重新运行。")}</p>}
     {result&&m&&p&&<>
       <div className="csa-window"><strong>{l("Actual tested period","实际测试区间")}:</strong> {result.actual_window.start_date} – {result.actual_window.end_date} · {result.actual_window.sessions} {l("shared sessions","个共同交易日")}</div>
       <h5>{l("Performance and risk","收益与风险")}</h5>

@@ -1,7 +1,9 @@
 import {useCallback,useEffect,useState} from "react";
 import {request} from "./api";
-import {importTournamentRank,createTournamentReplay} from "./tournamentApi";
+import {importTournamentRank,createTournamentReplay,createCustomPeriodStudy} from "./tournamentApi";
+import type {CustomPeriodJob} from "./tournamentApi";
 import TournamentStrategyInspector from "./TournamentStrategyInspector";
+import type {TournamentModelSpec} from "./TournamentStrategyInspector";
 import {useI18n} from "./i18n";
 import "./universeResearch.css";
 
@@ -47,6 +49,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   const [active,setActive]=useState<Job|null>(null);
   const [pick,setPick]=useState(0);
   const [busy,setBusy]=useState(false);
+  const [promotionTarget,setPromotionTarget]=useState<"simulation"|"live"|"research"|null>(null);
+  const [researchJob,setResearchJob]=useState<{selection:string;job:CustomPeriodJob}|null>(null);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const refresh=useCallback(async()=>{
@@ -103,19 +107,35 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
       await open(active.id);
     }catch(e){setError(String(e));}
   }
-  async function promote(destination:"simulation"|"live"){
-    if(!active||!chosen)return;
-    setBusy(true);setError("");setNotice("");
+  async function promote(destination:"simulation"|"live"|"research"){
+    if(!active||!chosen||!selectedSpec)return;
+    if(chosen.research_only&&destination!=="research"){
+      setError(t("Short selling and margin models require the historical research simulator, not the cash-only replay."));
+      return;
+    }
+    setBusy(true);setPromotionTarget(destination);setError("");setNotice("");
     try{
-      const version=await importTournamentRank(active.id,chosen.rank);
-      if(destination==="simulation"){
-        const replay=await createTournamentReplay(version.id);
-        onOpenSimulation(replay.id);
+      if(destination==="research"){
+        // Runs the signed-share historical fill engine without creating a
+        // cash-only replay, broker order, or live deployment.
+        const job=await createCustomPeriodStudy({spec:selectedSpec});
+        setResearchJob({selection:selectedKey,job});
+        window.requestAnimationFrame(()=>{
+          document.getElementById("ur-custom-study")?.scrollIntoView({
+            behavior:"smooth",block:"start",
+          });
+        });
       }else{
-        onOpenLive(version.id);
+        const version=await importTournamentRank(active.id,chosen.rank);
+        if(destination==="simulation"){
+          const replay=await createTournamentReplay(version.id);
+          onOpenSimulation(replay.id);
+        }else{
+          onOpenLive(version.id);
+        }
       }
     }catch(e){setError(e instanceof Error?e.message:String(e));}
-    finally{setBusy(false);}
+    finally{setBusy(false);setPromotionTarget(null);}
   }
   async function importAll(){
     if(!active||!result?.top10.length)return;
@@ -130,6 +150,17 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   }
   const result=active?.result;
   const chosen=result?.top10[pick];
+  const selectedKey=active&&chosen?`${active.id}:${chosen.rank}`:"";
+  const selectedSpec:TournamentModelSpec|null=active&&chosen?{
+    version:(["leveraged_trend","long_short_momentum","market_neutral",
+      "defensive_rotation","diversified_risk_parity","equity_hedge"].includes(chosen.model)?2:1),
+    model:chosen.model,symbols:chosen.symbols,
+    max_position_pct:active.params.max_position_pct,
+    delay_sessions:active.params.delay_sessions,rebalance_sessions:21,
+    restricted_research:chosen.restricted_research,
+    short_proxy_research:chosen.short_proxy_research,
+    research_only:chosen.research_only,
+  }:null;
   return <main className="ur-shell">
     <header className="ur-header"><div>
       <p className="ur-kicker">{t("PRIVATE QUANTITATIVE RESEARCH")}</p>
@@ -218,29 +249,42 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             {chosen&&<article className="ur-detail">
               <h3>#{chosen.rank} {label(chosen.basket_type)} · {label(chosen.model)}</h3>
               <p>{chosen.symbols.map(x=>x.toUpperCase()).join(" · ")}</p>
-              <TournamentStrategyInspector key={`${active.id}-${chosen.rank}`} spec={{
-                version:chosen.model==="leveraged_trend"||chosen.model==="long_short_momentum"||chosen.model==="market_neutral"||chosen.model==="defensive_rotation"||chosen.model==="diversified_risk_parity"||chosen.model==="equity_hedge"?2:1,model:chosen.model,symbols:chosen.symbols,
-                max_position_pct:active.params.max_position_pct,
-                delay_sessions:active.params.delay_sessions,rebalance_sessions:21,
-                restricted_research:chosen.restricted_research,
-                short_proxy_research:chosen.short_proxy_research,
-                research_only:chosen.research_only,
-              }} costs={{
+              {selectedSpec&&<TournamentStrategyInspector key={`${active.id}-${chosen.rank}`} spec={selectedSpec}
+                researchStudy={researchJob?.selection===selectedKey?researchJob.job:null} costs={{
                 commission_usd:Number(result.execution_assumptions.commission_usd),
                 slippage_bps:Number(result.execution_assumptions.slippage_bps),
                 fx_conversion_bps:Number(result.execution_assumptions.fx_conversion_bps),
                 base_currency:String(result.execution_assumptions.base_currency),
-              }} />
+              }} />}
               <p>{t(chosen.research_only?"Synthetic research model":"Executable allocation model")}: {label(chosen.model)} · {active?.params.max_position_pct}% {t("Maximum position weight (%)")} ·
                 {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
-                <button type="button" className="ur-primary" disabled={busy||chosen.research_only}
-                  onClick={()=>void promote("simulation")}>{t("Load this strategy into simulation")}</button>
-                <button type="button" className="ur-secondary" disabled={busy||chosen.research_only||chosen.restricted_research||chosen.short_proxy_research}
-                  onClick={()=>void promote("live")}>{t("Open in Live Engine (paper first)")}</button>
+                {chosen.research_only?
+                  <button type="button" className="ur-primary" disabled={busy}
+                    aria-busy={busy&&promotionTarget==="research"}
+                    onClick={()=>void promote("research")}>
+                    {busy&&promotionTarget==="research"?t("Starting historical study..."):
+                      t("Run this strategy in historical research")}
+                  </button>:
+                  <button type="button" className="ur-primary" disabled={busy}
+                    aria-busy={busy&&promotionTarget==="simulation"}
+                    onClick={()=>void promote("simulation")}>
+                    {busy&&promotionTarget==="simulation"?t("Preparing historical replay..."):
+                      t("Load this strategy into simulation")}
+                  </button>}
+                <button type="button" className="ur-secondary"
+                  disabled={busy||chosen.research_only||chosen.restricted_research||chosen.short_proxy_research}
+                  aria-busy={busy&&promotionTarget==="live"}
+                  onClick={()=>void promote("live")}>
+                  {chosen.research_only?t("Live engine unavailable for short or margin models"):
+                    (chosen.restricted_research||chosen.short_proxy_research)?
+                      t("Live engine unavailable for restricted ETFs"):
+                    (busy&&promotionTarget==="live")?t("Opening Live Engine..."):
+                      t("Open in Live Engine (paper first)")}
+                </button>
               </div>
               <p>{chosen.research_only?
-                t("Real share shorting and margin borrowing are evaluated only in the historical research model. This strategy cannot be loaded into the cash simulator or live engine. The audited historical test and trades remain available here."):
+                t("Short and margin strategies can run in the historical signed-position research engine. Click Run this strategy in historical research to see simulated fills, equity changes and risk. Cash-only replay and live broker monitoring do not support these exposures."):
                 t("Supported cash-funded models can be loaded into simulation and paper monitoring. Leveraged and inverse ETFs are separately restricted for live monitoring.")}</p>
               <div className="ur-kpis">
                 {[[t("Training return"),pct(chosen.training.return_pct)],

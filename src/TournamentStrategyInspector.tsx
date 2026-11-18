@@ -1,5 +1,6 @@
 import {useI18n} from "./i18n";
 import CustomStrategyAnalysis from "./CustomStrategyAnalysis";
+import type {CustomPeriodJob} from "./tournamentApi";
 import {MODEL_EXPLANATIONS,explanationText} from "./strategyNarratives";
 import "./tournamentInspector.css";
 
@@ -34,9 +35,10 @@ const CASH_MODELS=new Set([
 const RESEARCH_ONLY_MODELS=new Set(["leveraged_trend","long_short_momentum","market_neutral"]);
 
 export default function TournamentStrategyInspector({
-  spec,costs,context="research",
+  spec,costs,context="research",researchStudy=null,
 }:{
   spec:TournamentModelSpec;exactCode?:string;costs?:ResearchCosts;
+  researchStudy?:CustomPeriodJob|null;
   context?:"research"|"simulation"|"live";
 }){
   const {locale}=useI18n();
@@ -152,6 +154,6 @@ export default function TournamentStrategyInspector({
           "这些结果未完整建模税费、分红、公司行为、借券可得性变化、市场冲击或真实券商成交。历史表现不保证未来盈利。")}</p>
       </div>
     </>}
-    <CustomStrategyAnalysis spec={spec}/>
+    <div id="ur-custom-study"><CustomStrategyAnalysis spec={spec} initialJob={researchStudy}/></div>
   </section>;
 }
