@@ -369,12 +369,19 @@ def call_model(system: str, user: str, model: str | None = None) -> str:
             # weights must be installed and licensed separately by the user.
             timeout=httpx.Timeout(connect=5.0,read=ollama_timeout_seconds(),write=15.0,pool=5.0)
             with httpx.Client(timeout=timeout,trust_env=False) as client:
-                reply=client.post(LLAMA_CPP_CHAT_URL,json={
-                    "model":selected,"stream":False,"temperature":0.2,
-                    "max_tokens":local_output_token_limit(),
-                    "messages":[{"role":"system","content":system},
-                                {"role":"user","content":user}],
-                })
+                payload = {
+                    "model": selected, "stream": False, "temperature": 0.2,
+                    "max_tokens": local_output_token_limit(),
+                    "messages": [{"role": "system", "content": system},
+                                 {"role": "user", "content": user}],
+                }
+                # Compact Qwen is intended for fast explanations on small PCs.
+                # It supports non-thinking chat directly; avoid spending the
+                # entire short response budget generating reasoning tokens.
+                # Do not override reasoning for the user's larger models.
+                if selected.startswith("Qwen3.5-4B-"):
+                    payload["chat_template_kwargs"] = {"enable_thinking": False}
+                reply = client.post(LLAMA_CPP_CHAT_URL, json=payload)
                 reply.raise_for_status()
                 return str(reply.json()["choices"][0]["message"]["content"])
         with httpx.Client(timeout=45) as client:
