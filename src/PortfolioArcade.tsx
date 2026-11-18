@@ -15,6 +15,7 @@ import type { WorkspaceTab } from "./WorkspaceTabs";
 import StochasticResearch from "./StochasticResearch";
 import MarketDesk from "./MarketDesk";
 import StrategyLibrary from "./StrategyLibrary";
+import {PORTFOLIO_PRESETS,portfolioPresetCode} from "./strategyPresets";
 import type { StrategyExecution } from "./strategyAnalyticsApi";
 import { ASSETS, formatMoney, formatPrice } from "./data/demoMarket";
 import { gameCatalog, gameDiscover, gameImportTicker } from "./arcadeApi";
@@ -387,6 +388,11 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             <label>{t("Trade symbol")}<select value={target} onChange={e=>setTarget(e.target.value)}>{season.asset_ids.map(id=><option key={id} value={id}>{assetName(id)}</option>)}</select></label>
             <button onClick={addRule}><Plus size={16}/> {t("Add crossover rule")}</button>
           </div>
+          <div className="arc-template-row"><span>{t("STARTER STRATEGIES, EDITABLE")}</span>
+            {PORTFOLIO_PRESETS.map(p=><button key={p.id} type="button" title={p.description}
+              onClick={()=>setStrategy(portfolioPresetCode(p.id,season.asset_ids))}>{t(p.title)}</button>)}
+          </div>
+          <p className="arc-editor-help">{t("Selecting a template only changes the draft. No trades or deployment occur until you deliberately save and run the replay.")}</p>
           <textarea aria-label={t("Cross-asset strategy rules")} rows={5} spellCheck={false} value={strategy}
             onChange={e=>setStrategy(e.target.value)} placeholder="WHEN spy SMA(10) CROSSES ABOVE SMA(30) BUY 25% qqq"/>
           <div className="port-rule-row"><button onClick={()=>setStrategy(
