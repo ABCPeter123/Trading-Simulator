@@ -701,6 +701,9 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         "shortlist_targets_observed":sum(bool(item["held_out_target_observed"]) for item in leaders),
         "top10":leaders,
         "selection_method":(
+            ("Expanded correlation-aware asset search; " if params.get("basket_search","focused")=="expanded" else "Focused asset screening; ")
+            +("Execution-stressed validation ranking; " if params.get("selection_policy","return_risk")=="execution_robust" else "Standard validation ranking; ")
+            +(
             "High-performance discovery: shortlist candidates using validation-only "
             "annualized compound growth and cash-rate-adjusted Sharpe with caps, "
             "penalties for drawdowns, turnover and negative validation subperiods. "
