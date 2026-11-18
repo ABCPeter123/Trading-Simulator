@@ -12,6 +12,16 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Generating answer": "正在生成回答",
+  "Waiting for model output": "等待模型输出",
+  "First output": "首次输出",
+  "Total": "总耗时",
+  "output tokens": "输出 token",
+  "Live preview": "实时预览",
+  "Preview is incomplete. Strategy proposals are validated only after completion.": "当前仅为未完成的回答预览。策略建议将在完整生成后进行验证。",
+  "Stop generation": "停止生成",
+  "Generation stopped. Your draft question was restored.": "已停止生成，问题已恢复至输入框。",
+
   "Canadian asset prices and simulated fills are converted to USD using the previous completed USD/CAD FX close. Results use a shared USD cash account and are indicative.": "加拿大资产价格及模拟成交价采用上一已完成交易日的 USD/CAD 收盘汇率折算成美元。结果以共同的美元现金账户计算，仅供参考。",
   "TwIL 8B": "TwIL 8B",
   "Qwen 3.5 4B (fast)": "Qwen 3.5 4B（快速）",
