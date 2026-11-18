@@ -141,6 +141,52 @@ The observer will not invent an overnight market fill. Its results are
 research diagnostics, not broker short-locate checks, verified trade
 capacity, or guarantees that a manual trade could execute.
 
+## Private USD broker statement reconciliation
+
+The **Portfolio & Trade Journal** now includes a read-only **Reconcile broker
+CSV** panel. It checks whether your manually confirmed fills agree with
+normalized USD trades from a selected broker export. This is not a broker
+connection and it never changes existing fill records.
+
+1. Choose a UTF-8 comma-separated CSV with at most 1,000 transaction rows
+   (maximum 2 MB). The browser parses the source locally.
+2. Map required columns: **symbol**, **buy/sell side**, **trade date**,
+   **quantity**, **price**. Optionally map **fee**, **broker reference**, and
+   **currency**. Non-USD rows are rejected. The date format is ISO
+   `YYYY-MM-DD` or unambiguous U.S. `MM/DD/YYYY`.
+3. Review the normalized row count, then select **Compare with private
+   confirmed journal**. Only the allowlisted normalized trade fields are
+   sent to the owner-only private API. **The original CSV file, its other
+   columns and filename are never uploaded or persisted**.
+4. The backend compares in memory against existing confirmed journal
+   records. Unique broker references take precedence. If absent, compare
+   same New York trade date, symbol, side, quantity and approximate
+   price (0.5% or $0.05 for candidate discovery). Duplicate/ambiguous
+   entries are **not** arbitrarily matched.
+5. Review mismatches in quantity, price, fee, trade date, asset and side.
+   An omitted fee column is **unknown**, not zero. Manual journal
+   corrections still use the normal revision-history workflow.
+6. Journal fills not present within the imported date range are labeled
+   **not in this import**. A partial export does not prove a broker trade
+   is missing. The importer does not automatically create transactions,
+   positions, signals or adjustments.
+
+The API path is `POST /api/live/journal/reconcile`. Only sanitized,
+normalized rows, not actual CSV bytes, are accepted. Results are
+returned to the requester without database writes, downloaded files,
+server-side CSV storage, background tasks or public-demo access.
+No historical owner strategy code or account data is committed to Git.
+
+**Limitations:** This first version is for executed USD stock/ETF
+trades only. It does not parse deposits, withdrawals, dividends, splits,
+corporate actions, cash balances, fractional-fills grouped by order,
+options, currency conversion, statement PDF files or IBKR Flex
+XML. Some broker exports need column mapping or normalization before
+use. Matching by day cannot prove the actual hour of execution.
+The owner should compare source statements with their broker before
+modifying the journal. Never import an unreviewed CSV into actual
+portfolio holdings.
+
 ## Notification setup
 
 The worker loads **only allowlisted keys** from your private, Git-ignored
