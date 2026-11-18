@@ -248,3 +248,35 @@ functions. It refuses `simulation` and `live` contexts for these models
 rather than substituting a different portfolio strategy. Research-only
 versions cannot become paper or live deployments without a separate reviewed
 engine implementation and explicit owner approval.
+
+### Expanded training-only asset discovery and execution-robust ranking
+
+The universe tournament can now opt into expanded basket search. It first
+loads only genuine, quality-checked historical candles, then runs a bounded
+greedy symbol screen across all eligible assets. Up to sixteen additional
+distinct 6/8/12/16-asset baskets are proposed. The screen combines prior
+126-session momentum, prior 100-session volatility, asset-class exposure
+budgets, and pairwise past daily-return correlation. Every input is cut off
+at the **earliest 60%-history training boundary across the available**
+**instrument set**. This conservative cutoff is intentionally earlier than
+the validation and final held-out periods of every evaluated candidate.
+The result discloses the cutoff date, screened count, correlation-pool size,
+and number of extra baskets. It is not a complete search of all subsets.
+
+An optional execution-robust validation policy runs a second independent
+validation-segment backtest per eligible model using second-session opening
+execution and at least 20 bps modeled slippage. If the stressed model trips
+a margin call, violates the configured validation drawdown limit, or cannot
+trade, it is rejected. Otherwise it receives a **non-positive** additional
+score adjustment equal to half the deterioration between the ordinary and
+stressed validation-only objective scores. Stress results and the separate
+score deduction appear alongside the candidate's normal ranking components.
+The selected final historical 20% is never read by either the symbol screen
+or validation execution penalty. Existing studies retain the original
+focused/return-risk settings; new UI scans default to expanded/robust.
+
+These checks reduce one type of lookahead leakage but cannot fix survivorship
+bias, absence of delisted stocks, historical symbol changes, approximate
+spread/slippage assumptions, overfitting from repeated human experiments,
+or unsupported intraday liquidity and after-hours fills. The daily candle
+model must not be interpreted as verifying executable orders within 12 hours.
