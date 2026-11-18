@@ -256,6 +256,29 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
               l("Not met","未达标")}</strong></div>
         </div>
         <Plot data={audit.curve} description={l("Untouched final audit equity curve","独立最终审计净值曲线")}/>
+        {(audit.prior_selected_comparison?.length??0)>0&&<>
+          <h5>{l("Three portfolios selected before the final audit","在最终审计前选定的三类组合")}</h5>
+          <p>{l("Highest training growth, highest training Sharpe and balanced risk-adjusted score are selected using pre-audit prices only. Audit outcomes below do not reselect the winning portfolio.",
+            "最高训练期增长率、最高训练期夏普及均衡风险收益评分都只使用审计前价格选定。下方审计结果不会重新选择获胜组合。")}</p>
+          <div className="wfo-objective-grid">
+            {audit.prior_selected_comparison?.map(item=><article key={item.objective}>
+              <strong>{item.objective==="highest_growth"?l("Highest growth","最高增长"):
+                item.objective==="highest_sharpe"?l("Highest Sharpe","最高夏普"):
+                l("Balanced risk and return","均衡风险收益")}</strong>
+              <p><Selection value={item.selected} locale={locale}/></p>
+              <div><small>{l("Training CAGR","训练期复合增长率")}</small>
+                <b>{pct(item.training_objectives.cagr_pct)}</b></div>
+              <div><small>{l("Training excess Sharpe","训练期超额夏普")}</small>
+                <b>{dec(item.training_objectives.excess_sharpe)}</b></div>
+              <div><small>{l("Audit CAGR","审计期复合增长率")}</small>
+                <b>{pct(item.audit_objectives.cagr_pct)}</b></div>
+              <div><small>{l("Audit excess Sharpe","审计期超额夏普")}</small>
+                <b>{dec(item.audit_objectives.excess_sharpe)}</b></div>
+              <div><small>{l("Audit drawdown","审计期回撤")}</small>
+                <b>{pct(item.audit_drawdown_pct)}</b></div>
+            </article>)}
+          </div>
+        </>}
         <h5>{l("Multiple testing and confidence","多重测试与结果可信度")}</h5>
         <p>{l("Configurations tested per selection","每次选择尝试的配置")}: {result.model_search?.candidate_count}.
           {" "}{l("Total training evaluations","训练期累计评估次数")}: {result.model_search?.total_train_evaluations}.</p>
