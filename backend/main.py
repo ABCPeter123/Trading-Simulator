@@ -325,7 +325,7 @@ def add_instrument(request: ImportTicker):
 from . import portfolio_arcade as portfolio
 
 class PortfolioSeasonStart(BaseModel):
-    asset_ids: list[str] = Field(min_length=2, max_length=10)
+    asset_ids: list[str] = Field(min_length=2, max_length=16)
     period: Literal["7D", "30D", "60D", "6M", "1Y", "2Y", "5Y", "10Y", "MAX"] = "5Y"
     resolution: Literal["1m", "5m", "15m", "1h", "1d"] = "1d"
     starting_point: float = Field(default=0.3, ge=0.15, le=0.75)
