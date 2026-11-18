@@ -50,7 +50,7 @@ def validate(mode: str, code: str, symbols: list[str]):
         raise HTTPException(422, detail="Invalid strategy mode.")
     if not isinstance(code, str) or not code.strip():
         raise HTTPException(422, detail="Strategy code cannot be empty.")
-    if not isinstance(symbols, list) or not 1 <= len(symbols) <= 5 or any(
+    if not isinstance(symbols, list) or not 1 <= len(symbols) <= 16 or any(
         not isinstance(s, str) or len(s) > 50 or not s for s in symbols
     ):
         raise HTTPException(422, detail="Invalid strategy symbols.")
