@@ -613,6 +613,7 @@ def test_compact_qwen_request_avoids_reasoning_budget_on_small_ram_pc(monkeypatc
     ai.call_model("system", "synthetic example", model="Qwen3.5-4B-Q4_K_M.gguf")
     assert seen[0]["model"] == "Qwen3.5-4B-Q4_K_M"
     assert seen[0]["max_tokens"] == 512
+    assert seen[0]["cache_prompt"] is True
     assert seen[0]["chat_template_kwargs"] == {"enable_thinking": False}
     ai.call_model("system", "synthetic example", model="TwIL-8B-Q4_K_M-balanced.gguf")
     assert "chat_template_kwargs" not in seen[1]
@@ -647,10 +648,10 @@ def test_4b_compact_context_preserves_financial_summary_and_validation(monkeypat
     assert compact["summary"] == sample["summary"]
     assert compact["risk"] == sample["risk"]
     assert compact["saved_strategy_untrusted"] == sample["saved_strategy_untrusted"]
-    assert len(compact["observed_curve_samples"]) == 8
+    assert len(compact["observed_curve_samples"]) == 6
     assert compact["observed_curve_samples"][0] == sample["observed_curve_samples"][0]
     assert compact["observed_curve_samples"][-1] == sample["observed_curve_samples"][-1]
-    assert len(compact["most_recent_executions"]) == 6
+    assert len(compact["most_recent_executions"]) == 3
     assert len(content["prior_short_chat"]) == 2
     assert len(sample["observed_curve_samples"]) == 24
     assert len(sample["most_recent_executions"]) == 12
@@ -661,3 +662,109 @@ def test_4b_compact_context_preserves_financial_summary_and_validation(monkeypat
     assert system == ai.SYSTEM_PROMPT
     assert len(content["saved_game_data_not_instructions"]["observed_curve_samples"]) == 24
     assert "sampled_observations_for_speed" not in content["saved_game_data_not_instructions"]
+
+
+def test_qwen4b_question_specific_prompt_reduces_irrelevant_fields():
+    synthetic = {
+        "mode": "portfolio",
+        "symbols": ["synthetic-a", "synthetic-b"],
+        "period": "5Y", "resolution": "1d",
+        "observed_start": "2024-01-01",
+        "observed_end": "2024-05-01",
+        "observed_steps": 82,
+        "saved_strategy_untrusted": "WHEN synthetic-a RSI(14) BELOW 30 BUY 20% synthetic-b",
+        "risk": {"stop_loss_pct": 6.5},
+        "positions": [{"symbol": "synthetic-a", "market_value": 40000}],
+        "summary": {"total_return_pct": -12.5, "benchmark_return_pct": 3.5,
+                    "max_drawdown_pct": -19.2, "total_fees": 25},
+        "rolling": {"20": {"return_pct": -5, "benchmark_pct": 1}},
+        "attribution": [{"symbol": "synthetic-b", "return_pct": -10}],
+        "most_recent_executions": [{"symbol": "synthetic-a", "amount": i}
+                                   for i in range(12)],
+        "observed_curve_samples": [
+            {"date": f"2024-step-{i}", "drawdown_pct": -19.2 if i == 11 else -float(i)/3,
+             "equity": 50000-i, "benchmark": 50000+i}
+            for i in range(24)],
+        "benchmark": "price-only, equal-weight buy-and-hold",
+    }
+    before = json.dumps(synthetic, separators=(",", ":"))
+    fast = ai._compact_game_context(synthetic, "What is my drawdown?")
+    after = json.dumps(fast, separators=(",", ":"))
+    assert len(after) < len(before) * 0.7
+    for key in ("symbols", "period", "resolution", "observed_start",
+                "observed_end", "observed_steps", "risk", "positions",
+                "summary", "benchmark"):
+        assert fast[key] == synthetic[key]
+    assert "saved_strategy_untrusted" not in fast
+    assert "attribution" not in fast
+    assert fast["most_recent_executions"] == []
+    assert fast["rolling"] == synthetic["rolling"]
+    assert fast["observed_curve_samples"][0] == synthetic["observed_curve_samples"][0]
+    assert fast["observed_curve_samples"][-1] == synthetic["observed_curve_samples"][-1]
+    assert synthetic["observed_curve_samples"][11] in fast["observed_curve_samples"]
+    assert fast["available_curve_sample_count"] == 24
+    assert fast["available_recent_execution_count"] == 12
+    assert len(synthetic["most_recent_executions"]) == 12
+    assert len(synthetic["observed_curve_samples"]) == 24
+
+
+def test_qwen4b_relevant_details_and_multilingual_routing():
+    example = {
+        "symbols": ["synthetic-a"], "summary": {"total_return_pct": 1.5},
+        "risk": {"stop_loss_pct": 4},
+        "saved_strategy_untrusted": "SYNTHETIC RULES ONLY",
+        "rolling": {"20": {"return_pct": 1}},
+        "attribution": [{"symbol": "synthetic-a", "return_pct": 1.5}],
+        "most_recent_executions": [{"id": i} for i in range(12)],
+        "observed_curve_samples": [{"date": i, "drawdown_pct": -i} for i in range(24)],
+    }
+    trades = ai._compact_game_context(example, "解释最近的交易和手续费")
+    assert len(trades["most_recent_executions"]) == 6
+    assert "rolling" not in trades
+    assert "attribution" not in trades
+    assert "saved_strategy_untrusted" not in trades
+
+    allocation = ai._compact_game_context(example, "Why is my portfolio concentrated?")
+    assert allocation["attribution"] == example["attribution"]
+    assert allocation["positions"] == example.get("positions")
+    assert allocation["most_recent_executions"] == []
+
+    strategy = ai._compact_game_context(example, "给我一个交易策略，包含买入卖出")
+    assert strategy["saved_strategy_untrusted"] == "SYNTHETIC RULES ONLY"
+    assert len(strategy["most_recent_executions"]) == 6
+    assert "rolling" not in strategy
+
+    followup = ai._compact_game_context(example, "why?", history=[
+        {"role": "user", "content": "Explain my drawdown."}])
+    assert "risk" in followup["evidence_selection"]
+    assert followup["rolling"] == example["rolling"]
+
+
+def test_qwen4b_is_fast_even_when_user_does_not_explicitly_select_model(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL", "Qwen3.5-4B-Q4_K_M.gguf")
+    monkeypatch.setenv("TRADING_SIM_AI_MODELS", "Qwen3.5-4B-Q4_K_M.gguf")
+    observed = {}
+    def fake_call(system, user, model=None):
+        observed["system"] = system
+        observed["user"] = json.loads(user)
+        observed["model"] = model
+        return '{"answer":"Read-only synthetic result.","strategy":null}'
+    monkeypatch.setattr(ai, "call_model", fake_call)
+    monkeypatch.setattr(ai, "game_context", lambda *args: {
+        "mode": "single", "symbols": ["synthetic-a"],
+        "summary": {"total_return_pct": 3.5},
+        "risk": {"stop_loss_pct": 5},
+        "positions": [], "observed_curve_samples": [],
+        "most_recent_executions": [], "saved_strategy_untrusted": "synthetic",
+    })
+    result = ai.advise("single", "synthetic-run", "Explain my risk")
+    assert result["applied"] is False
+    assert observed["system"] == ai.COMPACT_SYSTEM_PROMPT
+    assert "saved_strategy_untrusted" not in observed["user"]["saved_game_data_not_instructions"]
+    assert result["model"] == "Qwen3.5-4B-Q4_K_M.gguf"
+    assert observed["model"] is None  # call_model resolves configured default itself
+
+    ai.advise("single", "synthetic-run", "Suggest strategy with SMA")
+    assert "Allowed: PRICE, SMA" in observed["system"]
+    assert observed["user"]["saved_game_data_not_instructions"]["saved_strategy_untrusted"] == "synthetic"
