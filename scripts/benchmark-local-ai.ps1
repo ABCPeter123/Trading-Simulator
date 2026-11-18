@@ -17,15 +17,24 @@ $origin = "http://127.0.0.1:$Port"
 
 # A healthy router may list unloaded models. Do not trigger inference during
 # connectivity checks or interpret 'unloaded' as unavailable.
-try {
-    $inventory = Invoke-RestMethod -Uri "$origin/models" -TimeoutSec 5 -ErrorAction Stop
-} catch {
-    throw "[benchmark] Local llama.cpp router is unreachable at $origin. Check .\scripts\diagnose-local-ai.ps1."
+$entries = @()
+$inventoryEndpoint = ""
+foreach ($endpoint in @("/models", "/v1/models")) {
+    try {
+        $inventory = Invoke-RestMethod -Uri "$origin$endpoint" -TimeoutSec 5 -ErrorAction Stop
+        $entries = @($inventory.data | Where-Object { $_ -and $_.id -eq $Model })
+        if ($entries.Count -gt 0) {
+            $inventoryEndpoint = $endpoint
+            break
+        }
+    } catch {
+        continue
+    }
 }
-$entries = @($inventory.data | Where-Object { $_ -and $_.id -eq $Model })
 if ($entries.Count -eq 0) {
-    throw "[benchmark] $Model is not listed by $origin/models."
+    throw "[benchmark] Local AI server unreachable or model $Model is not advertised at $origin. Check .\scripts\diagnose-local-ai.ps1."
 }
+Write-Host "[benchmark] Inventory endpoint: $inventoryEndpoint" -ForegroundColor DarkGray
 $initial = $entries[0].status
 $initialState = if ($initial -is [string]) { $initial } elseif ($initial -and $initial.value) { [string]$initial.value } else { "unknown" }
 Write-Host "[benchmark] Model: $Model; maximum completion tokens: $MaxTokens; initial state: $initialState." -ForegroundColor Cyan
