@@ -186,6 +186,27 @@ export interface WalkForwardStability {
     error?:string}[];
   cagr_range_pct_points:number|null;interpretation:string;
 }
+export interface MarketBenchmark {
+  status:"available"|"unavailable";symbol:"SPY";reason?:string;
+  method?:string;source?:string;first_session?:string;last_session?:string;
+  matched_sessions?:number;return_pct?:number;cagr_pct?:number|null;
+  excess_sharpe?:number|null;drawdown_pct?:number;
+  commission_usd?:number;fx_bps_on_buy?:number;
+  spread_bps?:number;slippage_bps_on_buy?:number;
+  income_treatment?:string;selection_used_this_reference?:false;
+}
+export interface ResearchReview {
+  status:"diagnostic_only"|"unavailable";reason?:string;model?:string;
+  findings?:{code:string;severity:"high"|"medium"|"info";basis:string;
+    observation:string;evidence:Record<string,number>}[];
+  next_experiments?:{id:string;priority:number;title:string;method:string;
+    evidence_basis:string;automatic_execution:false}[];
+  summary?:{audit_cagr_pct:number|null;audit_excess_sharpe:number|null;
+    assumed_cash_rate_pct:number;critical_findings:number;
+    training_candidates_eligible?:number;training_candidates_attempted?:number};
+  integrity?:{audit_already_opened:true;selection_changed:false;
+    experiments_queued:0;read_only:true;broker_orders:0;warning:string};
+}
 export interface WalkForwardFold {
   fold:number;training_end:string;out_of_sample_start:string;out_of_sample_end:string;
   training_sessions:number;out_of_sample_sessions:number;trials_evaluated:number;
@@ -196,6 +217,7 @@ export interface WalkForwardFold {
   selection_score_breakdown?:{total:number;components:Record<string,number>};
   training_candidate_diagnostics?:WalkForwardCandidates;
   unseen_benchmark_comparison?:WalkForwardBenchmarkComparison;
+  unseen_spy_price_benchmark?:MarketBenchmark;
   unseen_exposure_and_costs?:WalkForwardExposure;
 }
 export interface WalkForwardConsistency {
@@ -215,6 +237,7 @@ export interface WalkForwardResult {
   coverage?:{first_date:string;last_date:string;shared_sessions:number;warmup_sessions:number};
   targets?:{cagr_pct:number;excess_sharpe:number;max_drawdown_pct:number;risk_free_pct:number};
   execution_assumptions?:{base_currency:string;commission_usd:number;fx_conversion_bps:number;slippage_bps:number};
+  research_review?:ResearchReview;
   model_search?:{width:string;candidate_count:number;total_train_evaluations:number;
     candidate_scope:string;
     pre_audit_candidate_leaderboard?:WalkForwardCandidates;
@@ -240,6 +263,7 @@ export interface WalkForwardResult {
     selected:WalkForwardSelection;selection_score:number;trials_evaluated:number;eligible_trials:number;
     selection_score_breakdown?:{total:number;components:Record<string,number>};
     benchmark_comparison?:WalkForwardBenchmarkComparison;
+    market_benchmark?:MarketBenchmark;
     exposure_and_costs?:WalkForwardExposure;
     start_date:string;end_date:string;sessions:number;objectives:WalkForwardQuality;
     consistency?:WalkForwardConsistency;
