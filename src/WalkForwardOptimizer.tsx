@@ -281,8 +281,8 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           </div>
         </>}
         <h5>{l("Pre-audit selection-bias diagnostics","审计前选择偏差诊断")}</h5>
-        {result.model_search?.pre_audit_selection_diagnostics&&(()=>{
-          const diagnostics=result.model_search.pre_audit_selection_diagnostics;
+        {preAuditDiagnostics&&(()=>{
+          const diagnostics=preAuditDiagnostics;
           const dsr=diagnostics.deflated_sharpe;
           const pbo=diagnostics.pbo;
           return <>
