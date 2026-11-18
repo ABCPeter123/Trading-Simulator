@@ -243,6 +243,7 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
     reads older observations, and no fill can occur before the next open.
     broker commission and FX costs are explicit, not vendor quotes.
     """
+    legacy_cost_model = broker is None
     broker = broker or {}
     delay_sessions = int(broker.get("delay_sessions", 1))
     if delay_sessions not in (1, 2):
@@ -287,13 +288,15 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
                             qty = math.floor(qty+1e-9)
                     if qty*px<1 or qty<=1e-9:
                         continue
-                    fee=commission+(qty*px*fx_bps/10000
-                        if metadata[s]["currency"]!=base_currency else 0.)
+                    fee=(max(1.,qty*.005) if legacy_cost_model else
+                         commission+(qty*px*fx_bps/10000
+                         if metadata[s]["currency"]!=base_currency else 0.))
                     if side=="buy":
                         while qty>0 and qty*px+fee>cash+1e-6:
                             qty = qty*.999 if metadata[s]["kind"]=="Crypto" else qty-1
-                            fee=commission+(qty*px*fx_bps/10000
-                        if metadata[s]["currency"]!=base_currency else 0.)
+                            fee=(max(1.,qty*.005) if legacy_cost_model else
+                         commission+(qty*px*fx_bps/10000
+                         if metadata[s]["currency"]!=base_currency else 0.))
                         if qty<=0:continue
                         cash-=qty*px+fee
                         holdings[s]+=qty
