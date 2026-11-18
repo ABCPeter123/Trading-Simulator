@@ -104,6 +104,15 @@ def test_model_deploys_to_paper_and_generates_deduplicated_signals(model_fixture
     })
     assert result.status_code==200,result.text
     assert result.json()["mode"]=="portfolio_model"
+    # Deployed source must be the frozen version, not a mutable UI draft.
+    deployment_id=result.json()["id"]
+    source=TestClient(app).get(f"/api/live/deployments/{deployment_id}/strategy")
+    assert source.status_code==200,source.text
+    assert source.json()["code"]==version["code"]
+    assert source.json()["model_config"]["model"]=="equal_weight"
+    missing=TestClient(app).get("/api/live/deployments/does-not-exist/strategy")
+    assert missing.status_code==404
+
     now=datetime(2026,11,17,11,tzinfo=ZoneInfo("America/New_York"))
     live.run_once(now=now,source=model_fixture)
     signals=live.signals()
