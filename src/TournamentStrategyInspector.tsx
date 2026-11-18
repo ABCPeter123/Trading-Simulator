@@ -56,6 +56,40 @@ export default function TournamentStrategyInspector({
     spec.model==="diversified_risk_parity"?RISK_PARITY_CAPS:
     spec.model==="equity_hedge"?EQUITY_HEDGE_CAPS:null;
   const researchOnly=Boolean(spec.research_only||RESEARCH_ONLY_MODELS.has(spec.model));
+  const configuredCashModel=CASH_MODELS.has(spec.model)&&
+    (spec.target_investment_pct!=null||spec.equity_class_cap_pct!=null||
+     spec.redistribute_excess!=null);
+  const invested=spec.target_investment_pct??95;
+  const equity=spec.equity_class_cap_pct??70;
+  const redistribution=Boolean(spec.redistribute_excess);
+  // The narrative templates describe defaults. The following override
+  // supplies the actual source-model settings for user-customized runs.
+  const cashRuleDetail=(index:number,original:string)=>{
+    if(!configuredCashModel)return original;
+    const allocationRule=l(
+      `The active model targets up to ${invested}% total investment, limits any one asset to ${spec.max_position_pct}% and caps all equity positions together at ${equity}%. Other asset-category caps still apply. ${redistribution?
+        "Unused weight is redistributed only among eligible assets that still have room under every cap. Remaining weight stays in cash.":
+        "Unused weight remains in cash."}`,
+      `当前模型的总投资目标最高为 ${invested}%，每项资产仓位上限为 ${spec.max_position_pct}%，全部股票仓位合计上限为 ${equity}%。其他资产类别上限仍适用。${redistribution?
+        "未使用的权重仅在仍符合各项限制的合格资产之间重新分配；仍有剩余则保留现金。":
+        "未使用权重保留为现金。"}`);
+    if(spec.model==="equal_weight"&&index===1)return l(
+      `Give each basket asset the same initial score. Divide the configured ${invested}% gross target equally before applying position and category caps.`,
+      `每项资产初始评分相同。先将设定的 ${invested}% 总投资目标等额分配，再执行单项及类别仓位限制。`);
+    if(spec.model==="equal_weight"&&index===2)return allocationRule;
+    if(spec.model==="inverse_volatility"&&index===2)return allocationRule;
+    if(spec.model==="trend_filter"&&index===2)return l(
+      "Only assets above their completed-session trend qualify. Eligible assets receive inverse-volatility weights. "+
+      allocationRule,"仅有收盘价高于历史趋势线的资产合格。合格资产按波动率倒数加权。"+allocationRule);
+    if(spec.model==="relative_momentum"&&index===3)return l(
+      "Only the strongest assets with positive momentum qualify. Eligible assets receive inverse-volatility weights. "+
+      allocationRule,"仅有动量为正的最强资产合格。合格资产按波动率倒数加权。"+allocationRule);
+    if(spec.model==="volatility_target"&&index===2)return l(
+      `Start from a maximum ${invested}% invested budget. Reduce it if the past-return estimate exceeds the model's 12% annualized volatility target; never scale up beyond ${invested}%.`,
+      `初始最高投资预算为 ${invested}%。若历史收益率估计超过模型设定的12%年化波动率目标，则降低敞口，且不会超过 ${invested}%。`);
+    if(spec.model==="volatility_target"&&index===3)return allocationRule;
+    return original;
+  };
   return <section className="tsi" aria-label={l("Detailed strategy explanation","详细策略说明")}>
     <header className="tsi-header">
       <div>
@@ -104,15 +138,21 @@ export default function TournamentStrategyInspector({
           <div className="tsi-step-number" aria-hidden="true">{i+1}</div>
           <div className="tsi-step-body">
             <h6>{explanationText(step.title,locale)}</h6>
-            <p>{explanationText(step.detail,locale)}</p>
+            <p>{cashRuleDetail(i,explanationText(step.detail,locale))}</p>
           </div>
         </li>)}
       </ol>
 
       <h5>{l("2. Exposure and risk limits","2. 敞口与风险限制")}</h5>
       <div className="tsi-explainer">
-        <p>{l("The position limit applies to every asset individually. Category ceilings apply to the aggregate allocation of all assets in that class. If a cap reduces a position, the excess stays in cash rather than being redistributed.",
-          "单项仓位上限适用于每项资产。类别上限适用于该类别所有资产的总配置。若限制削减某项仓位，超出部分会保留为现金，而不会重新分配。")}</p>
+        <p>{configuredCashModel?
+          (redistribution?
+            l("Each asset and its class remain subject to configured caps. After applying limits, the engine redistributes unused capital only among eligible assets with spare capacity; any remainder stays in cash.",
+              "每项资产及其类别均受设定仓位上限约束。执行限制后，引擎仅向仍有剩余容量的合格资产重新分配资金，其余保留现金。"):
+            l("Each asset and its class remain subject to configured caps. Capital removed by those limits stays in cash.",
+              "每项资产及其类别均受设定仓位上限约束。限制所削减的资金保留为现金。")):
+          l("Each asset has an individual position limit. Category ceilings apply to the entire class, and excess allocation remains in cash.",
+            "每项资产均有独立仓位上限。类别上限适用于整个类别，超出部分保留为现金。")}</p>
         {caps&&<div className="tsi-limits" aria-label={l("Category exposure limits","资产类别敞口限制")}>
           {caps.map(([en,zh,value])=><div key={en}><span>{l(en,zh)}</span><strong>{value}</strong></div>)}
         </div>}

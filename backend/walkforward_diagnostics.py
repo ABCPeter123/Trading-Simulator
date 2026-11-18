@@ -33,6 +33,11 @@ def exposure(result, symbols, metadata):
             ))
         if "cash_pct" in row:
             cash_snapshots.append(float(row["cash_pct"]))
+        elif weights:
+            # Advanced signed-exposure ledgers store weights but not a
+            # dedicated cash snapshot. At rebalance open, cash/equity is
+            # 1 - sum(signed weights), including shorts and borrowed cash.
+            cash_snapshots.append(100.-100.*sum(float(w) for w in weights.values()))
         # Gross concentration among absolute occupied weights; it does not
         # confuse signed net exposure with gross investment.
         gross=sum(abs(float(w)) for w in weights.values())
@@ -56,7 +61,7 @@ def exposure(result, symbols, metadata):
         "average_largest_position_share_of_gross_pct":
             round(sum(concentration)/len(concentration),2) if concentration else None,
         "position_snapshots":len(samples),
-        "snapshot_definition":"At executed rebalance opens only; daily average exposure is separate.",
+        "snapshot_definition":"At executed rebalance opens only; missing cash fields are recovered from signed portfolio weights. Daily average exposure is separate.",
         "turnover_pct_of_initial_capital":result.get("turnover_pct"),
         "explicit_fees_and_financing_usd":result.get("fees"),
         "transaction_fees_usd":result.get("transaction_fees"),

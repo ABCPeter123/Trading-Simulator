@@ -86,6 +86,24 @@ def test_expanding_walkforward_seals_final_audit():
     assert [x["out_of_sample_return_pct"] for x in normal["walk_forward"]["folds"]]==[
         x["out_of_sample_return_pct"] for x in revised["walk_forward"]["folds"]]
     assert normal["final_audit"]["selected"]==revised["final_audit"]["selected"]
+    # The previously tournament-selected source is a retrospective reference.
+    # Comparing it must NOT affect prior-only walk-forward selections.
+    source=normal["final_audit"]["original_tournament_reference"]
+    altered_source=revised["final_audit"]["original_tournament_reference"]
+    assert source["status"]=="available"
+    assert source["configuration"]["model"]=="equal_weight"
+    assert source["selected_by_walkforward"] is False
+    assert source["selection_input"] is False
+    assert source["research_only"] is True
+    assert "not independent unseen" in source["interpretation"]
+    assert source["training_gate"]==altered_source["training_gate"]
+    assert source["training_score"]==altered_source["training_score"]
+    assert source["return_pct"]!=altered_source["return_pct"]
+    assert [f["original_tournament_reference"]["return_pct"]
+            for f in normal["walk_forward"]["folds"]]==[
+            f["original_tournament_reference"]["return_pct"]
+            for f in revised["walk_forward"]["folds"]]
+
     comparison=normal["final_audit"]["prior_selected_comparison"]
     amended=revised["final_audit"]["prior_selected_comparison"]
     assert [x["objective"] for x in comparison]==[
@@ -177,3 +195,74 @@ def test_public_demo_never_enqueues_private_optimization(local_queue,monkeypatch
     monkeypatch.setattr("backend.main.PUBLIC_DEMO",True)
     resp=TestClient(app).post("/api/live/research/walkforward/jobs",json=request())
     assert resp.status_code==403
+
+
+
+def test_retrospective_reference_keeps_custom_source_controls():
+    from backend import tournament_reference
+    actual=spec()
+    actual.update(target_investment_pct=87, equity_class_cap_pct=61,
+                  redistribute_excess=True, commission_usd=.7)
+    original=tournament_reference.source_config(actual)
+    assert original["target_investment_pct"]==87
+    assert original["equity_class_cap_pct"]==61
+    assert original["redistribute_excess"] is True
+    assert original["delay_sessions"]==1
+    assert original["max_position_pct"]==actual["max_position_pct"]
+
+    balanced=tournament_reference.source_config(spec())
+    assert balanced["target_investment_pct"]==95
+    assert balanced["equity_class_cap_pct"]==70
+    assert balanced["redistribute_excess"] is False
+
+
+def test_reference_training_drawdown_gate_reports_exclusion():
+    from backend import tournament_reference
+    limit={"max_drawdown_pct":15}
+    eligible={"trades":5,"average_invested_pct":86,
+              "max_drawdown_pct":-18,"margin_calls":0}
+    detail={"total":12}
+    assert tournament_reference.training_eligibility(eligible,detail,limit)=="max_drawdown_limit"
+    eligible["max_drawdown_pct"]=-8
+    assert tournament_reference.training_eligibility(eligible,detail,limit)=="qualified"
+    eligible["margin_calls"]=1
+    assert tournament_reference.training_eligibility(eligible,detail,limit)=="margin_calls"
+
+
+def test_exposure_recovers_cash_from_signed_snapshot_not_just_explicit_fields():
+    from backend import walkforward_diagnostics as diagnostics
+    test_ledger={
+        "rebalances":[{"weights":{"spy":.2,"ief":.3}},
+                      {"weights":{"spy":.5,"ief":-.1}}],
+        "average_invested_pct":70,
+        "trades":3,
+    }
+    metadata={"spy":{"group":"equity"},"ief":{"group":"bond"}}
+    measured=diagnostics.exposure(test_ledger,["spy","ief"],metadata)
+    assert measured["position_snapshots"]==2
+    assert measured["average_rebalance_cash_pct"]==55.0
+
+
+
+def test_reference_preserves_advanced_and_multi_sleeve_models():
+    from backend import tournament_reference
+    signed=spec("leveraged_trend")
+    signed_config=tournament_reference.source_config(signed)
+    assert signed_config["model"]=="leveraged_trend"
+    assert "target_investment_pct" not in signed_config
+    assert "redistribute_excess" not in signed_config
+
+    blend=spec()
+    blend.update(model="blended_portfolio",sleeves=[
+        {"model":"equal_weight","weight_pct":45},
+        {"model":"trend_filter","weight_pct":55},
+    ],target_investment_pct=86,equity_class_cap_pct=67,
+                 redistribute_excess=True)
+    blend_config=tournament_reference.source_config(blend)
+    assert blend_config["model"]=="blended_portfolio"
+    assert blend_config["target_investment_pct"]==86
+    assert blend_config["equity_class_cap_pct"]==67
+    assert blend_config["redistribute_excess"] is True
+    assert blend_config["sleeves"]==[
+        {"model":"equal_weight","weight_pct":45.0},
+        {"model":"trend_filter","weight_pct":55.0}]

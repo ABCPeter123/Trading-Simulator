@@ -207,6 +207,18 @@ export interface ResearchReview {
   integrity?:{audit_already_opened:true;selection_changed:false;
     experiments_queued:0;read_only:true;broker_orders:0;warning:string};
 }
+export interface OriginalTournamentReference {
+  status:"available"|"unavailable";
+  interpretation:string;reason?:string;
+  selected_by_walkforward:false;selection_input:false;research_only:true;
+  configuration:WalkForwardSelection;
+  training_gate?:string;training_score?:number;
+  training_drawdown_pct?:number;training_cagr_pct?:number|null;
+  training_excess_sharpe?:number|null;training_average_invested_pct?:number;
+  return_pct?:number;cagr_pct?:number|null;excess_sharpe?:number|null;
+  drawdown_pct?:number;average_invested_pct?:number;
+  turnover_pct?:number;trades?:number;
+}
 export interface WalkForwardFold {
   fold:number;training_end:string;out_of_sample_start:string;out_of_sample_end:string;
   training_sessions:number;out_of_sample_sessions:number;trials_evaluated:number;
@@ -217,6 +229,7 @@ export interface WalkForwardFold {
   selection_score_breakdown?:{total:number;components:Record<string,number>};
   training_candidate_diagnostics?:WalkForwardCandidates;
   unseen_benchmark_comparison?:WalkForwardBenchmarkComparison;
+  original_tournament_reference?:OriginalTournamentReference;
   unseen_spy_price_benchmark?:MarketBenchmark;
   unseen_exposure_and_costs?:WalkForwardExposure;
 }
@@ -263,6 +276,7 @@ export interface WalkForwardResult {
     selected:WalkForwardSelection;selection_score:number;trials_evaluated:number;eligible_trials:number;
     selection_score_breakdown?:{total:number;components:Record<string,number>};
     benchmark_comparison?:WalkForwardBenchmarkComparison;
+    original_tournament_reference?:OriginalTournamentReference;
     market_benchmark?:MarketBenchmark;
     exposure_and_costs?:WalkForwardExposure;
     start_date:string;end_date:string;sessions:number;objectives:WalkForwardQuality;

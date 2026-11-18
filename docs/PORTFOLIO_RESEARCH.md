@@ -352,3 +352,41 @@ paper-trading observations. Do not rerun the same final dates and call the
 result an untouched audit. ChatGPT still cannot directly read the owner's
 localhost/private research outputs without an explicitly authorized local
 connection in an appropriate runtime.
+
+
+### Diagnosing tournament versus walk-forward model disagreement
+
+A completed tournament and a walk-forward optimization do **not**
+necessarily select the same candidate. The tournament ranks candidate
+baskets/models using its 60/20/20 split and validation-period criteria.
+The walk-forward workflow uses an existing fixed basket, expanding prior
+training windows, a hard training drawdown gate and new selections at
+each fold. A high tournament validation return does not prove the same
+candidate would have satisfied earlier walk-forward training gates.
+
+Walk-forward reports now include the exact original source tournament
+model as a **retrospective reference** for each of the three validation
+folds and the final period. Its saved execution-delay, allocation target,
+equity cap, position cap, and unused-weight redistribution controls are
+preserved. The private report records the source model's prior-period
+training eligibility and subsequent period returns alongside the
+walk-forward selected model. No reference outcome can reselect a model.
+Because the source model may already have been selected using prices
+inside these intervals, **none of its replayed intervals is independent
+unseen evidence for the source model**. This cannot validate or invalidate
+a historical backtest without genuinely new forward observations.
+
+The strategy inspector's customized long-only explanations now reflect
+the source model's actual total invested target, equity ceiling and
+redistribution flag, rather than showing contradictory default 95%
+and keep-cash statements. Defensive and signed-position models retain
+their own fixed exposure budgets instead of implying long-only custom
+settings apply to them.
+
+For signed-position/advanced research ledgers, average cash at rebalance
+snapshots is derived from 100% minus the signed sum of contemporaneous
+position weights when the report lacks a separate cash percentage.
+Borrowed cash can make this number negative and short proceeds can make
+it exceed 100%; this is a signed ledger ratio, not a guarantee of freely
+withdrawable money. As before, daily exposure averages and rebalance
+snapshot metrics are distinct.

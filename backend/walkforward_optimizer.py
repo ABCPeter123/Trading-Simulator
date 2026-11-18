@@ -17,6 +17,7 @@ from . import blended_portfolio_research as blended
 from . import performance_objectives as objectives
 from . import selection_diagnostics as selection_bias
 from . import walkforward_diagnostics as explanation
+from . import tournament_reference
 from . import research_review
 from . import portfolio_research as pr
 from . import tournament_strategies as tournament
@@ -284,6 +285,7 @@ def analyze(payload, *, loader=None, report=None):
                 "minimum_requirements":"At least 90 initial post-warmup training sessions, 30 sessions per validation fold and 126 untouched final-audit sessions.",
                 "research_only":True,"no_real_orders":True}
     configs=list(candidates(settings["spec"],settings["search_width"]))
+    source_candidate=tournament_reference.source_config(settings["spec"])
     folds=[]
     realized=[]
     for fold_idx in range(3):
@@ -307,6 +309,11 @@ def analyze(payload, *, loader=None, report=None):
             result,symbols,market,metadata,train_end,out_end,
             selected["config"]["max_position_pct"]/100,settings)
         allocation=explanation.exposure(result,symbols,metadata)
+        # The source model came from a prior tournament and is a retrospective
+        # reference. Its performance has no authority over fold selection.
+        source_reference=tournament_reference.evaluate(
+            source_candidate,symbols,market,metadata,train_end,
+            train_end,out_end,settings,_execute)
         folds.append({"fold":fold_idx+1,
                       "training_end":days[train_end-1],
                       "out_of_sample_start":days[train_end],
@@ -319,6 +326,7 @@ def analyze(payload, *, loader=None, report=None):
                       "selection_score_breakdown":selected["score_breakdown"],
                       "training_candidate_diagnostics":selected["candidate_diagnostics"],
                       "unseen_benchmark_comparison":baseline,
+                      "original_tournament_reference":source_reference,
                       "unseen_exposure_and_costs":allocation,
                       "training_objectives":selected["training"],
                       "out_of_sample_objectives":fold_metrics,
@@ -373,6 +381,9 @@ def analyze(payload, *, loader=None, report=None):
         final,symbols,market,metadata,test_start,n,
         final_choice["config"]["max_position_pct"]/100,settings)
     audit_exposure=explanation.exposure(final,symbols,metadata)
+    source_reference=tournament_reference.evaluate(
+        source_candidate,symbols,market,metadata,test_start,
+        test_start,n,settings,_execute)
     # This stability diagnostic uses ONLY the pre-audit history and has
     # no authority to change the already-locked final selection.
     pre_audit_stability=explanation.parameter_sensitivity(
@@ -458,6 +469,7 @@ def analyze(payload, *, loader=None, report=None):
             "selected":final_choice["config"],
             "selection_score_breakdown":final_choice["score_breakdown"],
             "benchmark_comparison":audit_comparison,
+            "original_tournament_reference":source_reference,
             "market_benchmark":audit_spy,
             "exposure_and_costs":audit_exposure,
             "prior_selected_comparison":comparison,
@@ -496,6 +508,8 @@ def analyze(payload, *, loader=None, report=None):
             "SPY buy-and-hold uses exact matched daily sessions and a modeled opening purchase. It is a price-only comparison; dividends are not explicitly reinvested and historical provider adjustments may vary. A missing session yields unavailable, never a silent forward-fill.",
             "Same-basket equal-weight benchmarks and a fixed cash-rate hurdle are diagnostic, not additional reselectable candidates. Neither validates a market-index-relative edge.",
             "Exposure by category and cash is measured at discrete rebalance snapshots; daily average gross exposure is reported separately. Turnover is based on gross executed notional, not an annualized figure.",
+            "The original tournament-selected model is rerun as a retrospective reference under the walk-forward period split. Because it was chosen through a separate completed tournament, these periods are not independent out-of-sample evidence for that source model.",
+            "The original tournament candidate's prior-window eligibility is diagnostic; it cannot override drawdown limits or replace the chosen walk-forward model.",
             "Parameter sensitivity uses only pre-audit prices and does not change model selection; it is not a fresh unseen validation period.",
             "Actual instrument history remains susceptible to survivorship bias, incomplete corporate-action adjustment and limited historical coverage.",
             "Slippage, borrowing costs, spreads, commissions, FX and fills are assumed, not actual future broker executions. No paper-forward evidence is included.",
