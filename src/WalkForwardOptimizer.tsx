@@ -295,6 +295,30 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           <td>{dec(f.out_of_sample_objectives.excess_sharpe)}</td>
           <td>{pct(f.out_of_sample_drawdown_pct)}</td>
         </tr>)}</tbody></table></div>
+        {study.folds.some(f=>f.original_tournament_reference)&&
+          <details className="wfo-limit" open>
+            <summary>{l("Original tournament model vs walk-forward selections",
+              "原竞赛模型与滚动优化模型对照")}</summary>
+            <p>{l("This replays the tournament-selected source model on the same sessions and cost assumptions as the walk-forward candidates. It is retrospective: the source model may have been selected using data from these dates, so its returns are NOT fresh unseen evidence. Neither its returns nor its earlier risk-gate results change the optimizer's selections.",
+              "将竞赛选中的原始模型按相同日期及执行成本重新模拟。此比较属于事后分析：原模型可能已利用这些日期的数据做出选择，因此其收益并非新的未见数据证据。该模型的收益及训练期风险筛选结果均不会改变滚动优化结果。")}</p>
+            <div className="wfo-scroll"><table><thead><tr>
+              <th>{l("Period","期间")}</th>
+              <th>{l("Walk-forward selected","滚动优化模型")}</th>
+              <th>{l("Original tournament model","原竞赛模型")}</th>
+              <th>{l("Original training gate","原模型训练期筛选")}</th>
+              <th>{l("Original training drawdown","原模型训练期回撤")}</th>
+              <th>{l("Original invested capital","原模型平均投资")}</th>
+            </tr></thead><tbody>{study.folds.map(f=><tr key={f.fold}>
+              <td>{l("Fold","验证期")} {f.fold}</td>
+              <td>{pct(f.out_of_sample_return_pct)}</td>
+              <td>{pct(f.original_tournament_reference?.return_pct)}</td>
+              <td>{f.original_tournament_reference?.training_gate?
+                name(f.original_tournament_reference.training_gate):
+                l("Unavailable","不可用")}</td>
+              <td>{pct(f.original_tournament_reference?.training_drawdown_pct)}</td>
+              <td>{pct(f.original_tournament_reference?.average_invested_pct)}</td>
+            </tr>)}</tbody></table></div>
+          </details>}
         <details className="wfo-limit">
           <summary>{l("Fold-by-fold benchmarks, execution and exposure",
             "各验证期基准、执行成本及敞口")}</summary>
@@ -342,6 +366,32 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
             <strong>{audit.observed_targets_met?l("Met historically","历史观察达标"):
               l("Not met","未达标")}</strong></div>
         </div>
+        {audit.original_tournament_reference&&<details className="wfo-limit" open>
+          <summary>{l("Original tournament candidate: retrospective final-period comparison",
+            "原竞赛候选：最终期间的事后比较")}</summary>
+          <p>{l("This keeps the original tournament model and settings unchanged instead of reselecting another strategy. The historical final period is already observed and is NOT a new sealed audit of the original model.",
+            "此处保留原竞赛模型及设置，不重新选择其他策略。历史最终区间已被观察，因此不是原模型新的独立审计。")}</p>
+          <div className="wfo-headline">
+            <div><small>{l("Original model total return","原模型总收益")}</small>
+              <strong>{pct(audit.original_tournament_reference.return_pct)}</strong></div>
+            <div><small>{l("Original model CAGR","原模型年复合增长")}</small>
+              <strong>{pct(audit.original_tournament_reference.cagr_pct)}</strong></div>
+            <div><small>{l("Original model drawdown","原模型最大回撤")}</small>
+              <strong>{pct(audit.original_tournament_reference.drawdown_pct)}</strong></div>
+            <div><small>{l("Original model average invested","原模型平均投资比例")}</small>
+              <strong>{pct(audit.original_tournament_reference.average_invested_pct)}</strong></div>
+          </div>
+          <p>{l("Prior-period risk gate","审计前风险筛选")}:{" "}
+            {audit.original_tournament_reference.training_gate?
+            name(audit.original_tournament_reference.training_gate):
+            l("Unavailable","不可用")}.{" "}
+            {l("Prior-period drawdown","审计前回撤")}:{" "}
+            {pct(audit.original_tournament_reference.training_drawdown_pct)}.{" "}
+            {l("Prior-period score","审计前得分")}:{" "}
+            {dec(audit.original_tournament_reference.training_score)}.</p>
+          <p className="wfo-disclaimer">{l("A model chosen by a different tournament is not an independent ex-ante walk-forward contender. This comparison is for diagnosis only and cannot be used to claim the original tournament backtest was verified.",
+            "通过其他竞赛选出的模型并非独立的事前滚动验证候选。此比较仅供诊断，不能视为原竞赛回测已经获得独立验证。")}</p>
+        </details>}
         {audit.benchmark_comparison&&<>
           <h5>{l("Same-period baseline comparison","同区间基准比较")}</h5>
           <p>{l("The same-basket equal-weight baseline is a separately simulated long-only portfolio with identical instruments and session dates. The cash hurdle compounds your assumed constant annual rate. Neither benchmark participates in model selection.",
