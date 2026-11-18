@@ -37,6 +37,14 @@ MARGIN_RATE = adv.MARGIN_RATE_ANNUAL
 MAINTENANCE = adv.MAINTENANCE_RATIO
 
 
+class PaperContinuityError(ValueError):
+    """Observed sessions were missed, so a forward study cannot backfill."""
+
+
+class PaperRiskError(ValueError):
+    """The hypothetical ledger breached a hard portfolio risk condition."""
+
+
 def _private():
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO") == "1":
         raise HTTPException(403, "Forward-paper research is unavailable in public demos.")
@@ -311,7 +319,7 @@ def _fill(state, config, meta, symbols, today, opens):
     signed = config["model"] in adv.RESEARCH_ONLY
     equity_at_open = state["cash"] + sum(state["positions"][s]*opens[s] for s in symbols)
     if equity_at_open <= 0 or not math.isfinite(equity_at_open):
-        raise ValueError("Paper portfolio capital exhausted.")
+        raise PaperRiskError("Paper portfolio capital exhausted.")
     slippage=8.  # model-independent conservative research default
     fees=[]
     desired={s:math.trunc(equity_at_open*target[s]/opens[s]) for s in symbols}
@@ -343,6 +351,10 @@ def _advance(c, row, days, market, meta, at):
     if row["last_session"] not in days:
         raise ValueError("Previous observed paper session missing from source.")
     offset=days.index(row["last_session"])
+    # Reconstructing several opens after downtime would turn a live forward
+    # observation into hindsight backtesting. End the continuous study.
+    if len(days) - offset - 1 > 1:
+        raise PaperContinuityError("Missed daily paper-observation checkpoint.")
     pending_orders=[]
     for index in range(offset+1,len(days)):
         day=days[index]
@@ -364,13 +376,13 @@ def _advance(c, row, days, market, meta, at):
         state["financing_paid"]+=finance
         state["equity"]=state["cash"]+sum(state["positions"][s]*closes[s] for s in symbols)
         if state["equity"]<=0 or not math.isfinite(state["equity"]):
-            raise ValueError("Forward-paper equity exhausted; review exposure.")
+            raise PaperRiskError("Forward-paper equity exhausted; review exposure.")
         state["peak"]=max(state["peak"],state["equity"])
         gross=sum(abs(state["positions"][s]*closes[s]) for s in symbols)
         state["gross_pct"]=100*gross/state["equity"]
         drawdown=(state["equity"]/state["peak"]-1)*100
         if gross > 0 and state["equity"]/gross < MAINTENANCE:
-            raise ValueError("Margin maintenance floor breached; no future paper execution.")
+            raise PaperRiskError("Margin maintenance floor breached; no future paper execution.")
         # Everything for this day is committed atomically with the state.
         for symbol,action,quantity,price,fee in pending_orders:
             c.execute("INSERT INTO paper_fills VALUES(?,?,?,?,?,?,?,?,?,1)",
@@ -427,8 +439,11 @@ def process_one(study_id, *, now=None, loader=None):
         except (ValueError,TypeError,KeyError,HTTPException,ZeroDivisionError) as exc:
             c.rollback()
             # Fail closed and retain already committed observed sessions.
-            c.execute("UPDATE paper_studies SET last_error=?,updated_at=? WHERE id=?",
-                      ("Paper data or execution check failed ("+type(exc).__name__+").",
+            broken = isinstance(exc, (PaperContinuityError, PaperRiskError))
+            c.execute("UPDATE paper_studies SET status=?,last_error=?,updated_at=? WHERE id=?",
+                      ("paused" if broken else "active",
+                       "Paper observation stopped ("+type(exc).__name__+")."
+                       if broken else "Paper data check failed ("+type(exc).__name__+").",
                        at.isoformat(),study_id))
         return _public(c.execute("SELECT * FROM paper_studies WHERE id=?",(study_id,)).fetchone())
 
