@@ -715,7 +715,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "representative of distinct models, then fill remaining places by score. "
             "Sort selected finalists by validation return minus drawdown, turnover, "
             "volatility and weak historical regimes. This is not the unrestricted "
-            "global top ten. Held-out tests and future scenarios never determine selection."),
+            "global top ten. Held-out tests and future scenarios never determine selection.")),
         "shortlist_is_global_top_ten":False,
         "execution_assumptions":{**broker_assumptions,"configured_delay_sessions":params["delay_sessions"],
                                  "long_only_target_investment_pct":investment if mode=="high_performance" else 95.,
