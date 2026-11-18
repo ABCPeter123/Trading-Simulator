@@ -1,4 +1,4 @@
-import { request } from "./api";
+import { request, apiErrorMessage } from "./api";
 import { apiUrl, cloudFrontend, privateRequestHeaders } from "./privateConnection";
 
 export type AIProvider = "ollama" | "llama_cpp" | "openai" | "off";
@@ -84,10 +84,7 @@ export async function askAIStream(
     let message = "Local AI stream is unavailable.";
     try {
       const payload: unknown = await response.json();
-      if (payload && typeof payload === "object" && "detail" in payload &&
-          typeof payload.detail === "string") {
-        message = payload.detail;
-      }
+      if (!response.ok) message = apiErrorMessage(response.status, payload);
     } catch { /* use the fixed non-sensitive message */ }
     throw new Error(message);
   }
