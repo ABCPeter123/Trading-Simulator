@@ -19,6 +19,7 @@ from . import selection_diagnostics as selection_bias
 from . import walkforward_diagnostics as explanation
 from . import tournament_reference
 from . import research_review
+from . import research_integrity
 from . import portfolio_research as pr
 from . import tournament_strategies as tournament
 from . import universe_research as universe
@@ -439,6 +440,8 @@ def analyze(payload, *, loader=None, report=None):
         histories["usdcad"]=load("usdcad")
     report(34,"Aligning shared observed sessions")
     days,market,metadata,sources=pr._prepare(symbols,histories)
+    provenance=research_integrity.data_provenance(
+        symbols,histories,days,metadata,sources)
     n=len(days)
     points=[int(n*x) for x in SELECTION_FRACTIONS]
     if (points[0]-pr.WARMUP<90 or
@@ -478,6 +481,11 @@ def analyze(payload, *, loader=None, report=None):
         fold_ledgers.append({"selected":selected["config"],"ledger":result})
         fold_metrics=objectives.performance(result["equity_curve"],
                                              risk_free_pct=settings["risk_free_pct"])
+        training_ledger=next(row["train"] for row in evaluations
+                             if row["config"]==selected["config"])
+        training_cost_review=research_integrity.cash_cost_counterfactual(
+            selected["config"],training_ledger,symbols,market,metadata,
+            train_end,settings,_execute)
         baseline=explanation.baseline_comparison(
             result,symbols,market,metadata,train_end,out_end,
             selected["config"]["max_position_pct"]/100,settings)
@@ -501,6 +509,7 @@ def analyze(payload, *, loader=None, report=None):
                       "unseen_benchmark_comparison":baseline,
                       "original_tournament_reference":source_reference,
                       "unseen_exposure_and_costs":allocation,
+                      "pre_audit_training_cost_review":training_cost_review,
                       "training_objectives":selected["training"],
                       "out_of_sample_objectives":fold_metrics,
                       "out_of_sample_return_pct":result["return_pct"],
@@ -539,8 +548,11 @@ def analyze(payload, *, loader=None, report=None):
             pre_audit_curves.append(historical["equity_curve"])
         except (ValueError,ArithmeticError,ZeroDivisionError):
             continue
-    selected_training=_execute(final_choice["config"],symbols,market,metadata,
-                               pr.WARMUP,test_start,settings["slippage_bps"],settings)
+    selected_training=next(row["train"] for row in final_training
+                           if row["config"]==final_choice["config"])
+    pre_audit_cost_review=research_integrity.cash_cost_counterfactual(
+        final_choice["config"],selected_training,symbols,market,metadata,
+        test_start,settings,_execute)
     selection_diagnostics=selection_bias.diagnose(
         selected_training["equity_curve"],pre_audit_curves,
         risk_free_pct=settings["risk_free_pct"],
@@ -620,6 +632,7 @@ def analyze(payload, *, loader=None, report=None):
         "symbols":symbols,
         "coverage":{"first_date":days[0],"last_date":days[-1],
                     "shared_sessions":n,"warmup_sessions":pr.WARMUP},
+        "data_provenance":provenance,
         "execution_assumptions":{key:settings[key] for key in
               ("base_currency","commission_usd","fx_conversion_bps","slippage_bps")},
         "eligibility_policy":{
@@ -637,6 +650,7 @@ def analyze(payload, *, loader=None, report=None):
                         "pre_audit_risk_frontier":risk_frontier,
                         "pre_audit_candidate_leaderboard":final_choice["candidate_diagnostics"],
                         "pre_audit_parameter_stability":pre_audit_stability,
+                        "pre_audit_cost_review":pre_audit_cost_review,
                         "candidate_count":len(configs),
                         "total_train_evaluations":sum(x["trials_evaluated"] for x in folds)+attempted,
                         "candidate_scope":"Compatible models on the selected fixed basket. No symbol selection, intraday signals or unrestricted model synthesis.",
@@ -702,7 +716,9 @@ def analyze(payload, *, loader=None, report=None):
             "The original tournament-selected model is rerun as a retrospective reference under the walk-forward period split. Because it was chosen through a separate completed tournament, these periods are not independent out-of-sample evidence for that source model.",
             "The original tournament candidate's prior-window eligibility is diagnostic; it cannot override drawdown limits or replace the chosen walk-forward model.",
             "Parameter sensitivity uses only pre-audit prices and does not change model selection; it is not a fresh unseen validation period.",
+            "The provenance report identifies provider/FX coverage but cannot certify corporate actions, delisted securities or historical universe membership.",
             "Actual instrument history remains susceptible to survivorship bias, incomplete corporate-action adjustment and limited historical coverage.",
+            "Pre-audit frictionless versus costed replays measure sensitivity to execution assumptions, not exact fee attribution or proof of avoidable cash drag.",
             "Slippage, borrowing costs, spreads, commissions, FX and fills are assumed, not actual future broker executions. No paper-forward evidence is included.",
             "Rolling 252-session returns overlap and do not represent independent years. Calendar years only count when nearly complete; incomplete audit windows must show insufficient evidence instead of a made-up worst annual return.",
             "An observed annualized return over less than multiple full years is not evidence of consistent 50-60% annual performance.",
