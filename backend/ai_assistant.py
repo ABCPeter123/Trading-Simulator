@@ -176,8 +176,17 @@ def _compact_game_context(context, question="", history=()):
         # Compatibility with existing callers that ask for a generic compact
         # overview. More specific requests can be smaller.
         topics = {"strategy", "trades", "risk", "curve", "performance", "allocation"}
+    # Full rule text and a mini trade ledger are useful for causal
+    # underperformance explanations, but waste prefill time for a simple
+    # return or benchmark calculation. Never invent explanations for
+    # evidence intentionally omitted.
+    reason = bool(re.search(
+        r"\b(why|explain|reason|cause|underperform(?:ed|ing)?|outperform(?:ed|ing)?)\b|为什么|为何|原因|解释|跑输|跑赢",
+        question, flags=re.I,
+    ))
+    diagnostic = "performance" in topics and reason
     compact = dict(context)
-    if "strategy" not in topics and "performance" not in topics:
+    if "strategy" not in topics and not diagnostic:
         compact.pop("saved_strategy_untrusted", None)
     if not topics.intersection({"performance", "risk", "curve"}):
         compact.pop("rolling", None)
@@ -190,7 +199,7 @@ def _compact_game_context(context, question="", history=()):
         compact["observed_curve_samples"] = _fast_curve_selection(samples, count)
     executions = compact.get("most_recent_executions")
     if isinstance(executions, list):
-        count = 6 if "trades" in topics else 3 if topics.intersection({"performance", "strategy"}) else 0
+        count = 6 if "trades" in topics else 3 if "strategy" in topics or diagnostic else 0
         compact["most_recent_executions"] = executions[-count:] if count else []
     compact["sampled_observations_for_speed"] = True
     compact["evidence_selection"] = sorted(topics) if topics else ["overview"]
