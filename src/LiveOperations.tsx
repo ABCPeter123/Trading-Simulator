@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useState} from "react";
 import {Activity,AlertTriangle,Bell,Check,Clock3,PlayCircle,RefreshCw,Save,ShieldCheck,Wallet} from "lucide-react";
 import {useI18n} from "./i18n";
+import {request} from "./api";
 import {listStrategies} from "./strategyLibraryApi";
 import type {SavedStrategy} from "./strategyLibraryApi";
 import {
@@ -11,6 +12,13 @@ import {
 import type {Alert,ConfirmedFill,Deployment,FillDraft,Journal,MachineStatus,NotificationStatus,Signal} from "./liveMachineApi";
 import "./liveOperations.css";
 
+interface ResearchShortlist {
+  id:string;status:string;created_at:string;result?:{
+    top10:{rank:number;basket_type:string;model:string;symbols:string[];validation_score:number;
+      validation:{return_pct:number;max_drawdown_pct:number}}[];
+    eligible_count:number;excluded_count:number;selection_method:string;
+  }|null;
+}
 export type OperationsSection="dashboard"|"machine"|"journal"|"alerts";
 const fmt=(n:number)=>Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:2}):"";
 const when=(x:string|number|null)=>!x?"Never":new Date(typeof x==="number"?x*1000:x).toLocaleString();
@@ -23,11 +31,13 @@ function Summary({label,value,detail}:{label:string;value:string|number;detail?:
   return <article className="ops-summary"><span>{label}</span><strong>{value}</strong>{detail&&<small>{detail}</small>}</article>;
 }
 
-export default function LiveOperations({section,initialSignal,onRecordSignal,onConsumed}:{
+export default function LiveOperations({section,initialSignal,onRecordSignal,onConsumed,onOpenResearch}:{
   section:OperationsSection;initialSignal?:Signal|null;
   onRecordSignal?:(signal:Signal)=>void;onConsumed?:()=>void;
+  onOpenResearch?:()=>void;
 }){
   const {t}=useI18n();
+  const [shortlist,setShortlist]=useState<ResearchShortlist|null>(null);
   const [status,setStatus]=useState<MachineStatus|null>(null);
   const [deployments,setDeployments]=useState<Deployment[]>([]);
   const [signals,setSignals]=useState<Signal[]>([]);
@@ -48,6 +58,22 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
   const [draft,setDraft]=useState<FillDraft>(emptyFill);
   const [revisions,setRevisions]=useState<{previous:string;changed_at:string}[]>([]);
 
+  useEffect(()=>{
+    if(section!=="dashboard")return;
+    let active=true;
+    const update=async()=>{
+      try{
+        const jobs=await request<ResearchShortlist[]>("/live/research/universe/jobs");
+        const finished=jobs.find(j=>j.status==="completed");
+        if(!finished){if(active)setShortlist(null);return;}
+        const detail=await request<ResearchShortlist>("/live/research/universe/jobs/"+encodeURIComponent(finished.id));
+        if(active)setShortlist(detail);
+      }catch{if(active)setShortlist(null);}
+    };
+    void update();
+    const timer=setInterval(()=>{void update();},30000);
+    return()=>{active=false;clearInterval(timer);};
+  },[section]);
   const refresh=useCallback(async()=>{
     const results=await Promise.allSettled([
       getMachineStatus(),listDeployments(),listSignals(),getJournal(),listMachineAlerts(),getNotifications(),
@@ -157,6 +183,25 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
         <div className="ops-line"><span>{t("Notification channels")}</span><strong>{notification?.channels.join(", ")||t("Not configured")}</strong></div>
         <div className="ops-line"><span>{t("Open critical incidents")}</span><strong>{alerts.filter(a=>a.severity==="critical"&&a.status==="open").length}</strong></div>
         <p className="ops-muted">{t("Worker must run independently of the browser. Failed or stale market data blocks new recommendations.")}</p>
+      </section>
+      <section className="ops-card ops-wide">
+        <h2>{t("Top 10 historical research candidates")}</h2>
+        <p className="ops-muted">{t("Ranked using validation history, not future information. Historical candidates are not live trade recommendations.")}</p>
+        {!shortlist?.result?.top10?.length?
+          <p className="ops-muted">{t("No completed universe scan yet. Run Strategy Tournament in Research Lab.")}</p>:
+          <div className="ops-table-wrap"><table><thead><tr>
+            <th>#</th><th>{t("Model")}</th><th>{t("Basket")}</th>
+            <th>{t("Validation return")}</th><th>{t("Validation drawdown")}</th>
+          </tr></thead><tbody>
+            {shortlist.result.top10.map(item=><tr key={item.rank}>
+              <td>{item.rank}</td><td>{item.model.replaceAll("_"," ")}</td>
+              <td>{item.basket_type.replaceAll("_"," ")}
+                <small>{item.symbols.map(x=>x.toUpperCase()).join(", ")}</small></td>
+              <td>{item.validation.return_pct.toFixed(2)}%</td>
+              <td>{item.validation.max_drawdown_pct.toFixed(2)}%</td>
+            </tr>)}
+          </tbody></table></div>}
+        {onOpenResearch&&<button type="button" onClick={onOpenResearch}>{t("Open Strategy Tournament")}</button>}
       </section>
       <section className="ops-card ops-wide">
         <h2><Wallet size={18}/>{t("Confirmed positions")}</h2>
