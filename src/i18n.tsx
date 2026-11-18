@@ -65,6 +65,8 @@ const zh: Record<string, string> = {
   "Research Lab": "研究实验室",
   "Live Engine": "实时引擎",
   "Strategy Tournament": "策略竞赛",
+  "Live engine unavailable for custom research exposure": "自定义研究敞口暂不支持实时引擎",
+  "Custom investment and equity caps are preserved when saving and replaying this long-only strategy. Live monitoring is disabled until it can reproduce those research exposure rules.": "保存及历史回放时保留此多头策略的自定义投资比例和股票类别上限。在实时监控可复现这些规则前，暂不支持该策略。",
   "Target invested capital (%)": "目标投资资金比例（%）",
   "Equity category exposure cap (%)": "股票类别敞口上限（%）",
   "Redistribute unused weight among eligible assets": "把未使用的仓位分配给符合条件的资产",
