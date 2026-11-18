@@ -3,7 +3,7 @@
 # Print periodic progress while the model loads and generates. This script
 # does NOT start more PowerShell windows or change Windows paging settings.
 param(
-    [ValidateSet("TwIL-8B-Q4_K_M-balanced","Qwen3.5-9B-Q4_K_M")]
+    [ValidateSet("TwIL-8B-Q4_K_M-balanced","Qwen3.5-9B-Q4_K_M","Qwen3.5-4B-Q4_K_M")]
     [string]$Model = "Qwen3.5-9B-Q4_K_M",
     [ValidateRange(16,256)]
     [int]$MaxTokens = 64,
