@@ -43,17 +43,17 @@ if (Test-Path -LiteralPath $envPath) {
     }
 }
 
-# If one GGUF is allowlisted, show the router exactly that model.
-# Use a same-SSD NTFS hard link without duplicating the original large file.
-# The private managed folder is Git-ignored. Originals are never deleted.
-$routerModels = $models
+# When exactly one model is configured, use llama.cpp single-model mode.
+# This avoids router folder scanning, NTFS hard-link permissions, and delays.
+# All other model files remain private and untouched on the E: SSD.
+$singleModel = $null
 if (Test-Path -LiteralPath $envPath) {
     $choices = @()
     $selectedFilename = ""
     foreach ($line in Get-Content -LiteralPath $envPath -Encoding UTF8) {
         if ($line -match '^\s*TRADING_SIM_AI_MODELS\s*=\s*(.*?)\s*$') {
             $choices = @($Matches[1].Trim().Trim('"').Trim("'").Split(',') |
-                ForEach-Object { $_.Trim() } | Where-Object { $_ })
+                         ForEach-Object { $_.Trim() } | Where-Object { $_ })
         }
         if ($line -match '^\s*TRADING_SIM_AI_MODEL\s*=\s*(.*?)\s*$') {
             $selectedFilename = $Matches[1].Trim().Trim('"').Trim("'")
@@ -61,40 +61,25 @@ if (Test-Path -LiteralPath $envPath) {
     }
     if ($choices.Count -eq 1) {
         $filename = $choices[0]
-        if ($filename -notmatch '^[A-Za-z0-9_.-]+[.]gguf$' -or
-            $filename.StartsWith(".")) {
-            throw "Invalid single-model allowlist entry. Use only a GGUF filename."
+        if ($filename -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]*[.]gguf$') {
+            throw "Single-model AI allowlist must be a GGUF filename."
         }
         if ($selectedFilename -and $selectedFilename -ne $filename -and
             $selectedFilename -ne [IO.Path]::GetFileNameWithoutExtension($filename)) {
-            throw "TRADING_SIM_AI_MODEL must match TRADING_SIM_AI_MODELS in single-model mode."
+            throw "TRADING_SIM_AI_MODEL must match TRADING_SIM_AI_MODELS."
         }
-        $source = Join-Path $models $filename
-        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
-            throw "Selected GGUF not found: $filename. Re-run the compact-model installer."
+        $selectedPath = Join-Path $models $filename
+        if (-not (Test-Path -LiteralPath $selectedPath -PathType Leaf)) {
+            throw "Selected model file not found in models/private: $filename"
         }
-        if ((Get-Item -LiteralPath $source).Length -lt 200MB) {
-            throw "Selected GGUF appears incomplete: $filename"
+        if ((Get-Item -LiteralPath $selectedPath).Length -lt 200MB) {
+            throw "Selected GGUF is incomplete: $filename"
         }
-        $selectionDir = Join-Path $root ".local-state\ai-single-model"
-        $marker = Join-Path $selectionDir ".trading-sim-managed"
-        if (-not (Test-Path -LiteralPath $selectionDir)) {
-            New-Item -ItemType Directory -Path $selectionDir -Force | Out-Null
-            Set-Content -LiteralPath $marker -Value "Managed by Trading Simulator. Original models are in models/private."
+        $singleModel = @{
+            path = $selectedPath
+            id = [IO.Path]::GetFileNameWithoutExtension($filename)
         }
-        if (-not (Test-Path -LiteralPath $marker)) {
-            throw "AI model-view folder is not managed by Trading Simulator."
-        }
-        Get-ChildItem -LiteralPath $selectionDir -Filter "*.gguf" -File |
-            Remove-Item -Force
-        $link = Join-Path $selectionDir $filename
-        try {
-            New-Item -ItemType HardLink -Path $link -Target $source -ErrorAction Stop | Out-Null
-        } catch {
-            throw "Cannot create NTFS same-drive hard link. Check E: filesystem and folder access."
-        }
-        $routerModels = $selectionDir
-        Write-Host "[ai] Selected only $filename through a zero-copy SSD hard link." -ForegroundColor Green
+        Write-Host "[ai] Serving ONLY $filename with llama.cpp single-model mode." -ForegroundColor Green
     }
 }
 
@@ -236,22 +221,39 @@ Write-Host "[ai] Profile=$profile, physical_cores=$physical, logical_cpus=$logic
 Write-Host "[ai] Context=$ctx, batch=$batch, ubatch=$ubatch, GPU-layers=$gpuLayers (requires a GPU-enabled llama.cpp build)."
 Write-Host "[ai] GGUF files stay on $models; drive paging is not a substitute for RAM."
 
-$argsList = @(
-    "--models-dir", $routerModels, "--models-max", "1",
-    "--host", "127.0.0.1", "--port", "8081",
-    "--parallel", "1",
-    "--threads", [string]$threads,
-    "--threads-batch", [string]$batchThreads,
-    "--gpu-layers", $gpuLayers,
-    "--device", $selectedDevice,
-    "--split-mode", "none",
-    "--fit", "on",
-    "--fit-target", [string]$fitTarget,
-    "--flash-attn", "auto",
-    "--ctx-size", [string]$ctx,
-    "--batch-size", [string]$batch,
-    "--ubatch-size", [string]$ubatch
-)
+if ($singleModel) {
+    # Small, compatible flag set. Loading the sole GGUF directly is simpler
+    # and more robust than the on-demand multi-model router on older WinGet builds.
+    $argsList = @(
+        "--model", $singleModel.path,
+        "--alias", $singleModel.id,
+        "--host", "127.0.0.1", "--port", "8081",
+        "--parallel", "1",
+        "--threads", [string]$threads,
+        "--threads-batch", [string]$batchThreads,
+        "--gpu-layers", $gpuLayers,
+        "--device", $selectedDevice,
+        "--ctx-size", [string]$ctx
+    )
+} else {
+    $argsList = @(
+        "--models-dir", $models, "--models-max", "1",
+        "--host", "127.0.0.1", "--port", "8081",
+        "--parallel", "1",
+        "--threads", [string]$threads,
+        "--threads-batch", [string]$batchThreads,
+        "--gpu-layers", $gpuLayers,
+        "--device", $selectedDevice,
+        "--split-mode", "none",
+        "--fit", "on",
+        "--fit-target", [string]$fitTarget,
+        "--flash-attn", "auto",
+        "--ctx-size", [string]$ctx,
+        "--batch-size", [string]$batch,
+        "--ubatch-size", [string]$ubatch
+    )
+}
+Write-Host "[ai] Launching local llama-server. Errors, if any, follow below." -ForegroundColor Cyan
 & $executable @argsList
 $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {
