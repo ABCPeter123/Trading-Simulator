@@ -108,6 +108,13 @@ def _portfolio(symbols, at, loader=None):
     age = (at.astimezone(NY).date() - datetime.fromisoformat(latest[0]).date()).days
     if not 1 <= age <= 5:
         raise ValueError("Latest completed portfolio session is stale.")
+    # For the recent observation window require synchronized member dates,
+    # rather than silently treating a missing asset bar as a non-trading day.
+    recent = [set(datetime.fromtimestamp(int(b["time"]), NY).date().isoformat()
+                  for b in histories[s]["bars"][-35:]) for s in symbols]
+    latest_common = set.intersection(*recent)
+    if any((dates - latest_common) for dates in recent):
+        raise ValueError("Missing or unmatched member session in recent observations.")
     days, market, metadata, _ = pr._prepare(symbols, histories)
     if days[-1] != latest[0]:
         raise ValueError("Portfolio has missing common-session candles.")
@@ -263,7 +270,7 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
             raise HTTPException(409,"Forward-paper study limit reached.")
         existing = c.execute("SELECT * FROM paper_studies WHERE source_job=?",
                              (job_id,)).fetchone()
-        if existing:
+        if existing and existing["status"] == "active":
             c.commit()
             return _public(existing)
         uid = str(uuid4())
@@ -289,8 +296,8 @@ def change_status(study_id, status):
         row = c.execute("SELECT * FROM paper_studies WHERE id=?",(study_id,)).fetchone()
         if row is None:
             raise HTTPException(404,"Forward-paper study not found.")
-        if row["status"]=="retired" or (status=="active" and row["last_error"]):
-            raise HTTPException(409,"Retired or data-blocked study cannot be resumed without a fresh valid update.")
+        if row["status"] == "retired" or (status == "active" and row["status"] != "active"):
+            raise HTTPException(409,"A paused paper study cannot resume with a hidden observation gap. Start a fresh paper study.")
         # Do not silently skip sessions while paused and later call the
         # resulting history continuous forward evidence.
         c.execute("UPDATE paper_studies SET status=?,updated_at=? WHERE id=?",
@@ -386,6 +393,8 @@ def _advance(c, row, days, market, meta, at):
                               "remaining":config["delay_sessions"],
                               "signal_session":day}
             state["since_signal"]=0
+    if row["status"] == "active":
+        row["last_error"] = None
     c.execute("""UPDATE paper_studies SET status=?,last_session=?,state=?,
                  last_error=?,updated_at=? WHERE id=?""",
               (row["status"],row["last_session"],_dump(state),row["last_error"],
