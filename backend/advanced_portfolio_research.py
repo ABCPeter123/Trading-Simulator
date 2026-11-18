@@ -220,7 +220,8 @@ def scenario_grade(curve,market,symbols,start):
     for offset in range(1,len(curve)):
         idx=start+offset
         if idx<25:continue
-        x=[mean(closes[s][j] for s in symbols) for j in range(idx-21,idx)]
+        x=[mean(closes[s][j]/closes[s][idx-21] for s in symbols)
+           for j in range(idx-21,idx)]
         prior=x[-1]/x[0]-1
         changes=[b/a-1 for a,b in zip(x,x[1:])]
         vol=stdev(changes) if len(changes)>1 else 0.
