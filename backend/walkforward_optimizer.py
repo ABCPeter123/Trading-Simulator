@@ -16,6 +16,7 @@ from . import advanced_portfolio_research as adv
 from . import blended_portfolio_research as blended
 from . import performance_objectives as objectives
 from . import selection_diagnostics as selection_bias
+from . import walkforward_diagnostics as explanation
 from . import portfolio_research as pr
 from . import tournament_strategies as tournament
 from . import universe_research as universe
@@ -153,6 +154,8 @@ def _execute(config,symbols,market,metadata,start,end,slippage,settings=None):
 def _choose(configs,symbols,market,metadata,train_end,settings):
     """All candidate selection is performed only on bars BEFORE train_end."""
     valid=[]
+    records=[]
+    rejected=[]
     attempted=0
     for config in configs:
         attempted+=1
@@ -166,11 +169,29 @@ def _choose(configs,symbols,market,metadata,train_end,settings):
                 target_sharpe=settings["target_sharpe"])
             score=score_details["total"]
         except (ValueError,ArithmeticError,ZeroDivisionError):
+            rejected.append("execution_or_invalid_ledger")
             continue
-        if (score<=-1e5 or train["trades"]<1 or train["average_invested_pct"]<5
-            or abs(train["max_drawdown_pct"])>settings["max_drawdown_pct"]
-            or train.get("margin_calls",0)):
+        if score<=-1e5:
+            rejected.append("insufficient_training_history")
             continue
+        if train["trades"]<1:
+            rejected.append("no_training_trades")
+            continue
+        if train["average_invested_pct"]<5:
+            rejected.append("insufficient_training_exposure")
+            continue
+        if abs(train["max_drawdown_pct"])>settings["max_drawdown_pct"]:
+            rejected.append("max_drawdown_limit")
+            continue
+        if train.get("margin_calls",0):
+            rejected.append("margin_calls")
+            continue
+        records.append({
+            "order":attempted,"config":config,"score":score,
+            "quality":quality,"drawdown":train["max_drawdown_pct"],
+            "turnover":train.get("turnover_pct"),
+            "invested":train["average_invested_pct"],
+            "score_details":score_details})
         valid.append((score,config,quality,score_details))
     if not valid:
         return None,attempted,0
@@ -186,6 +207,8 @@ def _choose(configs,symbols,market,metadata,train_end,settings):
                                 ("balanced",best))}
     return {"score":best[0],"config":best[1],"training":best[2],
             "score_breakdown":best[3],
+            "candidate_diagnostics":explanation.candidate_leaderboard(
+                records,rejected,attempted),
             "training_leaders":leaders},attempted,len(valid)
 
 
@@ -279,6 +302,10 @@ def analyze(payload, *, loader=None, report=None):
         realized.append(result)
         fold_metrics=objectives.performance(result["equity_curve"],
                                              risk_free_pct=settings["risk_free_pct"])
+        baseline=explanation.baseline_comparison(
+            result,symbols,market,metadata,train_end,out_end,
+            selected["config"]["max_position_pct"]/100,settings)
+        allocation=explanation.exposure(result,symbols,metadata)
         folds.append({"fold":fold_idx+1,
                       "training_end":days[train_end-1],
                       "out_of_sample_start":days[train_end],
@@ -289,6 +316,9 @@ def analyze(payload, *, loader=None, report=None):
                       "selected":selected["config"],
                       "selection_score":selected["score"],
                       "selection_score_breakdown":selected["score_breakdown"],
+                      "training_candidate_diagnostics":selected["candidate_diagnostics"],
+                      "unseen_benchmark_comparison":baseline,
+                      "unseen_exposure_and_costs":allocation,
                       "training_objectives":selected["training"],
                       "out_of_sample_objectives":fold_metrics,
                       "out_of_sample_return_pct":result["return_pct"],
@@ -338,6 +368,15 @@ def analyze(payload, *, loader=None, report=None):
                                             risk_free_pct=settings["risk_free_pct"])
     audit_consistency=objectives.consistency(final["equity_curve"],
                                               target_cagr_pct=settings["target_cagr_pct"])
+    audit_comparison=explanation.baseline_comparison(
+        final,symbols,market,metadata,test_start,n,
+        final_choice["config"]["max_position_pct"]/100,settings)
+    audit_exposure=explanation.exposure(final,symbols,metadata)
+    # This stability diagnostic uses ONLY the pre-audit history and has
+    # no authority to change the already-locked final selection.
+    pre_audit_stability=explanation.parameter_sensitivity(
+        final_choice["config"],symbols,market,metadata,test_start,
+        settings,_execute)
     # This secondary stress is reported ONLY after the selection is locked.
     severe=_execute(stress_config,symbols,market,metadata,test_start,n,
                     max(35.,settings["slippage_bps"]),settings)
@@ -379,6 +418,8 @@ def analyze(payload, *, loader=None, report=None):
                    "max_drawdown_pct":settings["max_drawdown_pct"],
                    "risk_free_pct":settings["risk_free_pct"]},
         "model_search":{"width":settings["search_width"],
+                        "pre_audit_candidate_leaderboard":final_choice["candidate_diagnostics"],
+                        "pre_audit_parameter_stability":pre_audit_stability,
                         "candidate_count":len(configs),
                         "total_train_evaluations":sum(x["trials_evaluated"] for x in folds)+attempted,
                         "candidate_scope":"Compatible models on the selected fixed basket. No symbol selection, intraday signals or unrestricted model synthesis.",
@@ -398,6 +439,8 @@ def analyze(payload, *, loader=None, report=None):
         "final_audit":{
             "selected":final_choice["config"],
             "selection_score_breakdown":final_choice["score_breakdown"],
+            "benchmark_comparison":audit_comparison,
+            "exposure_and_costs":audit_exposure,
             "prior_selected_comparison":comparison,
             "selection_score":final_choice["score"],
             "trials_evaluated":attempted,"eligible_trials":eligible,
@@ -431,6 +474,9 @@ def analyze(payload, *, loader=None, report=None):
             "A fixed public grid of compatible models and bounded capital/position parameters is searched; no unlimited parameter fitting, learned indicators or multi-basket model synthesis is implemented.",
             "Bonferroni-adjusted p is an illustrative Gaussian-i.i.d. approximation conditional on the tested grid, not robust statistical significance.",
             "The separate estimated Deflated Sharpe uses an independent-normal expected maximum and i.i.d. skew/kurtosis correction. The CSCV PBO uses nonchronological splits of pre-audit candidate returns; both are approximations, not proof of performance or substitutes for real walk-forward evidence.",
+            "Same-basket equal-weight benchmarks and a fixed cash-rate hurdle are diagnostic, not additional reselectable candidates. Neither validates a market-index-relative edge.",
+            "Exposure by category and cash is measured at discrete rebalance snapshots; daily average gross exposure is reported separately. Turnover is based on gross executed notional, not an annualized figure.",
+            "Parameter sensitivity uses only pre-audit prices and does not change model selection; it is not a fresh unseen validation period.",
             "Actual instrument history remains susceptible to survivorship bias, incomplete corporate-action adjustment and limited historical coverage.",
             "Slippage, borrowing costs, spreads, commissions, FX and fills are assumed, not actual future broker executions. No paper-forward evidence is included.",
             "Rolling 252-session returns overlap and do not represent independent years. Calendar years only count when nearly complete; incomplete audit windows must show insufficient evidence instead of a made-up worst annual return.",
