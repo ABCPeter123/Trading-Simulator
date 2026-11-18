@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useState} from "react";
 import {request} from "./api";
+import {importTournamentRank,createTournamentReplay} from "./tournamentApi";
 import {useI18n} from "./i18n";
 import "./universeResearch.css";
 
@@ -18,7 +19,9 @@ import {validatedPercent} from "./validatedPercent";
 
 const pct=(x:number)=>Number.isFinite(x)?x.toFixed(2)+"%":"N/A";
 const label=(x:string)=>x.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
-export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>void}){
+export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpenLive}:{
+  onOpenDiscovery:()=>void;onOpenSimulation:(runId:string)=>void;onOpenLive:(strategyId:string)=>void;
+}){
   const {t}=useI18n();
   const [scope,setScope]=useState<"all"|"etfs"|"stocks">("all");
   const [delay,setDelay]=useState<1|2>(1);
@@ -29,6 +32,7 @@ export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>
   const [pick,setPick]=useState(0);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
+  const [notice,setNotice]=useState("");
   const refresh=useCallback(async()=>{
     const rows=await request<Job[]>("/live/research/universe/jobs");
     if(!Array.isArray(rows))throw new Error("Research queue returned an invalid response.");
@@ -83,6 +87,31 @@ export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>
       await open(active.id);
     }catch(e){setError(String(e));}
   }
+  async function promote(destination:"simulation"|"live"){
+    if(!active||!chosen)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const version=await importTournamentRank(active.id,chosen.rank);
+      if(destination==="simulation"){
+        const replay=await createTournamentReplay(version.id);
+        onOpenSimulation(replay.id);
+      }else{
+        onOpenLive(version.id);
+      }
+    }catch(e){setError(e instanceof Error?e.message:String(e));}
+    finally{setBusy(false);}
+  }
+  async function importAll(){
+    if(!active||!result?.top10.length)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      for(const winner of result.top10){
+        await importTournamentRank(active.id,winner.rank);
+      }
+      setNotice(t("All ranked portfolio models saved privately. Open the Live Engine to select a paper strategy."));
+    }catch(e){setError(e instanceof Error?e.message:String(e));}
+    finally{setBusy(false);}
+  }
   const result=active?.result;
   const chosen=result?.top10[pick];
   return <main className="ur-shell">
@@ -98,6 +127,7 @@ export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>
       ["4",t("Stress test"),t("Inspect execution costs, extra delay and hypothetical paths.")],
     ].map(([n,title,desc])=><article key={n}><b>{n}. {title}</b><p>{desc}</p></article>)}</div>
     {error&&<p className="ops-error" role="alert">{error}</p>}
+    {notice&&<p className="ops-message" role="status">{notice}</p>}
     <div className="ur-columns">
       <section className="ur-panel"><h2>{t("Configure tournament")}</h2>
         <label>{t("Universe")}
@@ -147,6 +177,8 @@ export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>
             </div>
             <p>{t("Ranked using historical validation only. Held-out tests and simulated futures do not influence selection.")}</p>
             <h2>{t("Top 10 research strategies")}</h2>
+            <button type="button" className="ur-secondary" disabled={busy||!result.top10.length}
+              onClick={()=>void importAll()}>{t("Save all top 10 as executable models")}</button>
             {result.top10.length===0?<p>{t("No qualifying candidates. Inspect missing history or relax the validation constraints.")}</p>:
             <div className="ur-scroll"><table><thead><tr><th>{t("Rank")}</th>
               <th>{t("Basket / Model")}</th><th>{t("Validation")}</th>
@@ -161,6 +193,15 @@ export default function UniverseResearch({onOpenDiscovery}:{onOpenDiscovery:()=>
             {chosen&&<article className="ur-detail">
               <h3>#{chosen.rank} {label(chosen.basket_type)} · {label(chosen.model)}</h3>
               <p>{chosen.symbols.map(x=>x.toUpperCase()).join(" · ")}</p>
+              <p>{t("Executable model")}: {label(chosen.model)} · {active?.params.max_position_pct}% {t("Maximum position weight (%)")} ·
+                {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
+              <div className="ur-actions">
+                <button type="button" className="ur-primary" disabled={busy}
+                  onClick={()=>void promote("simulation")}>{t("Load this strategy into simulation")}</button>
+                <button type="button" className="ur-secondary" disabled={busy}
+                  onClick={()=>void promote("live")}>{t("Open in Live Engine (paper first)")}</button>
+              </div>
+              <p>{t("Simulation uses the selected model, not a substitute SMA script. Live Engine imports the same version for manual-review paper signals. Eligible USD stocks and ETFs only; leveraged or inverse research stays simulation-only.")}</p>
               <div className="ur-kpis">
                 {[[t("Training return"),pct(chosen.training.return_pct)],
                   [t("Validation return"),pct(chosen.validation.return_pct)],
