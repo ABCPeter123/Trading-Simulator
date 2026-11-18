@@ -116,42 +116,16 @@ if ($settings.ContainsKey("TRADING_SIM_LLAMA_GPU_LAYERS")) {
     }
 }
 
-# In hybrid GPU systems, llama.cpp may expose an Intel shared-memory GPU
-# before the dedicated NVIDIA adapter. Pick exact names from --list-devices.
-# Prefer CUDA if available, otherwise NVIDIA Vulkan (Vulkan1 for GTX 1050 Ti).
+# Hybrid machines can expose Intel shared-memory graphics ahead of NVIDIA.
+# Select NVIDIA explicitly by the exact device name advertised by llama.cpp.
+# Prefer CUDA when available, then NVIDIA Vulkan (Vulkan1 on GTX 1050 Ti).
 $detectedDevices = @()
 try {
     $deviceOutput = @(& $executable --list-devices 2>&1)
     if ($LASTEXITCODE -eq 0) {
         foreach ($line in $deviceOutput) {
             $display = [string]$line
-            if ($display -match '^\s*(?<name>(?:CUDA|Vulkan|SYCL|Metal)\d+):\s*(?<label>.+?)\s*
-Write-Host "[ai] Profile=$profile, physical_cores=$physical, logical_cpus=$logical, threads=$threads, batch_threads=$batchThreads."
-Write-Host "[ai] Context=$ctx, batch=$batch, ubatch=$ubatch, GPU-layers=$gpuLayers (requires a GPU-enabled llama.cpp build)."
-Write-Host "[ai] GGUF files stay on $models; drive paging is not a substitute for RAM."
-
-$argsList = @(
-    "--models-dir", $models, "--models-max", "1",
-    "--host", "127.0.0.1", "--port", "8081",
-    "--parallel", "1",
-    "--threads", [string]$threads,
-    "--threads-batch", [string]$batchThreads,
-    "--gpu-layers", $gpuLayers,
-    "--device", $selectedDevice,
-    "--split-mode", "none",
-    "--fit", "on",
-    "--fit-target", [string]$fitTarget,
-    "--flash-attn", "auto",
-    "--ctx-size", [string]$ctx,
-    "--batch-size", [string]$batch,
-    "--ubatch-size", [string]$ubatch
-)
-& $executable @argsList
-$exitCode = $LASTEXITCODE
-if ($exitCode -ne 0) {
-    throw "llama-server exited with code $exitCode. Read .local-state/logs/ai.err.log."
-}
-) {
+            if ($display -match '^\s*(?<name>(?:CUDA|Vulkan|SYCL|Metal)\d+):\s*(?<label>.+?)\s*$') {
                 $detectedDevices += @{ name = $Matches["name"]; label = $Matches["label"] }
             }
         }
@@ -168,77 +142,31 @@ if ($deviceMode -in @("cpu","none")) {
     $selectedDevice = "none"
 } elseif ($deviceMode -eq "auto") {
     $nvidia = @($detectedDevices | Where-Object {
-        $_.label -match 'NVIDIA' -and $_.name -match '^CUDA\d+
-Write-Host "[ai] Profile=$profile, physical_cores=$physical, logical_cpus=$logical, threads=$threads, batch_threads=$batchThreads."
-Write-Host "[ai] Context=$ctx, batch=$batch, ubatch=$ubatch, GPU-layers=$gpuLayers (requires a GPU-enabled llama.cpp build)."
-Write-Host "[ai] GGUF files stay on $models; drive paging is not a substitute for RAM."
-
-$argsList = @(
-    "--models-dir", $models, "--models-max", "1",
-    "--host", "127.0.0.1", "--port", "8081",
-    "--parallel", "1",
-    "--threads", [string]$threads,
-    "--threads-batch", [string]$batchThreads,
-    "--gpu-layers", $gpuLayers,
-    "--flash-attn", "auto",
-    "--ctx-size", [string]$ctx,
-    "--batch-size", [string]$batch,
-    "--ubatch-size", [string]$ubatch
-)
-& $executable @argsList
-$exitCode = $LASTEXITCODE
-if ($exitCode -ne 0) {
-    throw "llama-server exited with code $exitCode. Read .local-state/logs/ai.err.log."
-}
-
+        $_.label -match 'NVIDIA' -and $_.name -match '^CUDA\d+$'
     })
     if ($nvidia.Count -eq 0) {
         $nvidia = @($detectedDevices | Where-Object {
-            $_.label -match 'NVIDIA' -and $_.name -match '^Vulkan\d+
-Write-Host "[ai] Profile=$profile, physical_cores=$physical, logical_cpus=$logical, threads=$threads, batch_threads=$batchThreads."
-Write-Host "[ai] Context=$ctx, batch=$batch, ubatch=$ubatch, GPU-layers=$gpuLayers (requires a GPU-enabled llama.cpp build)."
-Write-Host "[ai] GGUF files stay on $models; drive paging is not a substitute for RAM."
-
-$argsList = @(
-    "--models-dir", $models, "--models-max", "1",
-    "--host", "127.0.0.1", "--port", "8081",
-    "--parallel", "1",
-    "--threads", [string]$threads,
-    "--threads-batch", [string]$batchThreads,
-    "--gpu-layers", $gpuLayers,
-    "--flash-attn", "auto",
-    "--ctx-size", [string]$ctx,
-    "--batch-size", [string]$batch,
-    "--ubatch-size", [string]$ubatch
-)
-& $executable @argsList
-$exitCode = $LASTEXITCODE
-if ($exitCode -ne 0) {
-    throw "llama-server exited with code $exitCode. Read .local-state/logs/ai.err.log."
-}
-
+            $_.label -match 'NVIDIA' -and $_.name -match '^Vulkan\d+$'
         })
     }
     if ($nvidia.Count -gt 0) { $selectedDevice = [string]$nvidia[0].name }
-    # Without a dedicated GPU, CPU is safer than consuming shared iGPU RAM.
+    # On Intel-only machines, default to CPU rather than consuming shared RAM.
     if (-not $selectedDevice) { $selectedDevice = "none" }
 } else {
-    $matching = @($detectedDevices | Where-Object {
-        $_.name -eq $deviceMode
-    })
+    $matching = @($detectedDevices | Where-Object { $_.name -eq $deviceMode })
     if ($matching.Count -ne 1) {
         throw "TRADING_SIM_LLAMA_DEVICE '$deviceMode' is unavailable. Run llama-server --list-devices, or use auto/cpu."
     }
     $selectedDevice = [string]$matching[0].name
 }
 
-# Leave VRAM for Windows WDDM, buffers, and model KV allocations. Auto-fit
-# chooses partial GPU layers while keeping the rest in host RAM.
+# Leave room for Windows graphics and Vulkan buffers. With --gpu-layers auto
+# llama.cpp automatically fits partial GPU layers in dedicated VRAM.
 $fitTarget = Int-Setting "TRADING_SIM_LLAMA_FIT_TARGET" 768 256 2048
 if ($selectedDevice -eq "none") { $gpuLayers = "0" }
 $actualGpu = @($detectedDevices | Where-Object { $_.name -eq $selectedDevice })
 $deviceLabel = if ($actualGpu.Count -gt 0) { [string]$actualGpu[0].label } else { "CPU only" }
-Write-Host "[ai] Selected inference device: $selectedDevice ($deviceLabel); VRAM margin=$($fitTarget) MiB."
+Write-Host "[ai] Selected device: $selectedDevice ($deviceLabel); reserved GPU margin=$($fitTarget) MiB."
 
 Write-Host "[ai] Serving $($weights.Count) installed models locally, one loaded at a time."
 Write-Host "[ai] Profile=$profile, physical_cores=$physical, logical_cpus=$logical, threads=$threads, batch_threads=$batchThreads."
@@ -252,6 +180,10 @@ $argsList = @(
     "--threads", [string]$threads,
     "--threads-batch", [string]$batchThreads,
     "--gpu-layers", $gpuLayers,
+    "--device", $selectedDevice,
+    "--split-mode", "none",
+    "--fit", "on",
+    "--fit-target", [string]$fitTarget,
     "--flash-attn", "auto",
     "--ctx-size", [string]$ctx,
     "--batch-size", [string]$batch,
