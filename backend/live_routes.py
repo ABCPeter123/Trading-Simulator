@@ -17,6 +17,7 @@ from . import universe_research
 from . import tournament_strategies
 from . import strategy_source
 from . import strategy_period_queue
+from . import walkforward_queue
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -282,6 +283,40 @@ def get_strategy_period_study(job_id:str):
 def cancel_strategy_period_study(job_id:str):
     private()
     return strategy_period_queue.cancel(job_id)
+
+
+class WalkForwardBody(BaseModel):
+    spec:dict
+    search_width:Literal["focused","extended"]="focused"
+    target_cagr_pct:float=Field(default=55,ge=10,le=100)
+    target_sharpe:float=Field(default=2,ge=.5,le=5)
+    risk_free_pct:float=Field(default=3,ge=0,le=15)
+    max_drawdown_pct:float=Field(default=30,ge=5,le=60)
+    slippage_bps:float=Field(default=8,ge=0,le=100)
+
+
+@router.post("/research/walkforward/jobs",status_code=202)
+def create_walkforward_study(body:WalkForwardBody):
+    private()
+    return walkforward_queue.enqueue(body.model_dump())
+
+
+@router.get("/research/walkforward/jobs")
+def list_walkforward_studies():
+    private()
+    return walkforward_queue.list_jobs()
+
+
+@router.get("/research/walkforward/jobs/{job_id}")
+def get_walkforward_study(job_id:str):
+    private()
+    return walkforward_queue.get_job(job_id)
+
+
+@router.post("/research/walkforward/jobs/{job_id}/cancel")
+def cancel_walkforward_study(job_id:str):
+    private()
+    return walkforward_queue.cancel(job_id)
 
 
 @router.get("/research/universe/strategies")
