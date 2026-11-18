@@ -14,6 +14,7 @@ import {
 } from "./liveMachineApi";
 import type {Alert,ConfirmedFill,Deployment,DeploymentSource,FillDraft,Journal,MachineStatus,NotificationStatus,Signal} from "./liveMachineApi";
 import "./liveOperations.css";
+import PaperForwardMonitor from "./PaperForwardMonitor";
 
 interface ResearchShortlist {
   id:string;status:string;created_at:string;result?:{
@@ -254,6 +255,7 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
           <tbody>{(journal?.positions??[]).map(p=><tr key={p.asset_id}><td>{p.asset_id.toUpperCase()} ({p.currency})</td><td>{fmt(p.quantity)}</td><td>{fmt(p.average_cost)}</td><td>{fmt(p.realized_pnl)}</td></tr>)}</tbody></table></div>
       </section>
     </div>}
+    {section==="machine"&&<PaperForwardMonitor/>}
     {section==="machine"&&<div className="ops-grid">
       <section className="ops-card">
         <h2><PlayCircle size={18}/>{t("Deploy saved strategy")}</h2>
