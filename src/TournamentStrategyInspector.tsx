@@ -115,7 +115,7 @@ function algorithmFor(spec:TournamentModelSpec):string {
       "mark long/short positions to the actual completed close",
       "if maintenance threshold breaches, liquidate at the next opening",
       "RESEARCH ONLY when signed shorts or margin leverage is required",
-    ].join("\\n");
+    ].join("\n");
   }
   const lines=[
     "# READABLE PSEUDOCODE, not an independently runnable script",
