@@ -96,10 +96,11 @@ export async function askAIStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let result: AIAnswer | null = null;
+  let finished = false;
   try {
     while (true) {
       const {value, done} = await reader.read();
-      if (done) break;
+      if (done) {finished = true; break;}
       buffer += decoder.decode(value, {stream: true});
       buffer = buffer.replace(/\r\n/g, "\n");
       if (buffer.length > 262144) throw new Error("AI stream exceeded the safe response limit.");
@@ -141,6 +142,9 @@ export async function askAIStream(
     if (!result) throw new Error("Local AI stream ended before a validated response.");
     return result;
   } finally {
+    // On abort, malformed JSON or upstream errors, close the HTTP stream
+    // promptly instead of leaving llama.cpp decoding an unused response.
+    if (!finished) await reader.cancel().catch(()=>{});
     reader.releaseLock();
   }
 }
