@@ -61,14 +61,23 @@ try {
 } catch {
     Write-Host "[ai] No confirmed TCP listener on port 8081."
 }
-try {
-    $modelsResponse = Invoke-RestMethod -Uri "http://127.0.0.1:8081/models" -TimeoutSec 4 -ErrorAction Stop
-    Write-Host "[ai] Router GET /models succeeded." -ForegroundColor Green
-    foreach ($item in @($modelsResponse.data)) {
-        if ($item -and $item.id) { Write-Host "[ai] Available: $($item.id)" }
+$inventoryOK = $false
+foreach ($endpoint in @("/models","/v1/models")) {
+    try {
+        $modelsResponse = Invoke-RestMethod -Uri ("http://127.0.0.1:8081" + $endpoint) -TimeoutSec 4 -ErrorAction Stop
+        if ($null -eq $modelsResponse.data) { continue }
+        Write-Host "[ai] GET $endpoint succeeded (router or single-model mode)." -ForegroundColor Green
+        foreach ($item in @($modelsResponse.data)) {
+            if ($item -and $item.id) { Write-Host "[ai] Available: $($item.id)" }
+        }
+        $inventoryOK = $true
+        break
+    } catch {
+        continue
     }
-} catch {
-    Write-Host "[ai] Router GET /models failed ($($_.Exception.GetType().Name))." -ForegroundColor Yellow
+}
+if (-not $inventoryOK) {
+    Write-Host "[ai] Both /models and /v1/models failed; llama.cpp is not available." -ForegroundColor Yellow
 }
 try {
     $status = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/ai/status" -TimeoutSec 4 -ErrorAction Stop
