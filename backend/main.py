@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .assets import get_instrument, list_instruments, search_yahoo, import_yahoo
@@ -354,7 +354,7 @@ def arcade_analytics(run_id: str, at: int | None = Query(None, ge=0)):
 
 # AI advisor is read-only. Proposals must pass the same DSL validator and
 # are NEVER saved to a game or submitted as orders by this endpoint.
-from .ai_assistant import advise as ai_advise, provider_status as ai_provider_status, warmup_ollama as ai_warmup_ollama
+from .ai_assistant import advise as ai_advise, provider_status as ai_provider_status, warmup_ollama as ai_warmup_ollama, stream_advice as ai_stream_advice
 
 class AITurn(BaseModel):
     role: Literal["user", "assistant"]
@@ -381,6 +381,25 @@ def ai_ask(request: AIQuestion):
     return ai_advise(request.mode, request.run_id, request.question,
                      [turn.model_dump() for turn in request.history], request.language,
                      request.model)
+
+@app.post("/api/ai/ask/stream")
+def ai_ask_stream(body: AIQuestion):
+    # The same private-bridge authentication middleware guards this route.
+    # No model output is persisted or written to server logs. Only the
+    # answer-field preview is streamed; the complete candidate strategy is
+    # sent only after passing the existing DSL validator.
+    from .ai_assistant import configuration
+    if configuration()["provider"] != "llama_cpp":
+        raise HTTPException(422, detail="Local llama.cpp streaming is not enabled.")
+    output = ai_stream_advice(
+        body.mode, body.run_id, body.question,
+        [turn.model_dump() for turn in body.history], body.language, body.model)
+    return StreamingResponse(output, media_type="text/event-stream", headers={
+        "Cache-Control": "no-store",
+        "X-Accel-Buffering": "no",
+        "X-Content-Type-Options": "nosniff",
+    })
+
 
 # Stochastic research is computed exclusively from already-revealed bars.
 class ScenarioRequest(BaseModel):
