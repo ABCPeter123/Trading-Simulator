@@ -13,6 +13,7 @@ from . import live_notifications
 from . import research_optimizer
 from . import portfolio_research
 from . import research_queue
+from . import universe_research
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -217,3 +218,35 @@ def portfolio_job(job_id:str):
 def cancel_portfolio_job(job_id:str):
     private()
     return research_queue.cancel(job_id)
+
+
+class UniverseStudyBody(BaseModel):
+    scope:Literal["all","etfs","stocks"]="all"
+    delay_sessions:Literal[1,2]=1
+    max_drawdown_pct:float=Field(default=30,ge=5,le=60)
+    max_position_pct:float=Field(default=35,ge=10,le=50)
+
+
+@router.post("/research/universe/jobs",status_code=202)
+def queue_universe_study(body:UniverseStudyBody):
+    private()
+    return universe_research.enqueue(**body.model_dump())
+
+
+@router.get("/research/universe/jobs")
+def universe_studies():
+    private()
+    return universe_research.list_jobs()
+
+
+@router.get("/research/universe/jobs/{job_id}")
+def universe_study(job_id:str):
+    private()
+    return universe_research.get_job(job_id)
+
+
+@router.post("/research/universe/jobs/{job_id}/cancel")
+def cancel_universe_study(job_id:str):
+    private()
+    return universe_research.cancel(job_id)
+
