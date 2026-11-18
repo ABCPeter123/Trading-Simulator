@@ -68,6 +68,37 @@ $global:LASTEXITCODE = 0
     if ($observed -contains "9999") { throw "Invalid thread count accepted" }
     if ($observed -notcontains "0") { throw "CPU mode did not disable GPU layers" }
     if ($observed -contains "Vulkan1") { throw "Explicit CPU mode used NVIDIA GPU" }
+    # Single allowlisted GGUF must be the only router-visible model.
+    # This is a synthetic 220 MiB file on the same temporary NTFS drive.
+    $compactFile = Join-Path $modelDir "Qwen3.5-4B-Q4_K_M.gguf"
+    $handle = [IO.File]::OpenWrite($compactFile)
+    try { $handle.SetLength(220MB) } finally { $handle.Dispose() }
+    Set-Content -LiteralPath (Join-Path $testRoot ".env") -Value @(
+        "TRADING_SIM_AI_PROVIDER=llama_cpp",
+        "TRADING_SIM_AI_MODEL=Qwen3.5-4B-Q4_K_M.gguf",
+        "TRADING_SIM_AI_MODELS=Qwen3.5-4B-Q4_K_M.gguf",
+        "TRADING_SIM_LLAMA_DEVICE=Vulkan1"
+    )
+    & (Join-Path $scriptsDir "run-local-ai.ps1")
+    $observed = @(Get-Content -LiteralPath $env:TEST_LOCAL_AI_ARGS_PATH)
+    $dirIndex = [array]::IndexOf($observed, "--models-dir")
+    if ($dirIndex -lt 0) { throw "Missing model-dir argument." }
+    $servedDir = $observed[$dirIndex + 1]
+    if ($servedDir -eq $modelDir) { throw "Single-model mode still exposes all local GGUF files." }
+    $visible = @(Get-ChildItem -LiteralPath $servedDir -Filter "*.gguf" -File)
+    if ($visible.Count -ne 1 -or $visible[0].Name -ne "Qwen3.5-4B-Q4_K_M.gguf") {
+        throw "Single-model router does not restrict visible model inventory."
+    }
+    if ((Get-Item -LiteralPath $visible[0].FullName).Length -ne 220MB) {
+        throw "Single model link corrupted."
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $modelDir "Synthetic-Q4_K_M.gguf"))) {
+        throw "Original models were altered by single-model selection."
+    }
+    # A second launch must reuse the managed view safely without duplicates.
+    & (Join-Path $scriptsDir "run-local-ai.ps1")
+    $again = @(Get-ChildItem -LiteralPath $servedDir -Filter "*.gguf" -File)
+    if ($again.Count -ne 1) { throw "Second launch duplicated the selected GGUF." }
     Write-Host "Local AI tuning regression checks passed." -ForegroundColor Green
 } finally {
     Remove-Item Env:\TEST_LOCAL_AI_ARGS_PATH -ErrorAction SilentlyContinue
