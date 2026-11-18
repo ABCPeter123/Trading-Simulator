@@ -212,12 +212,17 @@ if (Test-LocalPort 5173) {
 # Reuse an existing router or start a local GGUF router quietly.
 # A listening TCP port alone is insufficient: an unrelated service may own it.
 function Test-LocalAiHttp {
-    try {
-        $null = Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8081/models" -TimeoutSec 2 -ErrorAction Stop
-        return $true
-    } catch {
-        return $false
+    # Router mode exposes /models. A single-model llama-server reliably
+    # exposes /v1/models instead. Both modes use the same chat endpoint.
+    foreach ($endpoint in @("/models", "/v1/models")) {
+        try {
+            $inventory = Invoke-RestMethod -Method Get -Uri ("http://127.0.0.1:8081" + $endpoint) -TimeoutSec 2 -ErrorAction Stop
+            if ($inventory -and $null -ne $inventory.data) { return $true }
+        } catch {
+            continue
+        }
     }
+    return $false
 }
 if ($aiProvider -eq "llama_cpp") {
     $modelDir = Join-Path $root "models\private"
@@ -227,9 +232,9 @@ if ($aiProvider -eq "llama_cpp") {
     }
     if (Test-LocalPort 8081) {
         if (Test-LocalAiHttp) {
-            Write-Host "[ai] Reusing healthy llama.cpp router on 127.0.0.1:8081." -ForegroundColor Green
+            Write-Host "[ai] Reusing healthy local llama.cpp server on 127.0.0.1:8081." -ForegroundColor Green
         } else {
-            Write-Host "[ai] Port 8081 is occupied, but GET /models failed. Check the listening process; no second router started." -ForegroundColor Yellow
+            Write-Host "[ai] Port 8081 is occupied, but both /models and /v1/models failed. Check the listening process." -ForegroundColor Yellow
         }
     } elseif ($modelFiles.Count -eq 0) {
         Write-Host "[ai] GGUF files missing from $modelDir. No AI router started." -ForegroundColor Yellow
@@ -244,7 +249,7 @@ if ($aiProvider -eq "llama_cpp") {
             Start-LocalBackground "ai" $aiScript
             # Give the router time to bind before declaring startup healthy.
             $aiReady = $false
-            for ($attempt = 0; $attempt -lt 15; $attempt++) {
+            for ($attempt = 0; $attempt -lt 75; $attempt++) {
                 Start-Sleep -Milliseconds 400
                 if (Test-LocalAiHttp) { $aiReady = $true; break }
                 $aiProcess = Get-Process -Id ([int]$serviceRecords["ai"].pid) -ErrorAction SilentlyContinue
@@ -253,7 +258,7 @@ if ($aiProvider -eq "llama_cpp") {
             if ($aiReady) {
                 Write-Host "[ai] Router responds on 127.0.0.1:8081." -ForegroundColor Green
             } else {
-                Write-Host "[ai] Router did not become reachable. Review .local-state\logs\ai.err.log and ai.out.log." -ForegroundColor Yellow
+                Write-Host "[ai] llama.cpp did not become reachable within 30 seconds. Review .local-state\logs\ai.err.log and ai.out.log." -ForegroundColor Yellow
                 foreach ($logName in @("ai.err.log","ai.out.log")) {
                     $logPath = Join-Path $logsDir $logName
                     if (Test-Path -LiteralPath $logPath) {
@@ -312,6 +317,30 @@ if ($CompareVercel) {
         Start-LocalBackground "baseline" $baselineScript
     }
     Write-Host "[baseline] Published source: http://127.0.0.1:5174" -ForegroundColor Cyan
+}
+
+# A background process being spawned does not mean the API is healthy.
+# Report startup failure before telling the user to open an unavailable UI.
+$backendReady = $false
+for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    try {
+        $backendHealth = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 2 -ErrorAction Stop
+        if ($backendHealth.mode -eq "local") { $backendReady = $true; break }
+    } catch {
+        Start-Sleep -Milliseconds 400
+    }
+}
+if ($backendReady) {
+    Write-Host "[backend] Verified local API at 127.0.0.1:8000." -ForegroundColor Green
+} else {
+    Write-Host "[backend] Local API is not reachable on port 8000. Inspect backend.err.log and backend.out.log." -ForegroundColor Yellow
+    foreach ($logName in @("backend.err.log", "backend.out.log")) {
+        $logPath = Join-Path $logsDir $logName
+        if (Test-Path -LiteralPath $logPath) {
+            Get-Content -LiteralPath $logPath -Tail 6 -ErrorAction SilentlyContinue |
+                ForEach-Object { Write-Host "[backend:$logName] $_" -ForegroundColor DarkYellow }
+        }
+    }
 }
 
 Write-Host "[ready] PC browser: http://127.0.0.1:5173" -ForegroundColor Cyan
