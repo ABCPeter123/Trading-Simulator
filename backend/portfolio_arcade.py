@@ -29,7 +29,7 @@ from .market import history
 from .intraday import replay_history, validate_replay_window
 from .portfolio_dsl import compile_portfolio_rules
 from .time_navigation import checkpoint, snapshot_at, history_info
-from . import portfolio_research as pr
+from . import portfolio_research as pr, advanced_portfolio_research as adv
 
 LOCK = RLock()
 DB_PATH = Path(os.environ.get(
@@ -402,6 +402,8 @@ def activate_tournament_model(run_id, strategy_id):
     from . import tournament_strategies as tournament
     version = tournament.get(strategy_id)
     spec = tournament.validate_spec(json.loads(version["code"]))
+    if spec.get("research_only"):
+        raise HTTPException(422, detail="Short-share and margin strategies need a signed-position replay engine; conventional cash portfolio simulation cannot execute them.")
     with LOCK, closing(connection()) as db, db:
         row, snap, state = _load(db, run_id)
         if snap.get("resolution") != "1d":
@@ -424,6 +426,8 @@ def create_tournament_season(strategy_id, period="MAX", starting_point=0.3, star
     from . import tournament_strategies as tournament
     version = tournament.get(strategy_id)
     model = tournament.validate_spec(json.loads(version["code"]))
+    if model.get("research_only"):
+        raise HTTPException(422, detail="This signed-exposure research strategy cannot be run in the current cash-only portfolio simulator.")
     run = create_season(model["symbols"], period, starting_point, start_date, "1d")
     return activate_tournament_model(run["id"], strategy_id)
 
@@ -454,8 +458,11 @@ def _rebalance_model(snapshot, state, ids, next_idx):
         item=get_instrument(s)
         metadata[s]={"group":pr._group(s,item.kind),"kind":item.kind,
                      "currency":item.currency,"spread_bps":float(item.spread_bps)}
-    weights=pr._weights(config["model"],ids,closes,len(observed),metadata,
-                        config["max_position_pct"]/100)
+    allocation=(adv.weights if config["model"] in adv.MODELS else pr._weights)
+    weights=allocation(config["model"],ids,closes,len(observed),metadata,
+                       config["max_position_pct"]/100)
+    if any(weight<0 for weight in weights.values()):
+        raise ValueError("Signed exposure cannot enter a cash-only replay")
     opening={s:dec(snapshot["daily"][s][day]["open"]) for s in ids}
     equity=dec(state["cash"])+sum(dec(state["positions"][s]["qty"])*opening[s] for s in ids)
     traded=False
