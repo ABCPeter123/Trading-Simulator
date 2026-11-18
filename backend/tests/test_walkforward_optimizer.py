@@ -23,9 +23,13 @@ def synthetic(days=1400,shock=False):
                     "open":px*1.0002,"high":px*1.03,
                     "low":px*.97,"close":px,"volume":9000+index})
     if shock:
-        for index in range(int(len(out)*.8),len(out)):
+        start=int(len(out)*.8)
+        remaining=len(out)-start
+        for index in range(start,len(out)):
+            # A decline that develops only INSIDE the held-out window.
+            factor=.55**((index-start+1)/remaining)
             for field in ("open","high","low","close"):
-                out[index][field]*=.6
+                out[index][field]*=factor
     return out
 
 
