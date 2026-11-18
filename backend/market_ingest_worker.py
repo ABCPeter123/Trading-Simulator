@@ -27,7 +27,14 @@ def main():
                 # No prices, credentials, or owner strategy data are logged.
                 if "error" in item:
                     logging.warning("Market sync unavailable: %s",item["error"])
-            market_ingestion.record_heartbeat("idle", len(updates))
+            # Run one durable history/reconciliation job at most per cycle.
+            # Every active feed gets a chance to poll fresh bars before the
+            # slower verification or repair job begins.
+            repairs = market_ingestion.run_reconciliation_due()
+            for job in repairs:
+                if job.get("error"):
+                    logging.warning("Historical verification pending retry: %s", job["error"])
+            market_ingestion.record_heartbeat("idle", len(updates)+len(repairs))
         except Exception as exc:
             logging.error("Market ingestion worker failed: %s",type(exc).__name__)
         if args.once:break
