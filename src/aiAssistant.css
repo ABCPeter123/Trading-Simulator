@@ -87,3 +87,15 @@
   .ai-popup .ai-form button{align-self:stretch;min-width:78px}
 }
 @media(max-height:550px){.ai-popup .ai-suggestions{display:none}}
+
+/* Streaming progress never exposes unvalidated DSL, only decoded answer text. */
+.ai-progress-area{display:flex;flex-direction:column;gap:7px;padding:9px 12px;max-height:220px;overflow-y:auto;flex-shrink:0;border-top:1px solid #2d4054}
+.ai-progress-area .ai-processing{padding:0;margin:0}
+.ai-live-answer{padding:10px 12px;border:1px solid #51657a;border-radius:8px;background:#13293a;max-height:140px;overflow-y:auto}
+.ai-live-answer strong{font-size:11px;color:#c1e1ff}
+.ai-live-answer p{margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere;color:#dfebf9;font-size:12px;line-height:1.6}
+.ai-live-answer small{color:#92adc4;font-size:10px;line-height:1.4}
+.ai-cancel{display:flex;align-items:center;gap:7px;align-self:flex-start;border:1px solid #b97e85;color:#ffd8d9;background:#472a36;padding:8px 12px;border-radius:7px;cursor:pointer;font-size:11px;font-weight:700}
+.ai-cancel:hover{background:#653746}
+.ai-cancelled{margin:0;padding:8px 12px;font-size:11px;color:#c5d3e8}
+.ai-metrics{display:block;margin-top:7px;font-size:10px;color:#a0bed1;font-variant-numeric:tabular-nums}
