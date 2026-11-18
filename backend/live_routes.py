@@ -15,6 +15,7 @@ from . import portfolio_research
 from . import research_queue
 from . import universe_research
 from . import tournament_strategies
+from . import strategy_source
 
 router=APIRouter(prefix="/api/live", tags=["Private strategy machine"])
 
@@ -232,6 +233,17 @@ class UniverseStudyBody(BaseModel):
     delay_sessions:Literal[1,2]=1
     max_drawdown_pct:float=Field(default=30,ge=5,le=60)
     max_position_pct:float=Field(default=35,ge=10,le=50)
+
+
+class TournamentSourceBody(BaseModel):
+    spec: dict
+    context: Literal["research", "simulation", "live"] = "research"
+
+
+@router.post("/research/universe/strategy-source")
+def tournament_strategy_source(body: TournamentSourceBody):
+    private()
+    return strategy_source.source_for_model(body.spec, body.context)
 
 
 @router.get("/research/universe/strategies")

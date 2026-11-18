@@ -18,3 +18,9 @@
 .tsi pre{margin:0;background:#0b1824;color:#d5e8f4;padding:13px;font-family:ui-monospace,Consolas,monospace;font-size:11px;line-height:1.7;white-space:pre;max-width:100%;overflow-x:auto}
 .tsi-copy-status{color:#8fe7b7!important;font-size:11px}
 @media(max-width:600px){.tsi{padding:11px}.tsi-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.tsi pre{font-size:10px}}
+
+.tsi-runtime{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin:12px 0}
+.tsi-runtime>span{background:#152d3d;border:1px solid #385468;border-radius:7px;padding:9px;line-height:1.6;color:#c6dce8;overflow-wrap:anywhere}
+.tsi-runtime code,.tsi-code-actions code{font-family:ui-monospace,Consolas,monospace;color:#b8ecf4;overflow-wrap:anywhere}
+.tsi-module{margin:10px!important}
+.tsi .tsi-code>p.tsi-note{padding:0 12px}

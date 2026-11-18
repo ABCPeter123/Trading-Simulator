@@ -35,3 +35,31 @@ export const createTournamentReplay=(strategyId:string)=>
   request<PortfolioSeason>("/portfolio-seasons/from-tournament",{
     method:"POST",body:JSON.stringify({strategy_id:strategyId,period:"MAX",starting_point:0.3}),
   });
+
+export interface TournamentSourceSpec {
+  version:1|2; model:string; symbols:string[]; max_position_pct:number;
+  delay_sessions:1|2; rebalance_sessions:number;
+  restricted_research?:boolean; short_proxy_research?:boolean; research_only?:boolean;
+}
+
+export interface PythonStrategySection {
+  label:string; function:string; path:string; first_line:number; sha256:string; code:string;
+}
+
+export interface PythonStrategyFile {
+  path:string; sha256:string; code:string;
+}
+
+export interface PythonStrategySource {
+  runtime:string; model:string; context:"research"|"simulation"|"live";
+  entry_point:string; research_execution_entry_point:string;
+  sections:PythonStrategySection[]; files:PythonStrategyFile[];
+  research_only:boolean; executable:boolean;
+}
+
+/** These sources come directly from the running local Python backend, not from a UI model. */
+export const getTournamentPythonSource = (
+  spec:TournamentSourceSpec,context:"research"|"simulation"|"live"="research",
+) => request<PythonStrategySource>("/live/research/universe/strategy-source",{
+  method:"POST",body:JSON.stringify({spec,context}),
+});
