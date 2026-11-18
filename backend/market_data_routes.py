@@ -43,6 +43,8 @@ def coverage(asset_id:str,window:str=Query("1Y"),resolution:str=Query("1d")):
 def health():
     _private()
     entries=market_ingestion.list_subscriptions()
+    jobs=market_ingestion.list_reconciliation_jobs()
+    state={(job["asset_id"],job["resolution"],job["kind"]):job for job in jobs}
     worker = market_ingestion.collector_health()
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).timestamp()
@@ -62,6 +64,8 @@ def health():
             "failure_code": entry["failure_code"],
             "age_seconds": age_seconds,
             "interval_seconds": expected_seconds,
+            "bootstrap": state.get((entry["asset_id"],resolution,"bootstrap")),
+            "reconciliation": state.get((entry["asset_id"],resolution,"reconcile")),
             "sync_state": ("disabled" if not entry["active"] else
                            "error" if entry["failure_code"] else
                            "not_started" if entry["last_success"] is None else
@@ -70,6 +74,7 @@ def health():
         })
     return {"subscriptions":len(entries),
             "collector": worker,
+            "reconciliation_jobs": len(jobs),
             "delivery_guaranteed": False,
             "active":sum(bool(x["active"]) for x in entries),
             "errors":sum(bool(x["active"] and x["failure_code"]) for x in entries),
