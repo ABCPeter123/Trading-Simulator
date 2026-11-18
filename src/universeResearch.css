@@ -65,3 +65,10 @@
 .ur-key-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
 .ur-key-metrics strong{font-size:20px}
 @media(max-width:720px){.ur-key-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.ur-detail-tabs button{padding:10px}}
+
+.ur-ranking-picker{display:flex;flex-direction:column;gap:7px;max-width:560px;margin:12px 0;font-size:12px;font-weight:650;color:#d4e4f0}
+.ur-ranking-picker select{width:100%;background:#172c3c;color:#e8f6fa;border:1px solid #517186;padding:10px 12px;border-radius:7px}
+.ur-ranking-table,.ur-monitoring-options{margin:12px 0;border:1px solid #375367;border-radius:8px;padding:10px 12px;background:#172b3c}
+.ur-ranking-table>summary,.ur-monitoring-options>summary{cursor:pointer;color:#cae5ee;font-weight:650}
+.ur-ranking-table .ur-scroll{margin-top:12px}
+.ur-ranking-picker select:focus-visible,.ur-ranking-table>summary:focus-visible,.ur-monitoring-options>summary:focus-visible{outline:2px solid #82ded1;outline-offset:2px}
