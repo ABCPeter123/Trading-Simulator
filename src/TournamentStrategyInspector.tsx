@@ -4,7 +4,7 @@ import {modelDescription} from "./tournamentApi";
 import "./tournamentInspector.css";
 
 export interface TournamentModelSpec {
-  version:1;
+  version:1|2;
   model:string;
   symbols:string[];
   max_position_pct:number;
@@ -12,6 +12,7 @@ export interface TournamentModelSpec {
   rebalance_sessions:number;
   restricted_research?:boolean;
   short_proxy_research?:boolean;
+  research_only?:boolean;
 }
 
 type ResearchCosts = {
@@ -44,9 +45,38 @@ const modelRules:Record<string, string[]> = {
     "Use the last 60 daily returns to estimate the annualized volatility of that normalized basket.",
     "Set gross_exposure = min(95%, 12% / estimated_annualized_volatility), then apply risk limits.",
   ],
+  defensive_rotation:[
+    "Compare each equity's last completed close to its previous 126-session mean.",
+    "If most equities have positive trends, hold trend-qualified equity exposure under an equity class cap.",
+    "Otherwise, move allocation into actual observed bond and commodity assets. Unused allocation stays in cash.",
+  ],
+  diversified_risk_parity:[
+    "Compute 60-session inverse volatility for each asset.",
+    "Apply tighter class limits: equities 45%, bonds 30%, commodities 20%, real estate 12%, crypto 5%.",
+  ],
+  equity_hedge:[
+    "Allocate using inverse volatility across equities, actual bond instruments and actual commodity instruments.",
+    "Cap equity at 50%, bonds at 30% and commodities at 20%. Retain spare cash.",
+  ],
+  leveraged_trend:[
+    "Identify equities with positive completed-close 126-session trends and positive 64/127-session momentum.",
+    "Set long target exposure up to 135% of equity, subject to per-asset caps.",
+    "Model borrowing interest, spreads, slippage, next-open fills and a 25% maintenance-margin liquidation trigger.",
+  ],
+  long_short_momentum:[
+    "Rank equity momentum across the prior 64 and 127 sessions.",
+    "Long the strongest third, short the weakest third; target up to 95% long and 45% short notional.",
+    "Model negative shares, stock-borrow costs, borrowing interest and margin liquidation risk. Never submit a share short to Wealthsimple.",
+  ],
+  market_neutral:[
+    "Rank equity momentum using previously completed 64/127-session returns.",
+    "Long the strongest third and short the weakest third with about 65% notional on each side.",
+    "Include short borrow fees and a maintenance-margin liquidation trigger. This is a synthetic research position, not an executable Wealthsimple share short.",
+  ],
 };
 
-const sourceLink="https://github.com/ABCPeter123/Trading-Simulator/blob/main/backend/portfolio_research.py#L186-L235";
+const sourceLinkCash="https://github.com/ABCPeter123/Trading-Simulator/blob/main/backend/portfolio_research.py#L186-L235";
+const sourceLinkAdvanced="https://github.com/ABCPeter123/Trading-Simulator/blob/main/backend/advanced_portfolio_research.py";
 const groupCaps:[string,number][]=[["Equities",70],["Bonds",55],["Commodities",35],["Real estate",20],["Crypto",10]];
 
 function algorithmFor(spec:TournamentModelSpec):string {
@@ -69,6 +99,24 @@ function algorithmFor(spec:TournamentModelSpec):string {
       "if length(recent_returns) >= 25 and estimated_risk > 1e-8: gross = min(0.95, 0.12 / estimated_risk)",
     ],
   };
+  if(spec.version===2){
+    return [
+      "# RESEARCH PSEUDOCODE, NOT DIRECTLY EXECUTABLE PYTHON",
+      `ASSETS = [${spec.symbols.map(s=>JSON.stringify(s)).join(", ")}]`,
+      `MODEL = ${JSON.stringify(spec.model)}`,
+      `REBALANCE_EVERY = ${spec.rebalance_sessions} shared sessions`,
+      `DELAY = ${spec.delay_sessions} session(s)`,
+      `MAX_ASSET_WEIGHT = ${spec.max_position_pct/100}`,
+      "",
+      "observe only previously completed daily closes",
+      ...((modelRules[spec.model]??[]).map(x=>"- "+x)),
+      "at next actual common-session open, rebalance signed target notionals",
+      "charge spread, slippage and FX estimates; accrue margin and borrow costs",
+      "mark long/short positions to the actual completed close",
+      "if maintenance threshold breaches, liquidate at the next opening",
+      "RESEARCH ONLY when signed shorts or margin leverage is required",
+    ].join("\\n");
+  }
   const lines=[
     "# READABLE PSEUDOCODE, not an independently runnable script",
     `ASSETS = [${spec.symbols.map(s=>JSON.stringify(s)).join(", ")}]`,
@@ -115,11 +163,13 @@ export default function TournamentStrategyInspector({
       rebalance_sessions:spec.rebalance_sessions,
       restricted_research:spec.restricted_research??false,
       short_proxy_research:spec.short_proxy_research??false,
+      research_only:spec.research_only??false,
     };
     return JSON.stringify(normalized,null,2);
   },[spec,exactCode]);
   const pseudocode=useMemo(()=>algorithmFor(spec),[spec]);
   const rules=modelRules[spec.model]??["No documented rules exist for this model."];
+  const advanced=spec.version===2;
   const copy=(value:string)=>{
     if(!navigator.clipboard){setCopyStatus(t("Clipboard unavailable. Select and copy the code manually."));return;}
     void navigator.clipboard.writeText(value)
@@ -130,7 +180,7 @@ export default function TournamentStrategyInspector({
     <header className="tsi-header">
       <div><h4>{t("Strategy logic and source")}</h4>
         <p>{t(modelDescription(spec.model))}</p></div>
-      <a href={sourceLink} target="_blank" rel="noreferrer">{t("View actual Python allocation function")}</a>
+      <a href={advanced?sourceLinkAdvanced:sourceLinkCash} target="_blank" rel="noreferrer">{t("View actual Python allocation function")}</a>
     </header>
     <div className="tsi-fields">
       <div><small>{t("Research asset basket")}</small><strong>{spec.symbols.map(s=>s.toUpperCase()).join(" · ")}</strong></div>
@@ -138,13 +188,14 @@ export default function TournamentStrategyInspector({
       <div><small>{t("Rebalance cadence")}</small><strong>{spec.rebalance_sessions} {t("common sessions")}</strong></div>
       <div><small>{t("Execution assumption")}</small><strong>{spec.delay_sessions} {t("session(s)")}</strong></div>
     </div>
+    {spec.research_only&&<p className="tsi-note">{t("Research-only synthetic exposure: not deployable to the cash simulator or Wealthsimple live engine.")}</p>}
     {(spec.restricted_research||spec.short_proxy_research)&&
       <p className="tsi-note">{t("This basket includes leveraged or inverse ETFs. The result is for research and simulation only, not approved live monitoring.")}</p>}
     <h5>{t("Exact allocation decision rules")}</h5>
     <ol className="tsi-rules">
       {rules.map((line,i)=><li key={i}>{t(line)}</li>)}
-      <li>{t("Hold at most 95% in aggregate before asset and category caps; unused capital remains in cash.")}</li>
-      <li>{t("Apply category exposure caps")}: {groupCaps.map(([name,cap])=>`${t(name)} ${cap}%`).join(", ")}.</li>
+      {!advanced&&<><li>{t("Hold at most 95% in aggregate before asset and category caps; unused capital remains in cash.")}</li>
+      <li>{t("Apply category exposure caps")}: {groupCaps.map(([name,cap])=>`${t(name)} ${cap}%`).join(", ")}.</li></>}
       <li>{t("Rebalance at the next eligible common-session open using completed historical data, selling before buying. No automatic brokerage execution.")}</li>
     </ol>
     {context==="simulation"&&<p className="tsi-note">{t("Historical replay uses the same target-weight function as tournament research, but its fill and fee approximation is different. Results may not match the tournament backtest exactly.")}</p>}
