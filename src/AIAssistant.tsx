@@ -191,6 +191,14 @@ export default function AIAssistant({mode,runId,onDraft}: {
               <> · {t("First output")}: {(answers[Math.floor(i/2)].metrics!.first_output_ms!/1000).toFixed(1)}s</>}
             {typeof answers[Math.floor(i/2)].metrics!.completion_tokens==="number"&&
               <> · {answers[Math.floor(i/2)].metrics!.completion_tokens} {t("output tokens")}</>}
+            {typeof answers[Math.floor(i/2)].metrics!.prompt_ms==="number"&&
+              <> · {t("Prompt processing")}: {(answers[Math.floor(i/2)].metrics!.prompt_ms!/1000).toFixed(1)}s</>}
+            {typeof answers[Math.floor(i/2)].metrics!.generation_ms==="number"&&
+              <> · {t("Generation")}: {(answers[Math.floor(i/2)].metrics!.generation_ms!/1000).toFixed(1)}s</>}
+            {typeof answers[Math.floor(i/2)].metrics!.generation_tokens_per_second==="number"&&
+              <> · {answers[Math.floor(i/2)].metrics!.generation_tokens_per_second!.toFixed(1)} {t("tokens/sec")}</>}
+            {typeof answers[Math.floor(i/2)].metrics!.reused_prompt_tokens==="number"&&
+              <> · {t("Cached tokens")}: {answers[Math.floor(i/2)].metrics!.reused_prompt_tokens}</>}
           </small>}
         {turn.role==="assistant"&&answers[Math.floor(i/2)]?.warning&&
           <p className="ai-warning">{t(answers[Math.floor(i/2)].warning ?? "")}</p>}
