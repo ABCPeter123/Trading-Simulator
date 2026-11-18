@@ -102,7 +102,7 @@ export default function TournamentStrategyInspector({
         {spec.model==="equity_hedge"&&<p>{l("The three listed category caps apply to equities, bonds and commodities; this model does not impose separate category caps on other recognized groups.",
           "上述三项类别上限仅适用于股票、债券和商品；该模型未对其他已识别资产类别单独设置类别上限。")}</p>}
         <p className="tsi-caveat"><strong>{l("Important trade-off:","重要权衡：")}</strong> {explanationText(narrative.caveat,locale)}</p>
-      </div>}
+      </div>
 
       <h5>{l("3. What happens during a historical backtest","3. 历史回测的具体过程")}</h5>
       <ol className="tsi-rules">
