@@ -1,4 +1,5 @@
 import {useI18n} from "./i18n";
+import CustomStrategyAnalysis from "./CustomStrategyAnalysis";
 import {MODEL_EXPLANATIONS,explanationText} from "./strategyNarratives";
 import "./tournamentInspector.css";
 
@@ -151,5 +152,6 @@ export default function TournamentStrategyInspector({
           "这些结果未完整建模税费、分红、公司行为、借券可得性变化、市场冲击或真实券商成交。历史表现不保证未来盈利。")}</p>
       </div>
     </>}
+    <CustomStrategyAnalysis spec={spec}/>
   </section>;
 }

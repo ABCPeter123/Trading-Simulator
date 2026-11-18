@@ -63,3 +63,60 @@ export const getTournamentPythonSource = (
 ) => request<PythonStrategySource>("/live/research/universe/strategy-source",{
   method:"POST",body:JSON.stringify({spec,context}),
 });
+
+export interface CustomPeriodRequest {
+  spec:TournamentSourceSpec;
+  start_date?:string|null;
+  end_date?:string|null;
+  max_position_pct?:number;
+  delay_sessions?:1|2;
+  slippage_bps?:number;
+  target_investment_pct?:number;
+  equity_class_cap_pct?:number;
+  redistribute_excess?:boolean;
+}
+export interface CustomPeriodMetric {
+  return_pct:number; max_drawdown_pct:number; annualized_volatility_pct:number|null;
+  sharpe:number|null;sortino:number|null; trades:number; fees:number;
+  turnover_pct:number;average_invested_pct:number;
+  average_gross_exposure_pct?:number;peak_gross_leverage?:number;
+  margin_interest?:number;short_borrow_cost?:number;margin_calls?:number;
+}
+export interface CustomPeriodResult {
+  requested_window:{start_date:string|null;end_date:string|null};
+  actual_window:{start_date:string;end_date:string;sessions:number;
+    warmup_sessions:number;available_start:string;available_end:string};
+  model:string;research_only:boolean;
+  assumptions:Record<string,string|number|boolean>;
+  metrics:CustomPeriodMetric;benchmark:CustomPeriodMetric;execution_stress:CustomPeriodMetric;
+  periods:{
+    monthly:{month:string;ending_equity:number;return_pct:number;pnl_usd:number;observed_sessions:number}[];
+    best_month:{month:string;return_pct:number;pnl_usd:number};
+    worst_month:{month:string;return_pct:number;pnl_usd:number};
+    monthly_average_pct:number; positive_months:number;observed_months:number;
+    worst_day:{return_pct:number;start:string;end:string}|null;
+    worst_five_sessions:{return_pct:number;start:string;end:string}|null;
+    worst_21_sessions:{return_pct:number;start:string;end:string}|null;
+    worst_drawdown:{drawdown_pct:number;peak_date:string|null;trough_date:string|null};
+  };
+  equity_curve:{time:number;value:number}[];
+  benchmark_curve:{time:number;value:number}[];
+  fills:{time:number;symbol:string;side:string;quantity:number;price:number;fee:number;notional:number}[];
+  fills_total:number;
+  limitations:string[];
+}
+export interface CustomPeriodJob {
+  id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";
+  created_at:string;updated_at:string;progress:number;stage:string;
+  error_code:string|null;result:CustomPeriodResult|null;
+}
+export const createCustomPeriodStudy=(body:CustomPeriodRequest)=>
+  request<CustomPeriodJob>("/live/research/strategy-period/jobs",{
+    method:"POST",body:JSON.stringify(body),
+  });
+export const getCustomPeriodStudy=(id:string)=>
+  request<CustomPeriodJob>("/live/research/strategy-period/jobs/"+encodeURIComponent(id));
+export const cancelCustomPeriodStudy=(id:string)=>
+  request<CustomPeriodJob>("/live/research/strategy-period/jobs/"+encodeURIComponent(id)+"/cancel",{
+    method:"POST",
+  });

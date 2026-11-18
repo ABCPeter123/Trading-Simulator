@@ -183,7 +183,8 @@ def _corr(a, b):
     return round(max(-1., min(1., result)), 4)
 
 
-def _weights(model, symbols, closes, i, metadata, max_weight):
+def _weights(model, symbols, closes, i, metadata, max_weight, *,
+             gross_target=.95, equity_cap=None, redistribute=False):
     """All signals and risk estimates read only through previous session i-1."""
     vol = {s:_vol(closes[s], i) for s in symbols}
     recent = {s:closes[s][i-1] for s in symbols}
@@ -212,7 +213,7 @@ def _weights(model, symbols, closes, i, metadata, max_weight):
         return {s:0. for s in symbols}
     # Shrink to a target annualized portfolio risk, based on the LAST 60
     # observed close-to-close returns, without using current-session prices.
-    gross = .95
+    gross = gross_target
     if model == "volatility_target":
         base = {s:raw[s]/total for s in symbols}
         observations = [_returns(closes[s],i) for s in symbols]
@@ -224,14 +225,44 @@ def _weights(model, symbols, closes, i, metadata, max_weight):
             if realized > 1e-8:
                 gross = min(gross, .12/realized)
     targets = {s:min(max_weight, gross*raw[s]/total) for s in symbols}
-    # Caps on risk categories, including crypto. Keep residual in cash;
-    # never redistribute excess into a highly correlated subgroup.
-    for group, cap in GROUP_CAPS.items():
+    caps = {**GROUP_CAPS, **({"equity": equity_cap} if equity_cap is not None else {})}
+    # The normal tournament preserves idle cash after risk limits.
+    for group, cap in caps.items():
         names = [s for s in symbols if metadata[s]["group"]==group]
         amount = sum(targets[s] for s in names)
         if amount > cap:
             for s in names:
                 targets[s] *= cap/amount
+    if redistribute:
+        # Explicit custom-research opt-in. Reinvest capped exposure only in
+        # already-eligible assets, never defeating position or class limits.
+        for _ in range(128):
+            remaining = gross - sum(targets.values())
+            if remaining < 1e-8:
+                break
+            candidates = [s for s in symbols
+                          if raw[s] > 0 and targets[s] < max_weight-1e-10
+                          and sum(targets[t] for t in symbols
+                                  if metadata[t]["group"] == metadata[s]["group"])
+                          < caps.get(metadata[s]["group"],1.)-1e-10]
+            if not candidates:
+                break
+            weight_sum = sum(raw[s] for s in candidates)
+            increments = {s: min(max_weight-targets[s], remaining*raw[s]/weight_sum)
+                          for s in candidates}
+            for group, cap in caps.items():
+                group_names=[s for s in candidates if metadata[s]["group"]==group]
+                inc=sum(increments[s] for s in group_names)
+                room=max(0.,cap-sum(targets[s] for s in symbols
+                                    if metadata[s]["group"]==group))
+                if inc>room and inc>0:
+                    for s in group_names:
+                        increments[s] *= room/inc
+            progress=sum(increments.values())
+            if progress<1e-10:
+                break
+            for s,change in increments.items():
+                targets[s]+=change
     return targets
 
 
@@ -245,6 +276,11 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
     """
     legacy_cost_model = broker is None
     broker = broker or {}
+    gross_target=float(broker.get("target_investment_pct",95))/100
+    equity_cap=float(broker.get("equity_class_cap_pct",70))/100
+    redistribute=broker.get("redistribute_excess",False)
+    if not (0.05<=gross_target<=1 and 0.10<=equity_cap<=1) or type(redistribute) is not bool:
+        raise ValueError("Invalid custom exposure settings.")
     delay_sessions = int(broker.get("delay_sessions", 1))
     if delay_sessions not in (1, 2):
         raise ValueError("Supported research delay is one or two common sessions.")
@@ -264,7 +300,9 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
         opens = {s:market[s][i]["open"] for s in symbols}
         if (i-start)%REBALANCE_SESSIONS==0:
             signal_index=max(1,i-(delay_sessions-1))
-            targets = _weights(model,symbols,closes,signal_index,metadata,max_weight)
+            targets = _weights(model,symbols,closes,signal_index,metadata,max_weight,
+                               gross_target=gross_target,equity_cap=equity_cap,
+                               redistribute=redistribute)
             total_equity = cash+sum(holdings[s]*opens[s] for s in symbols)
             # Sell first, freeing cash for reallocations.
             for side in ("sell","buy"):
