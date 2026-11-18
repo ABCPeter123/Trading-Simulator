@@ -8,6 +8,8 @@ export interface TournamentModelSpec {
   version:1|2; model:string; symbols:string[];
   max_position_pct:number; delay_sessions:1|2; rebalance_sessions:number;
   restricted_research?:boolean; short_proxy_research?:boolean; research_only?:boolean;
+  target_investment_pct?:number;equity_class_cap_pct?:number;
+  redistribute_excess?:boolean;
 }
 
 type ResearchCosts = {
@@ -44,7 +46,10 @@ export default function TournamentStrategyInspector({
   const {locale}=useI18n();
   const l=(en:string,zh:string)=>locale==="zh-CN"?zh:en;
   const narrative=MODEL_EXPLANATIONS[spec.model];
-  const caps=CASH_MODELS.has(spec.model)?DEFAULT_CAPS:
+  const caps=CASH_MODELS.has(spec.model)?
+    DEFAULT_CAPS.map(([en,zh,value])=>
+      [en,zh,en==="Equities"&&spec.equity_class_cap_pct!=null?
+        spec.equity_class_cap_pct+"%":value] as const):
     spec.model==="diversified_risk_parity"?RISK_PARITY_CAPS:
     spec.model==="equity_hedge"?EQUITY_HEDGE_CAPS:null;
   const researchOnly=Boolean(spec.research_only||RESEARCH_ONLY_MODELS.has(spec.model));
@@ -60,6 +65,14 @@ export default function TournamentStrategyInspector({
         context==="simulation"?l("Historical replay","历史回放"):l("Live monitoring","实时监控")}</span>
     </header>
 
+    {(spec.target_investment_pct!==undefined||spec.equity_class_cap_pct!==undefined)&&
+      <p className="tsi-intro">{l("This research version uses custom investment targets:","此研究版本使用自定义投资目标：")}
+        {" "}{l("invested capital","已投资资金")} {spec.target_investment_pct??95}%,
+        {" "}{l("equity category cap","股票类别上限")} {spec.equity_class_cap_pct??70}%,
+        {" "}{spec.redistribute_excess?
+          l("unused eligible allocation is redistributed.","未分配的合格仓位将重新配置。"):
+          l("unused allocation remains as cash.","未分配的资金保留为现金。")}
+      </p>}
     <div className="tsi-fields">
       <div><small>{l("Portfolio basket","资产组合")}</small><strong>{spec.symbols.map(s=>s.toUpperCase()).join(" · ")}</strong></div>
       <div><small>{l("Maximum per asset","单项资产仓位上限")}</small><strong>{spec.max_position_pct}%</strong></div>
