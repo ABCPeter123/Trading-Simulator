@@ -91,8 +91,6 @@ const zh: Record<string, string> = {
   "Held-out target reached": "留出期是否达到目标",
   "Insufficient sessions": "样本交易日不足",
   "Observed": "观察到",
-  "Yes": "是",
-  "No": "否",
   "Validation subperiod stability": "验证期分段稳定性",
   "positive subperiods": "个盈利子区间",
   "These are sequential diagnostics from one validation run, not independently retrained walk-forward models.": "这些是同一次验证回测中的连续子区间诊断，并非分别重新训练的滚动前推模型。",
