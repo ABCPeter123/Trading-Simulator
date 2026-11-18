@@ -13,7 +13,7 @@ import signal
 import sys
 import time
 
-from . import live_machine, live_notifications, live_email_digest
+from . import live_machine, live_notifications, live_email_digest, paper_forward
 
 def main():
     parser=argparse.ArgumentParser()
@@ -34,6 +34,9 @@ def main():
     while not should_stop:
         try:
             live_machine.run_once(worker_heartbeat=True)
+            # Paper-only observed-session fills use an independent SQLite
+            # ledger and cannot mutate real broker confirmations.
+            paper_forward.process_all()
             live_notifications.deliver_pending()
             live_email_digest.maybe_send_daily()
         except Exception as exc:
