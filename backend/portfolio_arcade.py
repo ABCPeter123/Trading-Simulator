@@ -29,13 +29,14 @@ from .market import history
 from .intraday import replay_history, validate_replay_window
 from .portfolio_dsl import compile_portfolio_rules
 from .time_navigation import checkpoint, snapshot_at, history_info
+from . import portfolio_research as pr
 
 LOCK = RLock()
 DB_PATH = Path(os.environ.get(
     "TRADING_SIM_ARCADE_DB",
     Path(__file__).resolve().parent.parent / "data" / "arcade.sqlite3",
 ))
-MAX_SYMBOLS = 5
+MAX_SYMBOLS = 10
 MAX_SKIP = 100
 
 
@@ -130,7 +131,7 @@ def _save(db, run_id, state):
 
 def create_season(symbols, period="5Y", starting_point=0.3, start_date=None, resolution="1d"):
     if not isinstance(symbols, list) or not 2 <= len(symbols) <= MAX_SYMBOLS:
-        raise HTTPException(422, detail="Choose 2-5 assets for one shared-cash season.")
+        raise HTTPException(422, detail="Choose 2-10 assets for one shared-cash season.")
     if len(set(symbols)) != len(symbols):
         raise HTTPException(422, detail="Each instrument can appear only once.")
     validate_replay_window(period, resolution)
@@ -192,7 +193,7 @@ def create_season(symbols, period="5Y", starting_point=0.3, start_date=None, res
     state = {
         "index": index, "start_index": index, "resolution": resolution, "cash": str(INITIAL_CASH),
         "positions": initial_positions, "orders": [], "fills": [],
-        "strategy": "", "risk": {"stop_loss_pct": 0, "take_profit_pct": 0},
+        "strategy": "", "model_strategy": None, "risk": {"stop_loss_pct": 0, "take_profit_pct": 0},
         "events": ["Multi-asset historical replay started. Future candles remain hidden."],
         "curve": [{"day": days[index], "value": float(INITIAL_CASH)}],
     }
@@ -289,7 +290,8 @@ def public(run_id, row, snap, state):
             "score": score, "badges": badges,
         }, "positions": positions,
         "orders": state["orders"], "fills": state["fills"][-60:][::-1],
-        "events": state["events"], "strategy": state["strategy"], "risk": state["risk"],
+        "events": state["events"], "strategy": state["strategy"],
+        "model_strategy": state.get("model_strategy"), "risk": state["risk"],
         "curve": state["curve"], "updated_at": row["updated_at"],
         "execution_notice": "Shared USD cash and observed close marks. CAD asset OHLC is converted into USD equivalents with the previous completed USD/CAD close when applicable. This is research-only currency modeling, not an executable FX rate. Fills use OHLC approximations, and unrevealed candles remain hidden.",
     }
@@ -381,6 +383,7 @@ def strategy(run_id, code):
         rules = compile_portfolio_rules(code, set(json.loads(row["basket"])))
         previous = state["strategy"]
         state["strategy"] = code
+        state["model_strategy"] = None
         event(state, f"Cross-asset strategy activated with {len(rules)} rules.")
         _save(db, run_id, state)
         response = public(run_id, row, snap, state)
@@ -392,6 +395,95 @@ def strategy(run_id, code):
         import logging
         logging.getLogger(__name__).exception("Could not archive activated portfolio strategy")
     return response
+
+
+def activate_tournament_model(run_id, strategy_id):
+    """Activate an immutable, researched model in an existing daily replay."""
+    from . import tournament_strategies as tournament
+    version = tournament.get(strategy_id)
+    spec = tournament.validate_spec(json.loads(version["code"]))
+    with LOCK, closing(connection()) as db, db:
+        row, snap, state = _load(db, run_id)
+        if snap.get("resolution") != "1d":
+            raise HTTPException(422, detail="Tournament models require daily historical replay.")
+        if json.loads(row["basket"]) != spec["symbols"]:
+            raise HTTPException(422, detail="The simulator basket must match the tournament model exactly.")
+        if state["index"] != state["start_index"] or state["fills"]:
+            raise HTTPException(409, detail="Load a tournament model into a new, unplayed simulation.")
+        state["strategy"] = ""
+        state["model_strategy"] = {"id": version["id"], "name": version["name"], **spec,
+                                   "elapsed_shared": 0, "next_rebalance": 1}
+        event(state, "Tournament allocation model loaded. Trades are simulated on future "
+              "common session opens using previously completed daily closes.")
+        _save(db, run_id, state)
+        return public(run_id, row, snap, state)
+
+
+def create_tournament_season(strategy_id, period="MAX", starting_point=0.3, start_date=None):
+    """Create a new private replay and attach a saved model; never mutate an old run."""
+    from . import tournament_strategies as tournament
+    version = tournament.get(strategy_id)
+    model = tournament.validate_spec(json.loads(version["code"]))
+    run = create_season(model["symbols"], period, starting_point, start_date, "1d")
+    return activate_tournament_model(run["id"], strategy_id)
+
+
+def _rebalance_model(snapshot, state, ids, next_idx):
+    """Same target-weight function as tournament; no observations from fill day.
+
+    All symbols must share the actual session. Delay 2 uses one additional
+    completed-session lag, matching the tournament model's stress semantics.
+    """
+    config=state.get("model_strategy")
+    if not config:
+        return False
+    days=snapshot["days"]
+    day=days[next_idx]
+    if any(day not in snapshot["daily"][s] for s in ids):
+        return False
+    config["elapsed_shared"]+=1
+    if config["elapsed_shared"] < config["next_rebalance"]:
+        return False
+    common=[d for d in days[:next_idx] if all(d in snapshot["daily"][s] for s in ids)]
+    observed=common[:-(config["delay_sessions"]-1)] if config["delay_sessions"]>1 else common
+    if len(observed)<pr.WARMUP:
+        return False
+    closes={s:[float(snapshot["daily"][s][d]["close"]) for d in observed] for s in ids}
+    metadata={}
+    for s in ids:
+        item=get_instrument(s)
+        metadata[s]={"group":pr._group(s,item.kind),"kind":item.kind,
+                     "currency":item.currency,"spread_bps":float(item.spread_bps)}
+    weights=pr._weights(config["model"],ids,closes,len(observed),metadata,
+                        config["max_position_pct"]/100)
+    opening={s:dec(snapshot["daily"][s][day]["open"]) for s in ids}
+    equity=dec(state["cash"])+sum(dec(state["positions"][s]["qty"])*opening[s] for s in ids)
+    traded=False
+    for side in ("sell","buy"):
+        for s in ids:
+            current=dec(state["positions"][s]["qty"])
+            desired=dec(weights[s])*equity/opening[s]
+            desired=desired.to_integral_value(rounding="ROUND_DOWN")
+            delta=desired-current
+            quantity=min(current,-delta) if side=="sell" else delta
+            if quantity<=0:
+                continue
+            if side=="buy":
+                # Keep a modest buffer for execution spread and the simulator fee.
+                maximum=(dec(state["cash"])*dec(".98")/opening[s]).to_integral_value(rounding="ROUND_DOWN")
+                quantity=min(quantity,maximum)
+            if quantity<=0:
+                continue
+            queued={"id":str(uuid4()),"side":side,"kind":"market",
+                    "size":str(quantity),"size_type":"units","price":None,
+                    "source":"tournament"}
+            outcome=_execute(state,s,queued,snapshot["daily"][s][day])
+            if outcome.startswith("FILLED"):
+                traded=True
+            event(state,f"MODEL {s.upper()}: {outcome}")
+    config["next_rebalance"]=config["elapsed_shared"]+config["rebalance_sessions"]
+    event(state,"Tournament portfolio rebalance checked using prior completed sessions.")
+    return traded
 
 
 def risk(run_id, stop_loss_pct, take_profit_pct):
@@ -472,6 +564,8 @@ def advance(run_id, count=1, until_action=False):
                     traded = traded or outcome.startswith("FILLED")
             state["orders"] = pending
             state["index"] = next_idx
+            if state.get("model_strategy"):
+                traded = _rebalance_model(snap,state,ids,next_idx) or traded
             # Each rule reads only its *signal* symbol's candles through this
             # day's close. Its order for another symbol waits for a future bar.
             for rule in bot_rules:
