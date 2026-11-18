@@ -39,6 +39,14 @@ def _db():
         updated_at TEXT NOT NULL,last_attempt TEXT,last_success TEXT,
         last_bar INTEGER,records INTEGER NOT NULL DEFAULT 0,
         failure_code TEXT,PRIMARY KEY(asset_id,resolution))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS reconciliation_jobs(
+        asset_id TEXT NOT NULL, resolution TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK(kind IN ('bootstrap','reconcile')),
+        due_at TEXT NOT NULL, last_attempt TEXT, last_success TEXT,
+        failures INTEGER NOT NULL DEFAULT 0, error_code TEXT,
+        verified_bars INTEGER NOT NULL DEFAULT 0,
+        verified_through INTEGER, status TEXT NOT NULL DEFAULT 'pending',
+        PRIMARY KEY(asset_id,resolution,kind))""")
     conn.execute("""CREATE TABLE IF NOT EXISTS collector_heartbeat(
         id INTEGER PRIMARY KEY CHECK(id=1),
         checked_at TEXT NOT NULL, state TEXT NOT NULL,
@@ -118,8 +126,178 @@ def subscribe(asset_id:str,resolution:str="5m"):
             VALUES(?,?,?,?)
             ON CONFLICT(asset_id,resolution) DO UPDATE SET active=1,updated_at=excluded.updated_at""",
                      (asset_id,resolution,now,now))
+        # Durable bootstrap is queued immediately, with recurring reconciliation
+        # gated on a successful bootstrap. Re-subscribing never overwrites a
+        # completed job or needlessly downloads all historical candles again.
+        conn.execute("""INSERT OR IGNORE INTO reconciliation_jobs
+            (asset_id,resolution,kind,due_at) VALUES(?,?, 'bootstrap',?)""",
+            (asset_id,resolution,now))
+        conn.execute("""INSERT OR IGNORE INTO reconciliation_jobs
+            (asset_id,resolution,kind,due_at) VALUES(?,?, 'reconcile',?)""",
+            (asset_id,resolution,now))
         conn.commit()
-    return {"asset_id":asset_id,"resolution":resolution,"active":True,"stored_locally":True}
+    return {"asset_id":asset_id,"resolution":resolution,"active":True,
+            "stored_locally":True,"backfill_queued":True}
+
+
+
+BOOTSTRAP_WINDOW = {"1m": "7D", "5m": "60D", "15m": "60D",
+                    "1h": "2Y", "1d": "MAX"}
+# Short overlapping windows verified hourly against provider-returned observations.
+VERIFY_SPAN_DAYS = {"1m": 2, "5m": 7, "15m": 7, "1h": 7, "1d": 21}
+RECONCILE_SECONDS = 3600
+MAX_RECONCILE_JOBS_PER_CYCLE = 1
+
+
+def list_reconciliation_jobs():
+    with LOCK, closing(_db()) as conn:
+        return [dict(row) for row in conn.execute("""
+            SELECT j.* FROM reconciliation_jobs j
+            JOIN subscriptions s ON s.asset_id=j.asset_id
+              AND s.resolution=j.resolution
+            WHERE s.active=1
+            ORDER BY j.due_at,j.asset_id,j.resolution,j.kind
+            LIMIT 250""")]
+
+
+def _fetch_reconcile_bars(asset, resolution, kind, now):
+    """Bypass normal HTTP history cache; never treat an offline fallback as new proof."""
+    if kind == "bootstrap":
+        window = BOOTSTRAP_WINDOW[resolution]
+        if resolution == "1d":
+            return (market.coinbase_candles(asset, window) if asset.kind == "Crypto"
+                    else market.yahoo_candles(asset, window)), window
+        days = intraday.SPAN_DAYS[window]
+    else:
+        window = BOOTSTRAP_WINDOW[resolution]
+        days = VERIFY_SPAN_DAYS[resolution]
+    end = now if resolution != "1d" else now + timedelta(days=1)
+    start = end - timedelta(days=days)
+    if asset.kind == "Crypto":
+        if resolution == "1d":
+            # Use exact daily granularity, not the misleading 1D display range.
+            # Reuse Coinbase's bounded daily source adapter only for bootstrap.
+            raise ValueError("Daily crypto reconciliation must use daily candles.")
+        bars = intraday.fetch_coinbase(asset, start, end, resolution)
+    else:
+        bars = intraday.fetch_yahoo(asset, start, end, resolution)
+    return bars, window
+
+
+def _merge_verified(asset_id, resolution, bars, window):
+    """Check all provider-returned bars are recorded with correct OHLCV.
+
+    This proves fidelity to *one provider response*, not all market events,
+    missing sessions, or exchange accuracy. Never fabricate absent candles.
+    """
+    import polars as pl
+    if not bars:
+        raise ValueError("Provider returned no observations.")
+    readings = {}
+    for bar in bars:
+        if not intraday._valid(bar):
+            raise ValueError("Provider returned malformed OHLCV.")
+        stamp = int(bar["time"])
+        value = tuple(float(bar[field]) for field in ("open","high","low","close","volume"))
+        if stamp in readings and readings[stamp] != value:
+            raise ValueError("Conflicting provider candles at identical timestamp.")
+        readings[stamp] = value
+    key = window if resolution == "1d" else f"{window}_{resolution}"
+    # Preserve original archive on malformed/conflicting inputs.
+    from .archive import record_history
+    record_history({"asset_id":asset_id,"range":key,"bars":bars})
+    path = archive_path(asset_id,key)
+    timestamps = list(readings)
+    observed = (pl.scan_parquet(path).filter(
+        pl.col("time").is_in(timestamps)).select(
+        ["time","open","high","low","close","volume"]).collect().to_dicts())
+    stored = {int(row["time"]):tuple(float(row[field]) for field in
+             ("open","high","low","close","volume")) for row in observed}
+    # Each provider observation must be present once and match exactly.
+    if len(observed) != len(stored) or stored != readings:
+        raise ValueError("Archive does not match observed provider candles.")
+    # Keep previously created chart windows synchronized; a timestamp
+    # may exist in distinct range views but never twice within one archive.
+    if resolution == "1d":
+        aliases = ("1Y","2Y","5Y","10Y","15Y","20Y","MAX")
+    else:
+        aliases = {
+            "1m":("7D",),"5m":("7D","30D","60D"),
+            "15m":("7D","30D","60D"),
+            "1h":("7D","30D","60D","6M","1Y","2Y"),
+        }[resolution]
+    for span in aliases:
+        alias = span if resolution == "1d" else f"{span}_{resolution}"
+        if alias != key and archive_path(asset_id,alias).exists():
+            record_history({"asset_id":asset_id,"range":alias,"bars":bars})
+    return {"verified_bars":len(readings),"verified_through":max(readings)}
+
+
+def execute_reconciliation(asset_id, resolution, kind, now=None):
+    now = now or datetime.now(timezone.utc)
+    asset = get_instrument(asset_id)
+    if not asset.ticker:
+        raise ValueError("Subscription has no provider ticker.")
+    bars, window = _fetch_reconcile_bars(asset, resolution, kind, now)
+    return _merge_verified(asset_id, resolution, bars, window)
+
+
+def run_reconciliation_due(now=None, execute=execute_reconciliation):
+    """Process a bounded number of durable jobs. Retry indefinitely but slowly.
+
+    A failed job remains queued with exponential, capped backoff. It is never
+    counted as verified. Each run gives incremental live polling a chance.
+    """
+    if os.environ.get("TRADING_SIM_PUBLIC_DEMO") == "1":
+        return []
+    now = now or datetime.now(timezone.utc)
+    stamp = now.isoformat()
+    with LOCK, closing(_db()) as conn:
+        due = [dict(row) for row in conn.execute("""
+            SELECT j.* FROM reconciliation_jobs j JOIN subscriptions s
+              ON j.asset_id=s.asset_id AND j.resolution=s.resolution
+            WHERE s.active=1 AND j.due_at<=?
+              AND (j.kind='bootstrap' OR EXISTS (
+                SELECT 1 FROM reconciliation_jobs b
+                WHERE b.asset_id=j.asset_id AND b.resolution=j.resolution
+                  AND b.kind='bootstrap' AND b.last_success IS NOT NULL))
+            ORDER BY CASE WHEN j.kind='bootstrap' THEN 0 ELSE 1 END,
+              j.due_at,j.asset_id LIMIT ?""",
+            (stamp, MAX_RECONCILE_JOBS_PER_CYCLE)).fetchall()]
+    completed = []
+    for job in due:
+        try:
+            result = execute(job["asset_id"],job["resolution"],job["kind"],now)
+            due_at = (now + timedelta(seconds=RECONCILE_SECONDS)).isoformat()
+            with LOCK, closing(_db()) as conn:
+                conn.execute("""UPDATE reconciliation_jobs SET
+                    last_attempt=?,last_success=?,due_at=?,failures=0,
+                    error_code=NULL,verified_bars=?,verified_through=?,
+                    status='provider_checked'
+                    WHERE asset_id=? AND resolution=? AND kind=?""",
+                    (stamp,stamp,due_at,result["verified_bars"],
+                     result["verified_through"],job["asset_id"],
+                     job["resolution"],job["kind"]))
+                conn.commit()
+            completed.append({"asset_id":job["asset_id"],"resolution":job["resolution"],
+                              "kind":job["kind"],"status":"provider_checked"})
+        except Exception as exc:
+            failures = int(job["failures"])+1
+            # 1m, 2m, 4m ... 60m, then every 60m forever.
+            backoff = min(RECONCILE_SECONDS, 60*2**min(failures-1, 6))
+            due_at = (now+timedelta(seconds=backoff)).isoformat()
+            with LOCK, closing(_db()) as conn:
+                conn.execute("""UPDATE reconciliation_jobs SET
+                    last_attempt=?,due_at=?,failures=?,error_code=?,
+                    status='retry_pending'
+                    WHERE asset_id=? AND resolution=? AND kind=?""",
+                    (stamp,due_at,failures,type(exc).__name__,job["asset_id"],
+                     job["resolution"],job["kind"]))
+                conn.commit()
+            completed.append({"asset_id":job["asset_id"],"resolution":job["resolution"],
+                              "kind":job["kind"],"status":"retry_pending",
+                              "error":type(exc).__name__})
+    return completed
 
 
 def unsubscribe(asset_id:str,resolution:str):
