@@ -26,9 +26,9 @@ def ollama_timeout_seconds():
         return 240
 def local_output_token_limit():
     try:
-        return max(1024, min(16384, int(os.environ.get("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "8192"))))
+        return max(128, min(16384, int(os.environ.get("TRADING_SIM_AI_MAX_OUTPUT_TOKENS", "768"))))
     except ValueError:
-        return 8192
+        return 768
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 LLAMA_CPP_ROUTER_MODELS_URL = "http://127.0.0.1:8081/models"
@@ -107,7 +107,8 @@ def configuration():
 # Only explicitly configured model IDs can be selected by the browser. Never
 # accept arbitrary inference URLs, model paths, or environment overrides from it.
 DEFAULT_LOCAL_MODELS = ("TwIL-8B-Q4_K_M-balanced.gguf",
-                        "Qwen3.5-9B-Q4_K_M.gguf")
+                        "Qwen3.5-9B-Q4_K_M.gguf",
+                        "Qwen3.5-4B-Q4_K_M.gguf")
 
 
 def local_model_choices():
