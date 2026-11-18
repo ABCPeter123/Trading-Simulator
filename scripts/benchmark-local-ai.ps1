@@ -46,7 +46,7 @@ $payload = @{
 Add-Type -AssemblyName System.Net.Http
 $http = New-Object System.Net.Http.HttpClient
 $http.Timeout = [TimeSpan]::FromSeconds($TimeoutSeconds)
-$body = New-Object System.Net.Http.StringContent($payload, [Text.Encoding]::UTF8, "application/json")
+$body = [System.Net.Http.StringContent]::new($payload, [Text.Encoding]::UTF8, "application/json")
 $watch = [Diagnostics.Stopwatch]::StartNew()
 $nextReport = 5
 try {
