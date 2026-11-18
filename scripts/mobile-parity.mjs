@@ -328,6 +328,17 @@ try {
     const chineseTab = await page.locator(".port-layout .ts-tab-strip button").first().textContent();
     if (chineseTab?.includes("Historical Replay"))
       throw new Error(width + "px workspace navigation was not translated");
+    // Floating AI must be usable and must not cover the persistent language
+    // switch on any supported viewport. No model or private data required.
+    const aiTrigger = page.locator(".ai-float-trigger");
+    await aiTrigger.click();
+    await visible(page, "#trading-ai-chat-panel", width+" AI chat dialog");
+    await page.locator("#trading-ai-chat-panel .ai-close").click();
+    if (await page.locator("#trading-ai-chat-panel").count() !== 0)
+      throw new Error(width+"px AI chat did not close");
+    await page.locator(".ts-lang-switch").getByRole("button",{name:"EN"}).click();
+    if (await page.locator("html").getAttribute("lang") !== "en")
+      throw new Error(width+"px language switch blocked by floating AI control");
     await context.close();
     process.stdout.write("Feature parity passed at " + width + "px (both modes, all workspaces).\n");
   }
