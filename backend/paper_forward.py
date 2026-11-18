@@ -321,6 +321,10 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
     try:
         profile=broker_model.normalize(execution)
         broker_model.check_model(profile,config["model"])
+    except ValueError as exc:
+        # Broker compatibility errors do not reveal strategy parameters.
+        raise HTTPException(422,detail="Incompatible paper broker settings: "+str(exc)) from None
+    try:
         days, market, meta, fx = _portfolio(
             symbols, at, loader,need_fx=profile["capital_currency"]=="CAD"
         )
