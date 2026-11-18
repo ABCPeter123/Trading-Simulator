@@ -209,21 +209,60 @@ if (Test-LocalPort 5173) {
         Start-LocalBackground "frontend" $script
     }
 }
-# Reuse a manually started router, or launch it silently if GGUFs are installed.
-# This server is always loopback-only. It must never be exposed publicly.
+# Reuse an existing router or start a local GGUF router quietly.
+# A listening TCP port alone is insufficient: an unrelated service may own it.
+function Test-LocalAiHttp {
+    try {
+        $null = Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8081/models" -TimeoutSec 2 -ErrorAction Stop
+        return $true
+    } catch {
+        return $false
+    }
+}
 if ($aiProvider -eq "llama_cpp") {
+    $modelDir = Join-Path $root "models\private"
+    $modelFiles = @()
+    if (Test-Path -LiteralPath $modelDir -PathType Container) {
+        $modelFiles = @(Get-ChildItem -LiteralPath $modelDir -Filter *.gguf -File -ErrorAction SilentlyContinue)
+    }
     if (Test-LocalPort 8081) {
-        Write-Host "[ai] Reusing llama.cpp router on 127.0.0.1:8081." -ForegroundColor Green
-    } elseif ((Get-Command llama-server -ErrorAction SilentlyContinue) -and
-              (Test-Path (Join-Path $root "models\private"))) {
-        $modelFiles = @(Get-ChildItem -LiteralPath (Join-Path $root "models\private") -Filter *.gguf -File -ErrorAction SilentlyContinue)
-        if ($modelFiles.Count -gt 0) {
-            Start-LocalBackground "ai" (Join-Path $root "scripts\run-local-ai.ps1")
+        if (Test-LocalAiHttp) {
+            Write-Host "[ai] Reusing healthy llama.cpp router on 127.0.0.1:8081." -ForegroundColor Green
         } else {
-            Write-Host "[ai] No GGUF models in models/private. Install TwIL and Qwen to enable AI." -ForegroundColor Yellow
+            Write-Host "[ai] Port 8081 is occupied, but GET /models failed. Check the listening process; no second router started." -ForegroundColor Yellow
         }
+    } elseif ($modelFiles.Count -eq 0) {
+        Write-Host "[ai] GGUF files missing from $modelDir. No AI router started." -ForegroundColor Yellow
     } else {
-        Write-Host "[ai] llama.cpp or local GGUF models are missing. Set up your models before using AI." -ForegroundColor Yellow
+        $server = Get-Command "llama-server" -ErrorAction SilentlyContinue
+        if (-not $server -or -not (Test-Path -LiteralPath $server.Source -PathType Leaf)) {
+            Write-Host "[ai] llama-server executable not found in PATH. Run Get-Command llama-server, then check llama.cpp installation." -ForegroundColor Yellow
+        } else {
+            # Resolve the executable in this terminal, not in the hidden child.
+            $env:TRADING_SIM_LLAMA_SERVER_EXE = $server.Source
+            $aiScript = Join-Path $root "scripts\run-local-ai.ps1"
+            Start-LocalBackground "ai" $aiScript
+            # Give the router time to bind before declaring startup healthy.
+            $aiReady = $false
+            for ($attempt = 0; $attempt -lt 15; $attempt++) {
+                Start-Sleep -Milliseconds 400
+                if (Test-LocalAiHttp) { $aiReady = $true; break }
+                $aiProcess = Get-Process -Id ([int]$serviceRecords["ai"].pid) -ErrorAction SilentlyContinue
+                if (-not $aiProcess) { break }
+            }
+            if ($aiReady) {
+                Write-Host "[ai] Router responds on 127.0.0.1:8081." -ForegroundColor Green
+            } else {
+                Write-Host "[ai] Router did not become reachable. Review .local-state\logs\ai.err.log and ai.out.log." -ForegroundColor Yellow
+                foreach ($logName in @("ai.err.log","ai.out.log")) {
+                    $logPath = Join-Path $logsDir $logName
+                    if (Test-Path -LiteralPath $logPath) {
+                        Get-Content -LiteralPath $logPath -Tail 5 -ErrorAction SilentlyContinue |
+                            ForEach-Object { Write-Host "[ai:$logName] $_" -ForegroundColor DarkYellow }
+                    }
+                }
+            }
+        }
     }
 }
 
