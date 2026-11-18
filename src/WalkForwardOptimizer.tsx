@@ -7,7 +7,6 @@ import "./walkForwardOptimizer.css";
 const pct=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?"N/A":value.toFixed(2)+"%";
 const dec=(value:number|null|undefined)=>value==null||!Number.isFinite(value)?"N/A":value.toFixed(2);
 const name=(value:string)=>value.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
-const money=(n:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n);
 
 function Plot({data,description}:{data:{time:number;value:number}[];description:string}){
   const path=useMemo(()=>{
@@ -215,7 +214,7 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
         <div className="wfo-headline">
           <div><small>{l("Audit total return","审计期总收益")}</small><strong>{pct(audit.return_pct)}</strong></div>
           <div><small>{l("Audit maximum drawdown","审计期最大回撤")}</small><strong>{pct(audit.drawdown_pct)}</strong></div>
-          <div><small>{l("Extra slippage return","更高滑点收益")}</small><strong>{pct(audit.stress_return_pct)}</strong></div>
+          <div><small>{l("Delayed execution + higher slippage","延迟执行及更高滑点")}</small><strong>{pct(audit.stress_return_pct)}</strong></div>
           <div><small>{l("Historical target observation","历史目标观察")}</small>
             <strong>{audit.observed_targets_met?l("Met historically","历史观察达标"):
               l("Not met","未达标")}</strong></div>
