@@ -12,6 +12,14 @@ const STORAGE_KEY = "trading-simulator-language";
  * Unmapped labels deliberately stay in English instead of changing data.
  */
 const zh: Record<string, string> = {
+  "Collector": "采集程序",
+  "Collector heartbeat stale": "采集程序心跳超时",
+  "Collector activity unverified": "尚未确认采集程序活动",
+  "Collector recently active": "采集程序最近运行正常",
+  "Last worker heartbeat": "最近采集心跳",
+  "Subscribed, collector heartbeat detected": "已订阅，检测到采集程序心跳",
+  "Subscribed, collector not confirmed": "已订阅，但尚未确认采集程序运行",
+
   "Observed history": "实际历史数据",
   "First archived": "最早归档",
   "bars": "根K线",
