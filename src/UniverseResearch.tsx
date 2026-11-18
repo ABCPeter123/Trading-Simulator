@@ -421,7 +421,17 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 onClick={()=>void importAll()}>{t("Save all top 10 strategy models")}</button>
             </details>
             {result.top10.length===0?<p>{t("No qualifying candidates. Inspect missing history or relax the validation constraints.")}</p>:
-            <div className="ur-scroll"><table><thead><tr><th>{t("Rank")}</th>
+            <>
+              <label className="ur-ranking-picker">{bilingual("Select a strategy to inspect","选择要查看的策略")}
+                <select value={pick} onChange={event=>{setPick(Number(event.target.value));setDetailTab("overview");}}>
+                  {result.top10.map((row,i)=><option key={row.rank} value={i}>
+                    #{row.rank} · {label(row.model)} · {pct(row.validation.return_pct)} {bilingual("validation","验证期")}
+                  </option>)}
+                </select>
+              </label>
+              <details className="ur-ranking-table">
+                <summary>{bilingual("Compare all ranked strategies","比较所有排名策略")} ({result.top10.length})</summary>
+                <div className="ur-scroll"><table><thead><tr><th>{t("Rank")}</th>
               <th>{t("Basket / Model")}</th><th>{t("Validation")}</th>
               <th>{t("Drawdown")}</th><th>{t("Held-out")}</th><th>{t("Score")}</th>
             </tr></thead><tbody>{result.top10.map((row,i)=><tr key={row.rank} className={i===pick?"ur-active":""}>
@@ -432,7 +442,9 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 {row.research_only&&<small>{t("Synthetic short / margin research only")}</small>}</td>
               <td>{pct(row.validation.return_pct)}</td><td>{pct(row.validation.max_drawdown_pct)}</td>
               <td>{pct(row.held_out.return_pct)}</td><td>{row.validation_score.toFixed(2)}</td>
-            </tr>)}</tbody></table></div>}
+            </tr>)}</tbody></table></div>
+              </details>
+            </>}
             {chosen&&<article className="ur-detail">
               <h3>#{chosen.rank} {label(chosen.basket_type)} · {label(chosen.model)}</h3>
               <p>{chosen.symbols.map(x=>x.toUpperCase()).join(" · ")}</p>
@@ -528,6 +540,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                     {busy&&promotionTarget==="simulation"?t("Preparing historical replay..."):
                       t("Load this strategy into simulation")}
                   </button>}
+                <details className="ur-monitoring-options">
+                  <summary>{bilingual("Monitoring and deployment options","监控及部署选项")}</summary>
                 <button type="button" className="ur-secondary"
                   disabled={busy||chosen.research_only||chosen.restricted_research||chosen.short_proxy_research||customResearchExposure}
                   aria-busy={busy&&promotionTarget==="live"}
@@ -539,6 +553,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                     (busy&&promotionTarget==="live")?t("Opening Live Engine..."):
                       t("Open in Live Engine (paper first)")}
                 </button>
+                </details>
               </div>
               <p>{chosen.model==="blended_portfolio"?
                 bilingual("Shared-cash blends now support private saved versions, historical period studies and walk-forward revalidation. Live execution remains disabled.","共享现金混合策略现已支持私人策略版本、历史区间研究和滚动验证。实时执行仍然禁用。"):
