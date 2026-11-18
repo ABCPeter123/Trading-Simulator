@@ -4,14 +4,15 @@ import {useI18n} from "./i18n";
 import {request} from "./api";
 import {listStrategies} from "./strategyLibraryApi";
 import {listTournamentVersions} from "./tournamentApi";
+import TournamentStrategyInspector from "./TournamentStrategyInspector";
 import type {TournamentVersion} from "./tournamentApi";
 import type {SavedStrategy} from "./strategyLibraryApi";
 import {
-  checkMachine,editConfirmedFill,getJournal,getMachineStatus,getNotifications,
+  checkMachine,editConfirmedFill,getJournal,getMachineStatus,getNotifications,inspectDeployment,
   listDeployments,listFillRevisions,listMachineAlerts,listSignals,
   newDeployment,recordConfirmedFill,setAlertState,setDeploymentState,setSignalState,
 } from "./liveMachineApi";
-import type {Alert,ConfirmedFill,Deployment,FillDraft,Journal,MachineStatus,NotificationStatus,Signal} from "./liveMachineApi";
+import type {Alert,ConfirmedFill,Deployment,DeploymentSource,FillDraft,Journal,MachineStatus,NotificationStatus,Signal} from "./liveMachineApi";
 import "./liveOperations.css";
 
 interface ResearchShortlist {
@@ -48,6 +49,9 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
   const [notification,setNotification]=useState<NotificationStatus|null>(null);
   const [library,setLibrary]=useState<(SavedStrategy|TournamentVersion)[]>([]);
   const [selectedStrategy,setSelectedStrategy]=useState("");
+  const [inspectedDeployment,setInspectedDeployment]=useState<DeploymentSource|null>(null);
+  const [inspectBusy,setInspectBusy]=useState<string|null>(null);
+  const [inspectError,setInspectError]=useState("");
   const appliedPreferred=useRef<string|undefined>(undefined);
   const [capital,setCapital]=useState("100000");
   const [monitorResolution,setMonitorResolution]=useState<"1d"|"1h"|"15m">("1d");
@@ -141,6 +145,14 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
     catch(e){setError(errorOf(e));}
     finally{setRunning(false);}
   }
+  async function toggleInspection(id:string){
+    if(inspectedDeployment?.id===id){setInspectedDeployment(null);return;}
+    setInspectBusy(id);setInspectError("");
+    try{setInspectedDeployment(await inspectDeployment(id));}
+    catch(e){setInspectError(errorOf(e));}
+    finally{setInspectBusy(null);}
+  }
+  const currentLibraryStrategy=library.find(entry=>entry.id===selectedStrategy);
   const pending=signals.filter(s=>s.status==="pending"||s.status==="acknowledged");
   function prefill(signal:Signal){
     if(section!=="journal"&&onRecordSignal){onRecordSignal(signal);return;}
@@ -251,6 +263,20 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
             {!library.length&&<option value="">{t("Save a strategy in the Research tab first.")}</option>}
             {library.map(s=><option key={s.id} value={s.id}>{s.name} ({s.mode})</option>)}
           </select></label>
+        {currentLibraryStrategy?.mode==="portfolio_model"&&
+          <TournamentStrategyInspector
+            key={currentLibraryStrategy.id}
+            spec={{version:1,model:currentLibraryStrategy.model,
+              symbols:currentLibraryStrategy.symbols,
+              max_position_pct:currentLibraryStrategy.max_position_pct,
+              delay_sessions:currentLibraryStrategy.delay_sessions,
+              rebalance_sessions:currentLibraryStrategy.rebalance_sessions,
+              restricted_research:currentLibraryStrategy.restricted_research,
+              short_proxy_research:currentLibraryStrategy.short_proxy_research}}
+            exactCode={currentLibraryStrategy.code} context="live"/>}
+        {currentLibraryStrategy&&currentLibraryStrategy.mode!=="portfolio_model"&&
+          <details className="ops-source"><summary>{t("View saved strategy script")}</summary>
+            <pre>{currentLibraryStrategy.code}</pre></details>}
         <div className="ops-field-grid">
           <label>{t("Reference capital")}<input inputMode="decimal" type="number" min="100" value={capital} onChange={e=>setCapital(e.target.value)}/></label>
           <label>{t("Max allocation per signal (%)")}<input type="number" min="0.01" max={library.find(x=>x.id===selectedStrategy)?.mode==="portfolio_model"?50:25} step=".5" value={allocation} onChange={e=>setAllocation(e.target.value)}/></label>
@@ -288,10 +314,15 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
       <section className="ops-card ops-wide">
         <h2>{t("Deployed strategies")}</h2>
         {!deployments.length&&<p className="ops-muted">{t("No deployed strategies yet.")}</p>}
+        {inspectError&&<p className="ops-error" role="alert">{inspectError}</p>}
         {deployments.map(d=><div className="ops-deployment" key={d.id}>
           <div><strong>{d.name}</strong><small>{d.symbols.join(", ").toUpperCase()} · {d.resolution??"1d"} · {t(d.state)} · {t("Last evaluation")}: {when(d.last_evaluated_at)} · {t("Loss stop")}: {d.max_realized_loss_pct}%</small>
             {d.last_error&&<small className="ops-danger">{t("Data check failed. No recommendation generated.")}</small>}</div>
           <div className="ops-action-buttons">
+            <button type="button" disabled={inspectBusy!==null}
+              onClick={()=>void toggleInspection(d.id)}>
+              {inspectBusy===d.id?t("Loading strategy source..."):
+                inspectedDeployment?.id===d.id?t("Hide deployed strategy source"):t("Inspect deployed strategy source")}</button>
             {d.state!=="retired"&&<button disabled={running} onClick={()=>void mutate(
               ()=>setDeploymentState(d.id,d.state==="paused"?"paper":"paused"),
               "Deployment state updated.")}>{d.state==="paused"?t("Resume paper"):t("Pause")}</button>}
@@ -300,6 +331,15 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
               "Live monitoring enabled. Execution remains manual.")}>{t("Live monitor")}</button>}
             {d.state!=="retired"&&<button disabled={running} onClick={()=>{if(window.confirm(t("Retire this deployment permanently?")))void mutate(()=>setDeploymentState(d.id,"retired"),"Deployment retired.");}}>{t("Retire")}</button>}
           </div>
+          {inspectedDeployment?.id===d.id&&<div className="ops-deployed-source">
+            <h3>{t("Frozen deployed source")}: {inspectedDeployment.name}</h3>
+            {inspectedDeployment.model_config?
+              <TournamentStrategyInspector
+                key={inspectedDeployment.id}
+                spec={inspectedDeployment.model_config}
+                exactCode={inspectedDeployment.code} context="live"/>:
+              <pre>{inspectedDeployment.code}</pre>}
+          </div>}
         </div>)}
       </section>
       <section className="ops-card ops-wide">
