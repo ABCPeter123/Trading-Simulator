@@ -266,13 +266,14 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
         {currentLibraryStrategy?.mode==="portfolio_model"&&
           <TournamentStrategyInspector
             key={currentLibraryStrategy.id}
-            spec={{version:1,model:currentLibraryStrategy.model,
+            spec={{version:currentLibraryStrategy.version,model:currentLibraryStrategy.model,
               symbols:currentLibraryStrategy.symbols,
               max_position_pct:currentLibraryStrategy.max_position_pct,
               delay_sessions:currentLibraryStrategy.delay_sessions,
               rebalance_sessions:currentLibraryStrategy.rebalance_sessions,
               restricted_research:currentLibraryStrategy.restricted_research,
-              short_proxy_research:currentLibraryStrategy.short_proxy_research}}
+              short_proxy_research:currentLibraryStrategy.short_proxy_research,
+              research_only:currentLibraryStrategy.research_only}}
             exactCode={currentLibraryStrategy.code} context="live"/>}
         {currentLibraryStrategy&&currentLibraryStrategy.mode!=="portfolio_model"&&
           <details className="ops-source"><summary>{t("View saved strategy script")}</summary>
@@ -289,11 +290,13 @@ export default function LiveOperations({section,initialSignal,onRecordSignal,onC
           <label>{t("Daily signal limit")}<input type="number" min="1" max="20" value={dailyLimit} onChange={e=>setDailyLimit(e.target.value)}/></label>
           <label>{t("Realized-loss stop (%)")}<input type="number" min="0.5" max="25" step=".5" value={lossLimit} onChange={e=>setLossLimit(e.target.value)}/></label>
         </div>
-        <button className="ops-primary" disabled={running||!selectedStrategy} onClick={()=>void mutate(
+        <button className="ops-primary" disabled={running||!selectedStrategy||Boolean(currentLibraryStrategy?.mode==="portfolio_model"&&currentLibraryStrategy.research_only)} onClick={()=>void mutate(
           ()=>newDeployment({strategy_id:selectedStrategy,state:"paper",capital:Number(capital),
           max_allocation_pct:Number(allocation),max_daily_signals:Number(dailyLimit),max_realized_loss_pct:Number(lossLimit),resolution:monitorResolution}),
           "Strategy deployed to paper signal monitoring.")}>
           {t("Deploy to paper monitoring")}</button>
+        {currentLibraryStrategy?.mode==="portfolio_model"&&currentLibraryStrategy.research_only&&
+          <p className="ops-danger">{t("Synthetic share-short and borrowed-margin research strategies cannot be deployed as Wealthsimple signals.")}</p>}
         {library.find(x=>x.id===selectedStrategy)?.mode==="portfolio_model"&&
           <p className="ops-muted">{t("Tournament allocation models rebalance the full saved basket every 21 shared trading sessions. Live signals are indicative, calculated from confirmed fills and recent daily history. Verify all holdings and execution prices manually.")}</p>}
         <p className="ops-muted">{t("Short selling, leverage and broker automation remain disabled until their risk models are validated.")}</p>
