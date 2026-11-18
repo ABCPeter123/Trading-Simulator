@@ -303,7 +303,8 @@ A drawdown question includes selected curve points (including the worst
 drawdown within the already sampled observations), but not unrelated trades.
 A trade question includes recent executions, a portfolio exposure question
 includes attribution, and a strategy-creation question includes existing
-strategy text and the DSL rule catalog. Unknown questions receive the core
+strategy text and the DSL rule catalog. Simple return questions omit rule
+text and fills; causal underperformance questions retain those details. Unknown questions receive the core
 overview; short follow-ups can inherit the latest user question topic.
 The selection never uses future candles and never changes stored strategies.
 The full 8B/9B context and its strategy validator remain unchanged.
