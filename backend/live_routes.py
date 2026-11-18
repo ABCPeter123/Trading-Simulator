@@ -80,6 +80,12 @@ def deploy(body:DeployBody):
     private()
     return engine.deploy(**body.model_dump())
 
+@router.get("/deployments/{deployment_id}/strategy")
+def deployment_strategy_source(deployment_id:str):
+    private()
+    return engine.get_deployment_source(deployment_id)
+
+
 @router.put("/deployments/{deployment_id}")
 def change_deployment(deployment_id:str,body:StateBody):
     private()
