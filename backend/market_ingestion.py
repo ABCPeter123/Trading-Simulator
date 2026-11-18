@@ -175,10 +175,12 @@ def _fetch_reconcile_bars(asset, resolution, kind, now):
     start = end - timedelta(days=days)
     if asset.kind == "Crypto":
         if resolution == "1d":
-            # Use exact daily granularity, not the misleading 1D display range.
-            # Reuse Coinbase's bounded daily source adapter only for bootstrap.
-            raise ValueError("Daily crypto reconciliation must use daily candles.")
-        bars = intraday.fetch_coinbase(asset, start, end, resolution)
+            # The 3M Coinbase chart uses daily OHLCV; 1M/1D chart windows
+            # use hourly/minute granularity and MUST NOT enter a daily archive.
+            bars = [bar for bar in market.coinbase_candles(asset, "3M")
+                    if bar["time"] >= start.timestamp()]
+        else:
+            bars = intraday.fetch_coinbase(asset, start, end, resolution)
     else:
         bars = intraday.fetch_yahoo(asset, start, end, resolution)
     return bars, window
@@ -253,10 +255,18 @@ def run_reconciliation_due(now=None, execute=execute_reconciliation):
     now = now or datetime.now(timezone.utc)
     stamp = now.isoformat()
     with LOCK, closing(_db()) as conn:
+        # Migrate existing watchlists from before reconciliation queues existed.
+        for kind in ("bootstrap", "reconcile"):
+            conn.execute("""INSERT OR IGNORE INTO reconciliation_jobs
+                (asset_id,resolution,kind,due_at)
+                SELECT asset_id,resolution,?,? FROM subscriptions WHERE active=1""",
+                (kind,stamp))
+        conn.commit()
         due = [dict(row) for row in conn.execute("""
             SELECT j.* FROM reconciliation_jobs j JOIN subscriptions s
               ON j.asset_id=s.asset_id AND j.resolution=s.resolution
             WHERE s.active=1 AND j.due_at<=?
+              AND (j.kind='reconcile' OR j.last_success IS NULL)
               AND (j.kind='bootstrap' OR EXISTS (
                 SELECT 1 FROM reconciliation_jobs b
                 WHERE b.asset_id=j.asset_id AND b.resolution=j.resolution
