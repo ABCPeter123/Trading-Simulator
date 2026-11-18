@@ -38,3 +38,10 @@
 .wfo-objective-grid article b{font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
 .wfo-year-table{min-width:440px!important}
 @media(max-width:750px){.wfo-objective-grid{grid-template-columns:1fr}.wfo-objective-grid article>div{padding:4px 0}}
+
+/* Compact walk-forward setup and result: additional calculations stay available. */
+.wfo-core-inputs{grid-template-columns:minmax(180px,300px)}
+.wfo-advanced,.wfo-deep-report,.wfo-forward{border:1px solid #3b5c6d;border-radius:8px;padding:12px;margin:13px 0;background:#172d3c}
+.wfo-advanced>summary,.wfo-deep-report>summary,.wfo-forward>summary{font-weight:700;color:#cae8ef;cursor:pointer}
+.wfo-advanced>summary:focus-visible,.wfo-deep-report>summary:focus-visible,.wfo-forward>summary:focus-visible{outline:2px solid #79daca;outline-offset:2px}
+.wfo-advanced[open]>summary,.wfo-deep-report[open]>summary,.wfo-forward[open]>summary{margin-bottom:12px}

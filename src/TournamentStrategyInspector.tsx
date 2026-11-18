@@ -129,6 +129,8 @@ export default function TournamentStrategyInspector({
         "此组合包含杠杆或反向ETF，仅供研究和历史回放参考，不允许用于实时监控。")}
     </div>}
 
+    <details className="tsi-explanation">
+      <summary>{l("Strategy rules and methodology","策略规则与研究方法")}</summary>
     {narrative&&<>
       <h5>{l("1. How this strategy makes decisions","1. 策略如何做出决策")}</h5>
       <p className="tsi-intro">{l("These steps describe the actual model's allocation rules. They are not generated from its historical performance or an AI forecast.",
@@ -213,7 +215,11 @@ export default function TournamentStrategyInspector({
           "这些结果未完整建模税费、分红、公司行为、借券可得性变化、市场冲击或真实券商成交。历史表现不保证未来盈利。")}</p>
       </div>
     </>}
-    <div id="ur-custom-study"><CustomStrategyAnalysis spec={spec} initialJob={researchStudy}/></div>
+    </details>
+    <details className="tsi-period-study" id="ur-custom-study" open={Boolean(researchStudy)}>
+      <summary>{l("Historical period analysis","历史区间分析")}</summary>
+      <CustomStrategyAnalysis spec={spec} initialJob={researchStudy}/>
+    </details>
     {context==="research"&&<WalkForwardOptimizer spec={spec}/>}
   </section>;
 }

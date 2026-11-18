@@ -185,13 +185,17 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
     <div className="wfo-body">
       <p>{l("Select strategy models and allocation settings on older prices, then test each selection on later sessions. Three rolling validation folds precede one sealed final audit. This is model selection, not AI prediction.",
         "仅使用早期价格选择策略模型及仓位参数，在后续交易日验证。三个滚动验证区间之后进行一次独立留出期审计。这是模型选择，而非AI预测。")}</p>
-      <div className="wfo-inputs">
+      <div className="wfo-inputs wfo-core-inputs">
         <label>{l("Search breadth","搜索范围")}
           <select value={searchWidth} onChange={e=>setSearchWidth(e.target.value as typeof searchWidth)}>
             <option value="focused">{l("Focused · up to 12 configurations","精简 · 最多12组配置")}</option>
             <option value="extended">{l("Extended · up to 24 configurations","扩展 · 最多24组配置")}</option>
             <option value="comprehensive">{l("Comprehensive · up to 48 configurations","全面 · 最多48组配置")}</option>
           </select></label>
+      </div>
+      <details className="wfo-advanced">
+        <summary>{l("Advanced selection and execution settings","高级筛选与执行设置")}</summary>
+        <div className="wfo-inputs">
         <label>{l("Target annual CAGR (%)","目标年复合增长率（%）")}
           <input type="number" min="10" max="100" step="1" value={targetCagr}
             onChange={e=>setTargetCagr(e.target.value)}/></label>
@@ -233,6 +237,7 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
         "Growth and exposure requirements are hard training-only eligibility gates. The aspirational CAGR and Sharpe remain scoring targets. No eligible candidate means no selected strategy. Minimum exposure never forces the engine to invest when signals say cash. A controlled 25/35/45/55% drawdown frontier plus your chosen limit compares only the three pre-audit folds.",
         "增长和敞口要求是仅使用训练期数据的硬性筛选门槛。目标 CAGR 和夏普仍是评分目标。若没有合格候选则不选择策略。最低敞口要求不会强制策略在现金信号下买入。25/35/45/55%回撤限制及自定义限制仅在最终审计前的三个验证区间进行对比。"
       )}</p>
+      </details>
       <div className="wfo-actions">
         <button type="button" disabled={busy||job?.status==="queued"||job?.status==="running"}
           aria-busy={busy} onClick={()=>void submit()}>
@@ -304,6 +309,8 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           <div><small>{l("Untouched audit excess Sharpe","独立审计期超额夏普")}</small>
             <strong>{dec(audit.objectives.excess_sharpe)}</strong></div>
         </div>
+        <details className="wfo-deep-report">
+          <summary>{l("Detailed validation, benchmarks, audit and diagnostics","详细验证、基准、审计及诊断报告")}</summary>
         <h5>{l("Annual consistency diagnostics","年度收益一致性诊断")}</h5>
         <p>{l("Rolling 252-session returns overlap and are not independent annual observations. Partial calendar years are excluded from the full-year worst-case statistic.",
           "滚动252个交易日收益区间相互重叠，并非独立年度观测。未满整年的日历年度不会计入完整年度最差收益。")}</p>
@@ -749,8 +756,12 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
         <details className="wfo-limit"><summary>{l("Model limitations and execution assumptions","模型限制与执行假设")}</summary>
           {result.limitations?.map((item,i)=><p key={i}>{item}</p>)}
         </details>
+        </details>
       </>}
-      {result?.status==="completed"&&<PaperForwardMonitor sourceJobId={job?.id}/>}
+      {result?.status==="completed"&&<details className="wfo-forward">
+        <summary>{l("Forward-paper monitoring","前向模拟跟踪")}</summary>
+        <PaperForwardMonitor sourceJobId={job?.id}/>
+      </details>}
       <details className="wfo-history"><summary>{l("Previous private walk-forward studies","过往私人滚动前推研究")} ({archive.length})</summary>
         {archive.length===0?<p>{l("No studies saved yet.","尚无已保存研究。")}</p>:
           archive.slice(0,20).map(item=><button type="button" key={item.id} disabled={busy}
