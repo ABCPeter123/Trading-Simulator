@@ -279,6 +279,32 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
             </article>)}
           </div>
         </>}
+        <h5>{l("Pre-audit selection-bias diagnostics","审计前选择偏差诊断")}</h5>
+        {result.model_search?.pre_audit_selection_diagnostics&&(()=>{
+          const diagnostics=result.model_search.pre_audit_selection_diagnostics;
+          const dsr=diagnostics.deflated_sharpe;
+          const pbo=diagnostics.pbo;
+          return <>
+            <p>{l("Computed only from pre-audit candidate equity curves. The final audit was excluded. These tests estimate selection bias; they do not establish an investable edge.",
+              "仅使用最终审计前的候选组合净值曲线计算，不包含最终审计数据。这些检验用于估计选择偏差，不能证明策略具有可交易的超额收益。")}</p>
+            <div className="wfo-headline">
+              <div><small>{l("Estimated deflated Sharpe probability","估计调整后夏普概率")}</small>
+                <strong>{pct(dsr.probability_pct)}</strong></div>
+              <div><small>{l("Multiple-testing Sharpe threshold","多重检验夏普阈值")}</small>
+                <strong>{dec(dsr.expected_max_sharpe)}</strong></div>
+              <div><small>{l("CSCV overfitting probability (PBO)","CSCV 过拟合概率（PBO）")}</small>
+                <strong>{pct(pbo.estimated_pbo_pct)}</strong></div>
+              <div><small>{l("CSCV partitions evaluated","已评估 CSCV 分区")}</small>
+                <strong>{pbo.evaluated_splits}</strong></div>
+              <div><small>{l("Distinct candidate return paths","不同候选收益路径数")}</small>
+                <strong>{pbo.distinct_candidates}</strong></div>
+              <div><small>{l("Eligible diagnostic runs","诊断有效候选")}</small>
+                <strong>{diagnostics.valid_candidate_curves}/{diagnostics.attempted_candidates}</strong></div>
+            </div>
+            <p className="wfo-disclaimer">{l("Deflated Sharpe relies on approximate independent, identically distributed returns and an independence-based trial threshold. CSCV reorders pre-audit blocks rather than replaying time in chronological order. N/A means evidence is insufficient.",
+              "调整后夏普依赖收益独立同分布及基于独立检验的近似阈值。CSCV 对审计前数据块进行非时间顺序的组合验证，不能替代真实的滚动前推检验。N/A 表示证据不足。")}</p>
+          </>;
+        })()}
         <h5>{l("Multiple testing and confidence","多重测试与结果可信度")}</h5>
         <p>{l("Configurations tested per selection","每次选择尝试的配置")}: {result.model_search?.candidate_count}.
           {" "}{l("Total training evaluations","训练期累计评估次数")}: {result.model_search?.total_train_evaluations}.</p>
