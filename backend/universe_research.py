@@ -24,13 +24,74 @@ import time
 from fastapi import HTTPException
 
 from . import assets, portfolio_research as pr, advanced_portfolio_research as adv, performance_objectives as objectives
+from . import blended_portfolio_research as blends
 from .archive import load_archived_history
 from .market import history
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = Path(os.environ.get("TRADING_SIM_UNIVERSE_DB", ROOT/"data/universe_research.sqlite3"))
 LOCK = RLock()
-CANDIDATE_MODELS = tuple(pr.MODELS) + tuple(adv.MODELS)
+CANDIDATE_MODELS = tuple(pr.MODELS) + tuple(adv.MODELS) + ("blended_portfolio",)
+# General-purpose deterministic candidate templates, not owner-selected strategies.
+BLEND_TEMPLATES = (
+    (("equal_weight",50),("trend_filter",50)),
+    (("relative_momentum",50),("inverse_volatility",50)),
+    (("relative_momentum",40),("trend_filter",35),("defensive_rotation",25)),
+    (("inverse_volatility",60),("equity_hedge",40)),
+)
+
+def _model_configs(include_blends=True):
+    for model in CANDIDATE_MODELS:
+        if model!="blended_portfolio":
+            yield model,None
+        elif include_blends:
+            for template in BLEND_TEMPLATES:
+                yield model,[{"model":name,"weight_pct":weight} for name,weight in template]
+
+
+def _balanced_breakdown(valid,regimes):
+    worst=regimes["worst_regime_return_pct"]
+    components={
+        "return_points":round(valid["return_pct"],6),
+        "drawdown_points":round(-1.7*abs(valid["max_drawdown_pct"]),6),
+        "turnover_points":round(-.025*valid["turnover_pct"],6),
+        "volatility_points":round(-.08*(valid.get("annualized_volatility_pct") or 0.),6),
+        "worst_regime_points":round(-.12*abs(min(0,worst)),6),
+        "few_trades_points":-4. if valid["trades"]<2 else 0.,
+    }
+    return {"eligible":True,"components":components,
+            "total":round(sum(components.values()),4),
+            "definition":"Validation-only heuristic points, not a forecast."}
+
+
+def _execution_cost_audit(result,market,metadata,slippage):
+    """Separate cash ledger charges from adverse modeled fill-price adjustments.
+
+    The two categories must not be summed as if they were identical broker fees.
+    Actual intraday price impact, borrow availability and fills are unknown.
+    """
+    opens={sym:{bar["time"]:float(bar["open"]) for bar in market[sym]}
+           for sym in metadata}
+    spread=slip=0.
+    for execution in result.get("executions",[]):
+        symbol=execution["symbol"]
+        price=opens[symbol].get(execution["time"])
+        if price is None:continue
+        notional=abs(float(execution["quantity"]))*price
+        spread+=notional*float(metadata[symbol]["spread_bps"])/20000
+        slip+=notional*slippage/10000
+    explicit=float(result.get("fees",0.))
+    financing=float(result.get("margin_interest",0.))
+    borrow=float(result.get("short_borrow_cost",0.))
+    return {"explicit_total_usd":round(explicit,2),
+            "transaction_and_fx_usd":round(explicit-financing-borrow,2),
+            "margin_interest_usd":round(financing,2),
+            "short_borrow_usd":round(borrow,2),
+            "estimated_spread_usd":round(spread,2),
+            "estimated_slippage_usd":round(slip,2),
+            "implicit_costs_already_in_fill_prices":True,
+            "method":"Trade sizes times real session open and assumed half spread/slippage; estimated, not realized broker fills."}
+
 # Predefined portfolio groups are starting configurations, not guaranteed winners.
 BASKET_SEEDS = {
     "diversified": ("spy","qqq","ief","gld","eem","vnq","vti","xlv"),
@@ -56,7 +117,7 @@ COST_ASSUMPTIONS = {
     "broker": "Wealthsimple indicative cash account model",
     "commission_usd": 0.0,
     "fx_conversion_bps": 150.0,
-    "base_currency": "CAD",
+    "base_currency": "USD",
     "slippage_bps": 8.0,
     "delay_sessions": 1,
     "delayed_stress_sessions": 2,
@@ -102,7 +163,8 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
             research_objective="balanced", target_cagr_pct=55.,
             target_sharpe=2., risk_free_pct=3.,
             target_investment_pct=95., equity_class_cap_pct=70.,
-            redistribute_excess=False):
+            redistribute_excess=False,base_currency="USD",slippage_bps=8.,
+            include_blends=True):
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
         raise HTTPException(403,detail="Owner research is unavailable in public demos.")
     if scope not in ("all","etfs","stocks") or delay_sessions not in (1,2):
@@ -121,6 +183,10 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
         or not 5<=target_investment_pct<=100 or not 10<=equity_class_cap_pct<=100
         or type(redistribute_excess) is not bool):
         raise HTTPException(422,detail="Invalid investment or asset-class concentration settings.")
+    if base_currency not in ("USD","CAD") or type(include_blends) is not bool:
+        raise HTTPException(422,detail="Invalid research account or strategy mix setting.")
+    if type(slippage_bps) not in (int,float) or not math.isfinite(slippage_bps) or not 0<=slippage_bps<=100:
+        raise HTTPException(422,detail="Invalid research slippage assumption.")
     with LOCK,closing(_connection()) as c:
         c.execute("BEGIN IMMEDIATE")
         if c.execute("SELECT count(*) FROM universe_jobs WHERE status IN ('queued','running')").fetchone()[0]>=MAX_QUEUE:
@@ -136,7 +202,9 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
               "risk_free_pct":float(risk_free_pct),
               "target_investment_pct":float(target_investment_pct),
               "equity_class_cap_pct":float(equity_class_cap_pct),
-              "redistribute_excess":redistribute_excess}
+              "redistribute_excess":redistribute_excess,
+              "base_currency":base_currency,"slippage_bps":float(slippage_bps),
+              "include_blends":include_blends}
         c.execute("""INSERT INTO universe_jobs
           (id,status,created_at,updated_at,progress,stage,params)
           VALUES (?,'queued',?,?,0,'Awaiting local research worker',?)""",
@@ -338,6 +406,10 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         or not 5<=investment<=100 or not 10<=equity_cap<=100
         or type(redistribute) is not bool):
         raise ValueError("Invalid capital allocation settings")
+    # Job-local broker assumptions never leak across research runs.
+    broker_assumptions={**COST_ASSUMPTIONS,
+                        "base_currency":params.get("base_currency","USD"),
+                        "slippage_bps":params.get("slippage_bps",8.)}
     universe=_universe(params["scope"]);histories={};rejected={}
     for ix,sym in enumerate(universe):
         item=assets.get_instrument(sym)
@@ -376,20 +448,24 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             n=len(days);train_end=int(n*.6);test_start=int(n*.8)
             if train_end<=pr.WARMUP or test_start-train_end<50:
                 raise ValueError("Insufficient separate validation history")
-            for model in CANDIDATE_MODELS:
+            for model,sleeves in _model_configs(params.get("include_blends",True)):
                 evaluated+=1
-                broker={**COST_ASSUMPTIONS,
+                broker={**broker_assumptions,
                         "delay_sessions":params["delay_sessions"]}
-                if mode=="high_performance" and model in pr.MODELS:
+                if mode=="high_performance" and (model in pr.MODELS or sleeves is not None):
                     broker.update(target_investment_pct=investment,
                                   equity_class_cap_pct=equity_cap,
                                   redistribute_excess=redistribute)
-                researcher=adv.segment if model in adv.MODELS else pr._segment
+                if sleeves is not None:
+                    researcher=blends.segment;argument=sleeves
+                else:
+                    researcher=adv.segment if model in adv.MODELS else pr._segment
+                    argument=model
                 try:
-                    train=researcher(model,symbols,market,metadata,pr.WARMUP,
+                    train=researcher(argument,symbols,market,metadata,pr.WARMUP,
                                      train_end,params["max_position_pct"]/100,
                                      broker=broker)
-                    valid=researcher(model,symbols,market,metadata,train_end,
+                    valid=researcher(argument,symbols,market,metadata,train_end,
                                      test_start,params["max_position_pct"]/100,
                                      broker=broker)
                 except (ArithmeticError, ValueError, ZeroDivisionError):
@@ -408,24 +484,22 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                 worst=regimes["worst_regime_return_pct"]
                 volatility=valid.get("annualized_volatility_pct") or 0.
                 if mode=="high_performance":
-                    score,quality,stability=objectives.score(
+                    breakdown,quality,stability=objectives.score_breakdown(
                         valid,valid["equity_curve"],risk_free,
                         drawdown_limit=params["max_drawdown_pct"],
                         target_cagr_pct=target_cagr,target_sharpe=target_sharpe)
+                    score=breakdown["total"]
                 else:
-                    score=round(valid["return_pct"]
-                                -1.7*abs(valid["max_drawdown_pct"])
-                                -.025*valid["turnover_pct"]
-                                -.08*volatility
-                                -.12*abs(min(0,worst))
-                                -(4 if valid["trades"]<2 else 0),4)
+                    breakdown=_balanced_breakdown(valid,regimes)
+                    score=breakdown["total"]
                     quality=objectives.performance(valid["equity_curve"],
                                                    risk_free_pct=risk_free)
                     stability=objectives.validation_windows(
                         valid["equity_curve"],risk_free_pct=risk_free)
                 if passes and score>-1e5:
                     ranked.append({"basket_type":label,"symbols":symbols,
-                                   "model":model,"score":score,
+                                   "model":model,"sleeves":sleeves,
+                                   "score_breakdown":breakdown,"score":score,
                                    "validation_objectives":quality,
                                    "validation_stability":stability,
                                    "train":pr._compact(train),
@@ -469,17 +543,19 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
     chosen.sort(key=lambda x:(-x["score"],x["basket_type"],x["model"]))
     leaders=[]
     for i,item in enumerate(chosen):
-        broker={**COST_ASSUMPTIONS,"delay_sessions":params["delay_sessions"]}
-        if mode=="high_performance" and item["model"] in pr.MODELS:
+        broker={**broker_assumptions,"delay_sessions":params["delay_sessions"]}
+        if mode=="high_performance" and (item["model"] in pr.MODELS or item["sleeves"] is not None):
             broker.update(target_investment_pct=investment,
                           equity_class_cap_pct=equity_cap,
                           redistribute_excess=redistribute)
-        slow={**broker,"delay_sessions":2,"slippage_bps":20}
-        researcher=adv.segment if item["model"] in adv.MODELS else pr._segment
-        test=researcher(item["model"],item["symbols"],item["_market"],
+        slow={**broker,"delay_sessions":2,"slippage_bps":max(20.,broker["slippage_bps"])}
+        researcher=(blends.segment if item["sleeves"] is not None else
+                    adv.segment if item["model"] in adv.MODELS else pr._segment)
+        argument=item["sleeves"] if item["sleeves"] is not None else item["model"]
+        test=researcher(argument,item["symbols"],item["_market"],
                          item["_metadata"],item["_test_start"],item["_n"],
                          params["max_position_pct"]/100,broker=broker)
-        stress=researcher(item["model"],item["symbols"],item["_market"],
+        stress=researcher(argument,item["symbols"],item["_market"],
                            item["_metadata"],item["_test_start"],item["_n"],
                            params["max_position_pct"]/100,broker=slow)
         validation_quality=item["validation_objectives"]
@@ -503,14 +579,17 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "pareto_optimal_validation":bool(item.get("pareto_optimal",False)),
             "held_out_target_observed":bool(targets_observed),
             "held_out_target_evaluable":sufficient_test,"basket_type":item["basket_type"],"symbols":item["symbols"],
-            "model":item["model"],"validation_score":item["score"],
+            "model":item["model"],"sleeves":item["sleeves"],
+            "score_breakdown":item["score_breakdown"],
+            "held_out_cost_audit":_execution_cost_audit(test,item["_market"],item["_metadata"],broker["slippage_bps"]),
+            "validation_score":item["score"],
             "training":item["train"],"validation":item["validation"],
             "validation_regimes":item["regime_validation"],
             "held_out_regimes":adv.scenario_grade(test["equity_curve"],
                 item["_market"],item["symbols"],item["_test_start"]),
             "coverage":{"first_session":item["_first_session"],
                         "last_session":item["_last_session"],"common_sessions":item["_n"]},
-            "research_only":item["model"] in adv.RESEARCH_ONLY,
+            "research_only":item["model"] in adv.RESEARCH_ONLY or item["sleeves"] is not None,
             "held_out":pr._compact(test),
             "delayed_execution_stress":pr._compact(stress),
             "hypothetical_scenarios":_scenarios(item["_validation_curve"],seed=42+i),
@@ -561,13 +640,16 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "volatility and weak historical regimes. This is not the unrestricted "
             "global top ten. Held-out tests and future scenarios never determine selection."),
         "shortlist_is_global_top_ten":False,
-        "execution_assumptions":{**COST_ASSUMPTIONS,"configured_delay_sessions":params["delay_sessions"],
+        "execution_assumptions":{**broker_assumptions,"configured_delay_sessions":params["delay_sessions"],
                                  "long_only_target_investment_pct":investment if mode=="high_performance" else 95.,
                                  "long_only_equity_class_cap_pct":equity_cap if mode=="high_performance" else 70.,
                                  "long_only_redistribute_excess":redistribute if mode=="high_performance" else False,
                                  "commission_note":"USD $0 listed-stock/ETF commission. FX 1.5% assumed on any cross-currency trade; this is conservative and account-dependent."},
         "test_used_for_selection":False,
         "limitations":[
+            "Blended portfolios use one shared long-only cash and transaction ledger. They are research-only until supported by the strategy importer and live monitor.",
+            "Historical coverage may exclude delisted symbols; verify point-in-time survivorship and corporate-action adjustments before relying on results.",
+            "Explicit fees and implicit spread/slippage are reported separately; implicit costs are already in modeled fill prices and must not be double-counted.",
             "The high-performance goal is an optimization target, not a return guarantee. A three-window validation diagnostic does not constitute walk-forward model refitting, a deflated Sharpe ratio, or a live forward trial.",
             "The risk-free rate for excess Sharpe is a constant user-specified annual assumption, not a historical cash yield series; the simulator does not credit cash interest.",
             "Observed held-out target achievements are descriptive only and require at least 126 held-out sessions. They cannot establish yearly consistency or a replicable investment edge.",
