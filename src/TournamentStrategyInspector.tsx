@@ -1,18 +1,13 @@
-import {useMemo,useState} from "react";
+import {useEffect,useMemo,useState} from "react";
 import {useI18n} from "./i18n";
-import {modelDescription} from "./tournamentApi";
+import {modelDescription,getTournamentPythonSource} from "./tournamentApi";
+import type {PythonStrategySource} from "./tournamentApi";
 import "./tournamentInspector.css";
 
 export interface TournamentModelSpec {
-  version:1|2;
-  model:string;
-  symbols:string[];
-  max_position_pct:number;
-  delay_sessions:1|2;
-  rebalance_sessions:number;
-  restricted_research?:boolean;
-  short_proxy_research?:boolean;
-  research_only?:boolean;
+  version:1|2; model:string; symbols:string[];
+  max_position_pct:number; delay_sessions:1|2; rebalance_sessions:number;
+  restricted_research?:boolean; short_proxy_research?:boolean; research_only?:boolean;
 }
 
 type ResearchCosts = {
@@ -75,69 +70,6 @@ const modelRules:Record<string, string[]> = {
   ],
 };
 
-const sourceLinkCash="https://github.com/ABCPeter123/Trading-Simulator/blob/main/backend/portfolio_research.py#L186-L235";
-const sourceLinkAdvanced="https://github.com/ABCPeter123/Trading-Simulator/blob/main/backend/advanced_portfolio_research.py";
-const groupCaps:[string,number][]=[["Equities",70],["Bonds",55],["Commodities",35],["Real estate",20],["Crypto",10]];
-
-function algorithmFor(spec:TournamentModelSpec):string {
-  const modelLines:Record<string,string[]> = {
-    equal_weight:["raw[asset] = 1 for every asset"],
-    inverse_volatility:["raw[asset] = 1 / max(stdev(last_60_daily_returns), 0.002)"],
-    trend_filter:[
-      "raw[asset] = (1 / volatility_60) if last_close > mean(last_126_closes) else 0",
-    ],
-    relative_momentum:[
-      "momentum[asset] = 0.5 * (last_close / close_at_i_minus_64 - 1)",
-      "                + 0.5 * (last_close / close_at_i_minus_127 - 1)",
-      "selected = top max(2, ceil(asset_count / 3)) assets by momentum",
-      "raw[asset] = 1 / volatility_60 if asset in selected and momentum > 0 else 0",
-    ],
-    volatility_target:[
-      "raw[asset] = 1 / max(stdev(last_60_daily_returns), 0.002)",
-      "estimated_risk = stdev(last_60_weighted_portfolio_returns) * sqrt(252)",
-      "gross = 0.95",
-      "if length(recent_returns) >= 25 and estimated_risk > 1e-8: gross = min(0.95, 0.12 / estimated_risk)",
-    ],
-  };
-  if(spec.version===2){
-    return [
-      "# RESEARCH PSEUDOCODE, NOT DIRECTLY EXECUTABLE PYTHON",
-      `ASSETS = [${spec.symbols.map(s=>JSON.stringify(s)).join(", ")}]`,
-      `MODEL = ${JSON.stringify(spec.model)}`,
-      `REBALANCE_EVERY = ${spec.rebalance_sessions} shared sessions`,
-      `DELAY = ${spec.delay_sessions} session(s)`,
-      `MAX_ASSET_WEIGHT = ${spec.max_position_pct/100}`,
-      "",
-      "observe only previously completed daily closes",
-      ...((modelRules[spec.model]??[]).map(x=>"- "+x)),
-      "at next actual common-session open, rebalance signed target notionals",
-      "charge spread, slippage and FX estimates; accrue margin and borrow costs",
-      "mark long/short positions to the actual completed close",
-      "if maintenance threshold breaches, liquidate at the next opening",
-      "RESEARCH ONLY when signed shorts or margin leverage is required",
-    ].join("\n");
-  }
-  const lines=[
-    "# READABLE PSEUDOCODE, not an independently runnable script",
-    `ASSETS = [${spec.symbols.map(s=>JSON.stringify(s)).join(", ")}]`,
-    `REBALANCE_EVERY = ${spec.rebalance_sessions} common trading sessions`,
-    `EXECUTION_DELAY = ${spec.delay_sessions} session(s)`,
-    `MAX_ASSET_WEIGHT = ${spec.max_position_pct / 100}`,
-    "",
-    "on_rebalance:",
-    "  # Use completed prices only. No future candles.",
-    "  vol_60[asset] = max(stdev(last_60_daily_returns), 0.002)",
-    ...((modelLines[spec.model]??["# Unsupported model"]).map(line=>"  "+line)),
-    "  if sum(raw.values()) == 0: target = all_cash; stop",
-    spec.model==="volatility_target"?"  # gross computed above":"  gross = 0.95",
-    "  target[asset] = min(MAX_ASSET_WEIGHT, gross * raw[asset] / sum(raw))",
-    "  enforce category caps (equity .70, bond .55, commodity .35, real_estate .20, crypto .10)",
-    "  keep any excess allocation in cash; do not redistribute capped weight",
-    "  at eligible common-session open, sell excess positions before buying deficits",
-    "  # Real orders are NEVER submitted; paper/live actions require review.",
-  ];
-  return lines.join("\n");
-}
 
 export default function TournamentStrategyInspector({
   spec,exactCode,costs,context="research",
@@ -147,40 +79,62 @@ export default function TournamentStrategyInspector({
 }){
   const {t}=useI18n();
   const [copyStatus,setCopyStatus]=useState("");
+  const [source,setSource]=useState<PythonStrategySource|null>(null);
+  const [sourceError,setSourceError]=useState("");
+  const [loadingSource,setLoadingSource]=useState(true);
+  // A stable fingerprint prevents duplicate requests for recreated prop objects.
+  const sourceKey=JSON.stringify([
+    spec.version,spec.model,spec.symbols,spec.max_position_pct,
+    spec.delay_sessions,spec.rebalance_sessions,spec.research_only??false,
+    spec.restricted_research??false,spec.short_proxy_research??false,
+  ]);
   const code=useMemo(()=>{
     if(exactCode){
       try{
         const parsed:unknown=JSON.parse(exactCode);
         if(parsed&&typeof parsed==="object"&&!Array.isArray(parsed))
           return JSON.stringify(parsed,null,2);
-      }catch{/* Fall back to the versioned parameters presented by the engine. */}
+      }catch{/* Invalid frozen configuration: show the available spec instead. */}
     }
-    // A simulation session also stores changing counters. Show the actual
-    // immutable model fields only, not those runtime fields, as configuration.
-    const normalized:TournamentModelSpec={
+    return JSON.stringify({
       version:spec.version,model:spec.model,symbols:spec.symbols,
       max_position_pct:spec.max_position_pct,delay_sessions:spec.delay_sessions,
       rebalance_sessions:spec.rebalance_sessions,
       restricted_research:spec.restricted_research??false,
       short_proxy_research:spec.short_proxy_research??false,
       research_only:spec.research_only??false,
-    };
-    return JSON.stringify(normalized,null,2);
-  },[spec,exactCode]);
-  const pseudocode=useMemo(()=>algorithmFor(spec),[spec]);
-  const rules=modelRules[spec.model]??["No documented rules exist for this model."];
-  const advanced=spec.version===2;
+    },null,2);
+  },[sourceKey,exactCode]);
+  useEffect(()=>{
+    let active=true;
+    setSource(null);setSourceError("");setLoadingSource(true);
+    void getTournamentPythonSource({
+      version:spec.version,model:spec.model,symbols:spec.symbols,
+      max_position_pct:spec.max_position_pct,delay_sessions:spec.delay_sessions,
+      rebalance_sessions:spec.rebalance_sessions,
+      restricted_research:spec.restricted_research??false,
+      short_proxy_research:spec.short_proxy_research??false,
+      research_only:spec.research_only??false,
+    },context).then(result=>{if(active)setSource(result);})
+      .catch(error=>{if(active)setSourceError(error instanceof Error?error.message:String(error));})
+      .finally(()=>{if(active)setLoadingSource(false);});
+    return ()=>{active=false;};
+  },[sourceKey,context]);
   const copy=(value:string)=>{
-    if(!navigator.clipboard){setCopyStatus(t("Clipboard unavailable. Select and copy the code manually."));return;}
+    if(!navigator.clipboard){
+      setCopyStatus(t("Clipboard unavailable. Select and copy the code manually."));return;
+    }
     void navigator.clipboard.writeText(value)
       .then(()=>setCopyStatus(t("Copied.")))
       .catch(()=>setCopyStatus(t("Clipboard unavailable. Select and copy the code manually.")));
   };
+  const rules=modelRules[spec.model]??["No documented rules exist for this model."];
+  const publicPath=spec.version===2?"advanced_portfolio_research.py":"portfolio_research.py";
   return <section className="tsi" aria-label={t("Strategy logic and source")}>
     <header className="tsi-header">
-      <div><h4>{t("Strategy logic and source")}</h4>
-        <p>{t(modelDescription(spec.model))}</p></div>
-      <a href={advanced?sourceLinkAdvanced:sourceLinkCash} target="_blank" rel="noreferrer">{t("View actual Python allocation function")}</a>
+      <div><h4>{t("Strategy logic and source")}</h4><p>{t(modelDescription(spec.model))}</p></div>
+      <a href={"https://github.com/ABCPeter123/Trading-Simulator/blob/main/backend/"+publicPath}
+        target="_blank" rel="noreferrer">{t("View public engine repository")}</a>
     </header>
     <div className="tsi-fields">
       <div><small>{t("Research asset basket")}</small><strong>{spec.symbols.map(s=>s.toUpperCase()).join(" · ")}</strong></div>
@@ -191,26 +145,51 @@ export default function TournamentStrategyInspector({
     {spec.research_only&&<p className="tsi-note">{t("Research-only synthetic exposure: not deployable to the cash simulator or Wealthsimple live engine.")}</p>}
     {(spec.restricted_research||spec.short_proxy_research)&&
       <p className="tsi-note">{t("This basket includes leveraged or inverse ETFs. The result is for research and simulation only, not approved live monitoring.")}</p>}
-    <h5>{t("Exact allocation decision rules")}</h5>
+    <h5>{t("Exact executable strategy source")}</h5>
+    <p className="tsi-note">{t("The running private Python backend supplies these actual execution functions. They are not pseudocode. Copy a complete module to work with its dependencies inside the repository.")}</p>
+    {loadingSource&&<p className="tsi-note" role="status">{t("Loading actual Python engine source...")}</p>}
+    {sourceError&&<p className="tsi-note" role="alert">{t("Exact source unavailable")}: {sourceError}</p>}
+    {source&&<>
+      <div className="tsi-runtime">
+        <span>{t("Active allocation entry point")}: <code>{source.entry_point}</code></span>
+        <span>{t("Research fill engine")}: <code>{source.research_execution_entry_point}</code></span>
+        <span>{t("Execution context")}: {t(context)}</span>
+      </div>
+      {source.sections.map((section,index)=><details className="tsi-code" key={section.label+section.path} open={index===0}>
+        <summary>{t(section.label)}</summary>
+        <div className="tsi-code-actions">
+          <span><code>{section.path}:{section.first_line}</code> · SHA-256 {section.sha256.slice(0,16)}</span>
+          <button type="button" onClick={()=>copy(section.code)}>{t("Copy exact Python")}</button>
+        </div>
+        <pre>{section.code}</pre>
+      </details>)}
+      <details className="tsi-code">
+        <summary>{t("Complete executable Python modules")}</summary>
+        <p className="tsi-note">{t("These are complete files from the active backend, including imports, constants and helper functions.")}</p>
+        {source.files.map(file=><details className="tsi-code tsi-module" key={file.path}>
+          <summary>{file.path}</summary>
+          <div className="tsi-code-actions">
+            <span>SHA-256 {file.sha256}</span>
+            <button type="button" onClick={()=>copy(file.code)}>{t("Copy full Python module")}</button>
+          </div>
+          <pre>{file.code}</pre>
+        </details>)}
+      </details>
+    </>}
+    <h5>{t("Strategy rules explained")}</h5>
     <ol className="tsi-rules">
       {rules.map((line,i)=><li key={i}>{t(line)}</li>)}
-      {!advanced&&<><li>{t("Hold at most 95% in aggregate before asset and category caps; unused capital remains in cash.")}</li>
-      <li>{t("Apply category exposure caps")}: {groupCaps.map(([name,cap])=>`${t(name)} ${cap}%`).join(", ")}.</li></>}
-      <li>{t("Rebalance at the next eligible common-session open using completed historical data, selling before buying. No automatic brokerage execution.")}</li>
+      <li>{t("The research backtest models next-open fills. The historical replay and live monitoring use separate execution and accounting paths.")}</li>
     </ol>
     {context==="simulation"&&<p className="tsi-note">{t("Historical replay uses the same target-weight function as tournament research, but its fill and fee approximation is different. Results may not match the tournament backtest exactly.")}</p>}
     {context==="live"&&<p className="tsi-note">{t("Live monitoring generates suggested order sizes from saved capital, current prices and confirmed fills. It does not read brokerage balances or place orders.")}</p>}
     {costs&&<p className="tsi-note">{t("Tournament research cost assumptions")}: {costs.slippage_bps??"?"} bps {t("slippage")}, {costs.commission_usd??"?"} USD {t("commission")}, {costs.fx_conversion_bps??"?"} bps {t("FX conversion")}, {costs.base_currency??"USD"} {t("base currency")}.</p>}
-    <details className="tsi-code" open>
-      <summary>{t("View full readable algorithm")}</summary>
-      <div className="tsi-code-actions"><span>{t("Pseudocode, faithful to allocation logic, not executable Python")}</span>
-        <button type="button" onClick={()=>copy(pseudocode)}>{t("Copy algorithm")}</button></div>
-      <pre>{pseudocode}</pre>
-    </details>
     <details className="tsi-code">
-      <summary>{t("Exact machine-readable strategy configuration (JSON)")}</summary>
-      <div className="tsi-code-actions"><span>{t("These are the actual model parameters, not a separate SMA script.")}</span>
-        <button type="button" onClick={()=>copy(code)}>{t("Copy JSON")}</button></div>
+      <summary>{t("Versioned strategy parameters (JSON)")}</summary>
+      <div className="tsi-code-actions">
+        <span>{t("This JSON selects the real engine function and parameters. It is configuration, not standalone executable code.")}</span>
+        <button type="button" onClick={()=>copy(code)}>{t("Copy JSON")}</button>
+      </div>
       <pre>{code}</pre>
     </details>
     {copyStatus&&<p className="tsi-copy-status" role="status">{copyStatus}</p>}
