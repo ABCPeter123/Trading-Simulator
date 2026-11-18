@@ -1,5 +1,6 @@
 import {useI18n} from "./i18n";
 import CustomStrategyAnalysis from "./CustomStrategyAnalysis";
+import WalkForwardOptimizer from "./WalkForwardOptimizer";
 import type {CustomPeriodJob} from "./tournamentApi";
 import {MODEL_EXPLANATIONS,explanationText} from "./strategyNarratives";
 import "./tournamentInspector.css";
@@ -168,5 +169,6 @@ export default function TournamentStrategyInspector({
       </div>
     </>}
     <div id="ur-custom-study"><CustomStrategyAnalysis spec={spec} initialJob={researchStudy}/></div>
+    {context==="research"&&<WalkForwardOptimizer spec={spec}/>}
   </section>;
 }
