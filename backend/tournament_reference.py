@@ -36,14 +36,23 @@ def source_config(spec):
     return candidate
 
 
-def training_eligibility(training, details, settings):
-    """Match walk-forward candidate rejection gates for training-only history."""
+def training_eligibility(training, details, settings, quality=None):
+    """Reproduce the same training gates for a *post-hoc* source reference."""
     if details["total"]<=-1e5:return "insufficient_training_history"
     if training["trades"]<1:return "no_training_trades"
     if training["average_invested_pct"]<5:return "insufficient_training_exposure"
     if abs(training["max_drawdown_pct"])>settings["max_drawdown_pct"]:
         return "max_drawdown_limit"
     if training.get("margin_calls",0):return "margin_calls"
+    if quality is not None:
+        cagr=quality.get("cagr_pct")
+        if cagr is None or cagr<settings.get("minimum_training_cagr_pct",0):
+            return "minimum_training_growth_not_met"
+        if cagr<(settings.get("risk_free_pct",0)+
+                 settings.get("minimum_excess_cagr_pct_points",0)):
+            return "minimum_excess_growth_not_met"
+    if training["average_invested_pct"]<settings.get("min_average_invested_pct",5):
+        return "minimum_investment_exposure_not_met"
     return "qualified"
 
 
@@ -72,7 +81,7 @@ def evaluate(config, symbols, market, metadata, training_end, start, stop,
             drawdown_limit=settings["max_drawdown_pct"],
             target_cagr_pct=settings["target_cagr_pct"],
             target_sharpe=settings["target_sharpe"])
-        gate=training_eligibility(train,score_details,settings)
+        gate=training_eligibility(train,score_details,settings,quality)
         subsequent=executor(config,symbols,market,metadata,
                             start,stop,settings["slippage_bps"],settings)
         audit=objectives.performance(

@@ -95,6 +95,9 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
   const [targetSharpe,setTargetSharpe]=useState("2");
   const [riskFree,setRiskFree]=useState("3");
   const [maxDrawdown,setMaxDrawdown]=useState("30");
+  const [minGrowth,setMinGrowth]=useState("10");
+  const [minExcessGrowth,setMinExcessGrowth]=useState("0");
+  const [minInvested,setMinInvested]=useState("50");
   const [slippage,setSlippage]=useState(String(spec.slippage_bps??8));
   const [job,setJob]=useState<WalkForwardJob|null>(null);
   const [archive,setArchive]=useState<WalkForwardJob[]>([]);
@@ -143,6 +146,9 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
         target_sharpe:parse(targetSharpe,.5,5),
         risk_free_pct:parse(riskFree,0,15),
         max_drawdown_pct:parse(maxDrawdown,5,60),
+        minimum_training_cagr_pct:parse(minGrowth,0,100),
+        minimum_excess_cagr_pct_points:parse(minExcessGrowth,0,30),
+        min_average_invested_pct:parse(minInvested,0,100),
         slippage_bps:parse(slippage,0,100),
         base_currency:baseCurrency,
         commission_usd:parse(commission,0,30),
@@ -198,6 +204,17 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
         <label>{l("Max training drawdown (%)","训练期最大回撤（%）")}
           <input type="number" min="5" max="60" step="1" value={maxDrawdown}
             onChange={e=>setMaxDrawdown(e.target.value)}/></label>
+        <label>{l("Minimum training CAGR (%)","最低训练期年复合增长（%）")}
+          <input type="number" min="0" max="100" step="1" value={minGrowth}
+            onChange={e=>setMinGrowth(e.target.value)}/></label>
+        <label>{l("Minimum CAGR above cash assumption (percentage points)",
+                    "超出假设现金利率的最低增长差值（百分点）")}
+          <input type="number" min="0" max="30" step=".5" value={minExcessGrowth}
+            onChange={e=>setMinExcessGrowth(e.target.value)}/></label>
+        <label>{l("Minimum average invested capital (%)",
+                    "最低平均已投资资本（%）")}
+          <input type="number" min="0" max="100" step="5" value={minInvested}
+            onChange={e=>setMinInvested(e.target.value)}/></label>
         <label>{l("Account funding currency","账户资金币种")}
           <select value={baseCurrency} onChange={e=>setBaseCurrency(e.target.value as "USD"|"CAD")}>
             <option value="USD">USD</option><option value="CAD">CAD</option>
@@ -212,6 +229,10 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
           <input type="number" min="0" max="100" step="1" value={slippage}
             onChange={e=>setSlippage(e.target.value)}/></label>
       </div>
+      <p className="wfo-disclaimer">{l(
+        "Growth and exposure requirements are hard training-only eligibility gates. The aspirational CAGR and Sharpe remain scoring targets. No eligible candidate means no selected strategy. Minimum exposure never forces the engine to invest when signals say cash. A controlled 25/35/45/55% drawdown frontier plus your chosen limit compares only the three pre-audit folds.",
+        "增长和敞口要求是仅使用训练期数据的硬性筛选门槛。目标 CAGR 和夏普仍是评分目标。若没有合格候选则不选择策略。最低敞口要求不会强制策略在现金信号下买入。25/35/45/55%回撤限制及自定义限制仅在最终审计前的三个验证区间进行对比。"
+      )}</p>
       <div className="wfo-actions">
         <button type="button" disabled={busy||job?.status==="queued"||job?.status==="running"}
           aria-busy={busy} onClick={()=>void submit()}>
@@ -235,6 +256,39 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
       {result?.status==="no_eligible_candidate"&&<p className="wfo-error">
         {l("No eligible selection under these research risk constraints.","当前研究风险限制下无合格候选。")} {result.reason}
       </p>}
+      {result?.rejection_diagnostics&&<details className="wfo-limit" open>
+        <summary>{l("Training rejection breakdown, no qualified strategy",
+          "训练期拒绝原因，没有合格策略")}</summary>
+        <p>{l("The optimizer refused to promote a strategy that missed the configured requirements. No audit was used to rescue or select a failing model.",
+          "优化器不会把不符合设定要求的策略视为优胜策略，也不会利用审计期数据挽救或重新选择。")}</p>
+        <div className="wfo-headline">
+          <div><small>{l("Eligible","合格")}</small><strong>{result.rejection_diagnostics.eligible_count}</strong></div>
+          <div><small>{l("Tested","测试总数")}</small><strong>{result.rejection_diagnostics.attempted_count}</strong></div>
+        </div>
+        <div className="wfo-scroll"><table><thead><tr>
+          <th>{l("Reason","拒绝原因")}</th><th>{l("Candidates","候选数量")}</th>
+        </tr></thead><tbody>{Object.entries(result.rejection_diagnostics.rejection_reasons).map(([reason,count])=>
+          <tr key={reason}><td>{name(reason)}</td><td>{count}</td></tr>)}</tbody></table></div>
+      </details>}
+      {result?.status==="no_eligible_candidate"&&result.model_search?.pre_audit_risk_frontier&&
+        <details className="wfo-limit" open>
+          <summary>{l("Risk-limit sensitivity, training and pre-audit folds only",
+            "风险限制敏感性，仅训练期及最终审计前验证")}</summary>
+          <p>{l("All risk limits are tested under the same minimum growth, investment and execution assumptions. No alternate model was evaluated on the final audit, and this failed study did not select any strategy.",
+            "所有回撤限制均使用相同的最低增长率、投资敞口和执行成本假设。没有对最终审计期测试替代模型，本次研究也没有选出任何策略。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Training drawdown cap","训练期回撤上限")}</th>
+            <th>{l("Qualified historical folds","合格的历史验证区间")}</th>
+            <th>{l("Stitched fold CAGR","验证期拼接年复合增长")}</th>
+            <th>{l("Final pre-audit training eligible","最终审计前训练合格数")}</th>
+          </tr></thead><tbody>{result.model_search.pre_audit_risk_frontier.experiments.map(x=>
+            <tr key={x.max_training_drawdown_pct}>
+              <td>{pct(x.max_training_drawdown_pct)}</td>
+              <td>{x.folds_with_eligible_candidate}/{x.fold_count}</td>
+              <td>{pct(x.validation_cagr_pct)}</td>
+              <td>{x.pre_audit_final_training_eligible_count}</td>
+            </tr>)}</tbody></table></div>
+        </details>}
       {study&&audit&&<>
         <div className="wfo-headline">
           <div><small>{l("Validation fold success","验证期盈利区间")}</small>
@@ -280,6 +334,19 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
               </tr>)}
             </tbody></table></div>
           </details>}
+        {result.eligibility_policy&&<>
+          <h5>{l("Hard training qualification gates","训练期硬性资格筛选")}</h5>
+          <div className="wfo-headline">
+            <div><small>{l("Minimum training CAGR","最低训练期增长率")}</small>
+              <strong>{pct(result.eligibility_policy.minimum_training_cagr_pct)}</strong></div>
+            <div><small>{l("CAGR above cash assumption","超过现金假设的增长率")}</small>
+              <strong>{pct(result.eligibility_policy.minimum_excess_cagr_pct_points)}</strong></div>
+            <div><small>{l("Average invested exposure minimum","最低平均投资敞口")}</small>
+              <strong>{pct(result.eligibility_policy.min_average_invested_pct)}</strong></div>
+          </div>
+          <p className="wfo-disclaimer">{l("Every candidate must satisfy all three gates on past training periods, plus the configured drawdown and margin limits. This is screening, not a promise of future performance.",
+            "每个候选都必须在历史训练期满足三项门槛，以及所设回撤及保证金要求。这是筛选机制，不代表未来收益保证。")}</p>
+        </>}
         <h5>{l("Training selections and unseen validation","训练期选择与未见数据验证")}</h5>
         <div className="wfo-scroll"><table><thead><tr>
           <th>{l("Fold","折")}</th><th>{l("Unseen period","未见数据区间")}</th>
@@ -343,6 +410,30 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
             <td>{money(f.unseen_exposure_and_costs?.explicit_fees_and_financing_usd)}</td>
           </tr>)}</tbody></table></div>
         </details>
+        {result.model_search?.pre_audit_risk_frontier&&<section className="wfo-limit">
+          <h5>{l("Controlled drawdown-limit comparison, pre-audit only",
+            "受控回撤上限对比，仅限最终审计前")}</h5>
+          <p>{l("The candidate grid, growth and exposure gates, and execution costs are fixed. Only the maximum allowed training drawdown changes. Each alternative is selected using earlier training prices and observed on the following three historical folds. The final audit is NOT replayed for alternate caps. Inspecting these fold returns does not create a fresh unseen test.",
+            "候选范围、增长和敞口门槛以及执行成本均固定，仅改变训练期允许的最大回撤。每项方案只依据此前训练期选择，并在随后三个历史验证区间观测。不会针对不同回撤上限重新测试最终审计期。查看这些收益不构成新的独立未见验证。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Training drawdown cap","训练回撤上限")}</th>
+            <th>{l("Eligible folds","合格验证期")}</th>
+            <th>{l("Stitched CAGR","拼接后年复合增长")}</th>
+            <th>{l("Excess Sharpe","超额夏普")}</th>
+            <th>{l("Validation drawdown","验证期回撤")}</th>
+            <th>{l("Final training eligible","最终训练期合格数量")}</th>
+          </tr></thead><tbody>{result.model_search.pre_audit_risk_frontier.experiments.map(x=>
+            <tr key={x.max_training_drawdown_pct}>
+              <td>{pct(x.max_training_drawdown_pct)} {x.is_configured_limit?l("(configured)","（当前设置）"):""}</td>
+              <td>{x.folds_with_eligible_candidate}/{x.fold_count}</td>
+              <td>{pct(x.validation_cagr_pct)}</td>
+              <td>{dec(x.validation_excess_sharpe)}</td>
+              <td>{pct(x.validation_drawdown_pct)}</td>
+              <td>{x.pre_audit_final_training_eligible_count}</td>
+            </tr>)}</tbody></table></div>
+          <p className="wfo-disclaimer">{l("When a risk limit has fewer than three eligible folds, its stitched result is unavailable rather than cherry-picking successful periods. This diagnostic does not select the final model or rank models on audit data.",
+            "若某风险上限有少于三个合格区间，拼接结果标记为不可用，不会只选择成功的时间段。此诊断不会选择最终模型，也不按审计期收益排序。")}</p>
+        </section>}
         <h5>{l("Stitched normalized validation index","拼接后的标准化验证指数")}</h5>
         <Plot data={study.curve} description={l("Compound index of separate walk-forward fold returns",
           "分段滚动验证收益复合指数")}/>

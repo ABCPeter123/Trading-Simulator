@@ -132,6 +132,9 @@ export interface WalkForwardRequest {
   target_sharpe:number;
   risk_free_pct:number;
   max_drawdown_pct:number;
+  minimum_training_cagr_pct?:number;
+  minimum_excess_cagr_pct_points?:number;
+  min_average_invested_pct?:number;
   slippage_bps:number;
   base_currency?:"USD"|"CAD";commission_usd?:number;fx_conversion_bps?:number;
 }
@@ -242,19 +245,51 @@ export interface WalkForwardConsistency {
   complete_calendar_years:number;worst_complete_calendar_year_pct:number|null;
   all_complete_years_positive:boolean|null;interpretation:string;
 }
+export interface RiskFrontier {
+  basis:string;risk_limits_pct:number[];
+  observation_boundary:string;cannot_reselect_final_audit:true;
+  not_an_independent_test_after_inspection:true;
+  experiments:{
+    max_training_drawdown_pct:number;is_configured_limit:boolean;
+    folds_with_eligible_candidate:number;fold_count:number;
+    pre_audit_final_training_eligible_count:number;
+    pre_audit_final_training_has_candidate:boolean;
+    status:"full_pre_audit_folds"|"incomplete_pre_audit_folds";
+    validation_cagr_pct?:number|null;validation_excess_sharpe?:number|null;
+    validation_drawdown_pct?:number;
+    no_final_audit_replay:true;not_used_for_selection:true;
+    folds:{fold:number;eligible_training_candidates:number;
+      status:"qualified"|"no_eligible_candidate";
+      selected?:WalkForwardSelection;out_of_sample_return_pct?:number;
+      out_of_sample_cagr_pct?:number|null;out_of_sample_drawdown_pct?:number}[];
+  }[];
+}
+export interface RejectionDiagnostics {
+  attempted_count:number;eligible_count:number;rejected_count:number;
+  rejection_reasons:Record<string,number>;
+  thresholds:{max_training_drawdown_pct:number;
+    minimum_training_cagr_pct:number;minimum_excess_cagr_pct_points:number;
+    min_average_invested_pct:number};
+}
 export interface WalkForwardResult {
   status:"completed"|"insufficient_history"|"no_eligible_candidate";
   research_only:boolean;no_real_orders:boolean;
   sessions_available?:number;minimum_requirements?:string;
   reason?:string;fold_failed?:number|string;
+  selection_outcome?:string;rejection_diagnostics?:RejectionDiagnostics;
   coverage?:{first_date:string;last_date:string;shared_sessions:number;warmup_sessions:number};
   targets?:{cagr_pct:number;excess_sharpe:number;max_drawdown_pct:number;risk_free_pct:number};
   execution_assumptions?:{base_currency:string;commission_usd:number;fx_conversion_bps:number;slippage_bps:number};
   research_review?:ResearchReview;
+  eligibility_policy?:{
+    minimum_training_cagr_pct:number;minimum_excess_cagr_pct_points:number;
+    min_average_invested_pct:number;growth_target_is_a_hard_gate:false;reason:string
+  };
   model_search?:{width:string;candidate_count:number;total_train_evaluations:number;
     candidate_scope:string;
     pre_audit_candidate_leaderboard?:WalkForwardCandidates;
     pre_audit_parameter_stability?:WalkForwardStability;
+    pre_audit_risk_frontier?:RiskFrontier;
     pre_audit_selection_diagnostics?:{
       basis:string;valid_candidate_curves:number;attempted_candidates:number;
       deflated_sharpe:{status:string;probability_pct:number|null;

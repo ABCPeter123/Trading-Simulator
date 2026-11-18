@@ -34,14 +34,20 @@ def validate_request(payload):
     width=payload.get("search_width","focused")
     if width not in MAX_CANDIDATES:
         raise HTTPException(422,"Search width must be focused, extended or comprehensive.")
-    params={"target_cagr_pct":payload.get("target_cagr_pct",55.),
+    params={"minimum_training_cagr_pct":payload.get("minimum_training_cagr_pct",10.),
+            "minimum_excess_cagr_pct_points":payload.get("minimum_excess_cagr_pct_points",0.),
+            "min_average_invested_pct":payload.get("min_average_invested_pct",50.),
+            "target_cagr_pct":payload.get("target_cagr_pct",55.),
             "target_sharpe":payload.get("target_sharpe",2.),
             "risk_free_pct":payload.get("risk_free_pct",3.),
             "max_drawdown_pct":payload.get("max_drawdown_pct",30.),
             "slippage_bps":payload.get("slippage_bps",8.),
             "commission_usd":payload.get("commission_usd",0.),
             "fx_conversion_bps":payload.get("fx_conversion_bps",150.)}
-    limits={"target_cagr_pct":(10,100),"target_sharpe":(.5,5),
+    limits={"minimum_training_cagr_pct":(0,100),
+            "minimum_excess_cagr_pct_points":(0,30),
+            "min_average_invested_pct":(0,100),
+            "target_cagr_pct":(10,100),"target_sharpe":(.5,5),
             "risk_free_pct":(0,15),"max_drawdown_pct":(5,60),
             "slippage_bps":(0,100),"commission_usd":(0,30),
             "fx_conversion_bps":(0,300)}
@@ -153,65 +159,192 @@ def _execute(config,symbols,market,metadata,start,end,slippage,settings=None):
                    config["max_position_pct"]/100,broker=broker)
 
 
-def _choose(configs,symbols,market,metadata,train_end,settings):
-    """All candidate selection is performed only on bars BEFORE train_end."""
-    valid=[]
+def _evaluate_training_candidates(configs,symbols,market,metadata,train_end,settings):
+    """Compute candidate ledgers once per training cutoff; never read later bars.
+
+    The same completed-history ledgers are reused for all drawdown settings in
+    the diagnostic frontier. The final audit never enters these evaluations.
+    """
     records=[]
-    rejected=[]
-    attempted=0
-    for config in configs:
-        attempted+=1
+    for order,config in enumerate(configs):
         try:
             train=_execute(config,symbols,market,metadata,pr.WARMUP,train_end,
                            settings["slippage_bps"],settings)
-            score_details,quality,_=objectives.score_breakdown(
-                train,train["equity_curve"],settings["risk_free_pct"],
-                drawdown_limit=settings["max_drawdown_pct"],
-                target_cagr_pct=settings["target_cagr_pct"],
-                target_sharpe=settings["target_sharpe"])
-            score=score_details["total"]
+            records.append({"order":order,"config":config,"train":train})
         except (ValueError,ArithmeticError,ZeroDivisionError):
-            rejected.append("execution_or_invalid_ledger")
+            records.append({"order":order,"config":config,
+                            "error":"execution_or_invalid_ledger"})
+    return records
+
+
+def _gate(record,settings):
+    """Single gate definition shared by baseline and drawdown frontier."""
+    if "error" in record:return record["error"]
+    train=record["train"]
+    quality=record["quality"]
+    if record["score_details"]["total"]<=-1e5:
+        return "insufficient_training_history"
+    if train["trades"]<1:return "no_training_trades"
+    if train["average_invested_pct"]<5:return "insufficient_training_exposure"
+    if abs(train["max_drawdown_pct"])>settings["max_drawdown_pct"]:
+        return "max_drawdown_limit"
+    if train.get("margin_calls",0):return "margin_calls"
+    if (quality["cagr_pct"] is None or
+        quality["cagr_pct"]<settings["minimum_training_cagr_pct"]):
+        return "minimum_training_growth_not_met"
+    if quality["cagr_pct"] < (settings["risk_free_pct"]+
+                             settings["minimum_excess_cagr_pct_points"]):
+        return "minimum_excess_growth_not_met"
+    if train["average_invested_pct"]<settings["min_average_invested_pct"]:
+        return "minimum_investment_exposure_not_met"
+    return "qualified"
+
+
+def _screen(evaluations,settings):
+    from collections import Counter
+    survivors=[];rejections=Counter()
+    for row in evaluations:
+        if "error" in row:
+            rejections[row["error"]]+=1
             continue
-        if score<=-1e5:
-            rejected.append("insufficient_training_history")
-            continue
-        if train["trades"]<1:
-            rejected.append("no_training_trades")
-            continue
-        if train["average_invested_pct"]<5:
-            rejected.append("insufficient_training_exposure")
-            continue
-        if abs(train["max_drawdown_pct"])>settings["max_drawdown_pct"]:
-            rejected.append("max_drawdown_limit")
-            continue
-        if train.get("margin_calls",0):
-            rejected.append("margin_calls")
-            continue
-        records.append({
-            "order":attempted,"config":config,"score":score,
-            "quality":quality,"drawdown":train["max_drawdown_pct"],
-            "turnover":train.get("turnover_pct"),
-            "invested":train["average_invested_pct"],
-            "score_details":score_details})
-        valid.append((score,config,quality,score_details))
+        train=row["train"]
+        score_details,quality,_=objectives.score_breakdown(
+            train,train["equity_curve"],settings["risk_free_pct"],
+            drawdown_limit=settings["max_drawdown_pct"],
+            target_cagr_pct=settings["target_cagr_pct"],
+            target_sharpe=settings["target_sharpe"])
+        assessed={**row,"score":score_details["total"],"quality":quality,
+                  "score_details":score_details}
+        reason=_gate(assessed,settings)
+        if reason=="qualified":survivors.append(assessed)
+        else:rejections[reason]+=1
+    return survivors,dict(sorted(rejections.items()))
+
+
+def _choose(configs,symbols,market,metadata,train_end,settings,*,evaluations=None):
+    """Select only from historical training; audit has zero selection authority."""
+    if evaluations is None:
+        evaluations=_evaluate_training_candidates(
+            configs,symbols,market,metadata,train_end,settings)
+    valid,rejections=_screen(evaluations,settings)
+    attempted=len(evaluations)
     if not valid:
         return None,attempted,0
-    # Stable ties: the fixed trial order is the deterministic tiebreaker.
-    best=max(valid,key=lambda item:item[0])
-    high_growth=max(valid,key=lambda item:
-                    item[2]["cagr_pct"] if item[2]["cagr_pct"] is not None else float("-inf"))
-    high_sharpe=max(valid,key=lambda item:
-                    item[2]["excess_sharpe"] if item[2]["excess_sharpe"] is not None else float("-inf"))
-    leaders={name:{"config":entry[1],"score":entry[0],"training":entry[2]}
-             for name,entry in (("highest_growth",high_growth),
-                                ("highest_sharpe",high_sharpe),
-                                ("balanced",best))}
-    return {"score":best[0],"config":best[1],"training":best[2],
-            "score_breakdown":best[3],
-            "candidate_diagnostics":explanation.candidate_leaderboard(
-                records,rejected,attempted),
-            "training_leaders":leaders},attempted,len(valid)
+    # Stable ties use the original candidate order, not a later test.
+    best=max(valid,key=lambda row:(row["score"],-row["order"]))
+    growth=max(valid,key=lambda row:(
+        row["quality"]["cagr_pct"] if row["quality"]["cagr_pct"] is not None else float("-inf"),
+        -row["order"]))
+    sharpe=max(valid,key=lambda row:(
+        row["quality"]["excess_sharpe"] if row["quality"]["excess_sharpe"] is not None else float("-inf"),
+        -row["order"]))
+    leaders={name:{"config":row["config"],"score":row["score"],
+                   "training":row["quality"]}
+             for name,row in (("highest_growth",growth),
+                              ("highest_sharpe",sharpe),
+                              ("balanced",best))}
+    records=[{
+        "order":r["order"],"config":r["config"],"score":r["score"],
+        "quality":r["quality"],"drawdown":r["train"]["max_drawdown_pct"],
+        "turnover":r["train"].get("turnover_pct"),
+        "invested":r["train"]["average_invested_pct"],
+        "score_details":r["score_details"],
+    } for r in valid]
+    rejected=[reason for reason,count in rejections.items() for _ in range(count)]
+    return {
+        "score":best["score"],"config":best["config"],
+        "training":best["quality"],"score_breakdown":best["score_details"],
+        "candidate_diagnostics":explanation.candidate_leaderboard(
+            records,rejected,attempted),
+        "training_leaders":leaders,
+    },attempted,len(valid)
+
+
+def _gate_report(evaluations,settings):
+    valid,rejected=_screen(evaluations,settings)
+    return {"attempted_count":len(evaluations),
+            "eligible_count":len(valid),
+            "rejected_count":len(evaluations)-len(valid),
+            "rejection_reasons":rejected,
+            "thresholds":{
+                "max_training_drawdown_pct":settings["max_drawdown_pct"],
+                "minimum_training_cagr_pct":settings["minimum_training_cagr_pct"],
+                "minimum_excess_cagr_pct_points":settings["minimum_excess_cagr_pct_points"],
+                "min_average_invested_pct":settings["min_average_invested_pct"],
+            }}
+
+
+def _risk_frontier(configs,fold_training,fold_results,final_training,settings,
+                   symbols,market,metadata,points):
+    """Controlled drawdown-only study on the three pre-audit OOS folds.
+
+    Final-audit data is never evaluated at alternate risk caps, and neither
+    this comparison nor its winner selects the final audited strategy.
+    """
+    caps=sorted(set([25.,35.,45.,55.,settings["max_drawdown_pct"]]))
+    frontier=[]
+    for cap in caps:
+        trial={**settings,"max_drawdown_pct":cap}
+        entries=[];segments=[]
+        for index,evaluations in enumerate(fold_training):
+            choice,_,eligible=_choose(configs,symbols,market,metadata,
+                                      points[index],trial,evaluations=evaluations)
+            row={"fold":index+1,"eligible_training_candidates":eligible,
+                 "status":"qualified" if choice else "no_eligible_candidate"}
+            if choice:
+                # The baseline ledger may be reused, but all new executions
+                # stop before the final audit's first trading session.
+                baseline_choice=(fold_results[index]["selected"]
+                                 if fold_results[index] is not None else None)
+                if choice["config"]==baseline_choice:
+                    observed=fold_results[index]["ledger"]
+                else:
+                    observed=_execute(choice["config"],symbols,market,metadata,
+                                      points[index],points[index+1],
+                                      trial["slippage_bps"],trial)
+                metrics=objectives.performance(
+                    observed["equity_curve"],risk_free_pct=trial["risk_free_pct"])
+                row.update({
+                    "selected":choice["config"],
+                    "out_of_sample_return_pct":observed["return_pct"],
+                    "out_of_sample_cagr_pct":metrics["cagr_pct"],
+                    "out_of_sample_drawdown_pct":observed["max_drawdown_pct"],
+                })
+                segments.append(observed)
+            entries.append(row)
+        candidate,_,final_eligible=_choose(
+            configs,symbols,market,metadata,points[3],trial,
+            evaluations=final_training)
+        summary={"max_training_drawdown_pct":cap,
+                 "is_configured_limit":cap==settings["max_drawdown_pct"],
+                 "folds_with_eligible_candidate":len(segments),
+                 "fold_count":len(fold_training),
+                 "pre_audit_final_training_eligible_count":final_eligible,
+                 "pre_audit_final_training_has_candidate":candidate is not None,
+                 "folds":entries,
+                 "no_final_audit_replay":True,
+                 "not_used_for_selection":True}
+        if len(segments)==len(fold_training):
+            curve=_chain_segments(segments)
+            performance=objectives.performance(
+                curve,risk_free_pct=trial["risk_free_pct"])
+            summary.update({
+                "status":"full_pre_audit_folds",
+                "validation_cagr_pct":performance["cagr_pct"],
+                "validation_excess_sharpe":performance["excess_sharpe"],
+                "validation_drawdown_pct":_max_drawdown(curve),
+            })
+        else:
+            summary["status"]="incomplete_pre_audit_folds"
+        frontier.append(summary)
+    return {
+        "basis":"All variants share the original basket, model grid, costs and growth/exposure thresholds; only the training drawdown limit changes.",
+        "risk_limits_pct":caps,
+        "experiments":frontier,
+        "observation_boundary":"Three historical validation folds only; final-audit dates never used for alternate-cap evaluation.",
+        "cannot_reselect_final_audit":True,
+        "not_an_independent_test_after_inspection":True,
+    }
 
 
 def _chain_segments(segments):
@@ -259,6 +392,38 @@ def _trial_adjustment(sharpe,sessions,trial_count):
             "assumed_trials":trial_count}
 
 
+def _no_eligible_report(fold_failed,why,evaluations,fold_training,
+                        fold_ledgers,configs,symbols,market,metadata,points,settings):
+    """Fail closed and still show controlled risk sensitivity.
+
+    All omitted training ledgers are filled using observations ending before
+    the final audit. No failed study is rescued by audit-date tuning.
+    """
+    for index in range(len(fold_training),3):
+        fold_training.append(_evaluate_training_candidates(
+            configs,symbols,market,metadata,points[index],settings))
+        fold_ledgers.append(None)
+    final_training=(evaluations if fold_failed=="final" else
+                    _evaluate_training_candidates(
+                        configs,symbols,market,metadata,points[3],settings))
+    frontier=_risk_frontier(configs,fold_training,fold_ledgers,final_training,
+                            settings,symbols,market,metadata,points)
+    return {
+        "status":"no_eligible_candidate","fold_failed":fold_failed,
+        "candidate_count":len(configs),"research_only":True,
+        "no_real_orders":True,"selection_outcome":"no_qualified_strategy",
+        "reason":why,
+        "rejection_diagnostics":_gate_report(evaluations,settings),
+        "model_search":{
+            "width":settings["search_width"],"candidate_count":len(configs),
+            "total_train_evaluations":sum(len(x) for x in fold_training)+len(final_training),
+            "candidate_scope":"Fixed historical basket; no final-audit re-selection.",
+            "pre_audit_risk_frontier":frontier,
+        },
+        "no_final_audit_performed":True,
+    }
+
+
 def analyze(payload, *, loader=None, report=None):
     settings=validate_request(payload)
     report=report or (lambda pct,stage:None)
@@ -288,21 +453,29 @@ def analyze(payload, *, loader=None, report=None):
     source_candidate=tournament_reference.source_config(settings["spec"])
     folds=[]
     realized=[]
+    fold_training=[]
+    fold_ledgers=[]
     for fold_idx in range(3):
         train_end=points[fold_idx]
         out_end=points[fold_idx+1]
         report(36+int(42*fold_idx/3),"Selecting parameters from past observations")
+        evaluations=_evaluate_training_candidates(
+            configs,symbols,market,metadata,train_end,settings)
+        fold_training.append(evaluations)
         selected,attempted,eligible=_choose(configs,symbols,market,metadata,
-                                            train_end,settings)
+                                            train_end,settings,
+                                            evaluations=evaluations)
         if selected is None:
-            # A failed selection is a failed study, not a cherry-picked fold.
-            return {"status":"no_eligible_candidate","fold_failed":fold_idx+1,
-                    "candidate_count":len(configs),"research_only":True,
-                    "no_real_orders":True,
-                    "reason":"No candidate passed prior-period drawdown, trading and exposure checks."}
+            fold_ledgers.append(None)
+            return _no_eligible_report(
+                fold_idx+1,
+                "No configuration met the growth, drawdown and exposure training thresholds at this fold.",
+                evaluations,fold_training,fold_ledgers,configs,symbols,
+                market,metadata,points,settings)
         result=_execute(selected["config"],symbols,market,metadata,
                         train_end,out_end,settings["slippage_bps"],settings)
         realized.append(result)
+        fold_ledgers.append({"selected":selected["config"],"ledger":result})
         fold_metrics=objectives.performance(result["equity_curve"],
                                              risk_free_pct=settings["risk_free_pct"])
         baseline=explanation.baseline_comparison(
@@ -340,13 +513,20 @@ def analyze(payload, *, loader=None, report=None):
                                                   target_cagr_pct=settings["target_cagr_pct"])
     test_start=points[3]
     report(88,"Training final choice without seeing the audit period")
+    final_training=_evaluate_training_candidates(
+        configs,symbols,market,metadata,test_start,settings)
     final_choice,attempted,eligible=_choose(configs,symbols,market,metadata,
-                                             test_start,settings)
+                                             test_start,settings,
+                                             evaluations=final_training)
     if final_choice is None:
-        return {"status":"no_eligible_candidate","fold_failed":"final",
-                "candidate_count":len(configs),"research_only":True,
-                "no_real_orders":True,
-                "reason":"No candidate qualified on the pre-audit training sample."}
+        return _no_eligible_report(
+            "final","No configuration met the growth, drawdown and exposure thresholds on the pre-audit training sample.",
+            final_training,fold_training,fold_ledgers,configs,symbols,
+            market,metadata,points,settings)
+    report(88,"Comparing drawdown constraints on pre-audit folds only")
+    risk_frontier=_risk_frontier(
+        configs,fold_training,fold_ledgers,final_training,settings,
+        symbols,market,metadata,points)
     # All competing curves are calculated entirely in the pre-audit period.
     # They remain in memory, and only aggregate diagnostics enter the local
     # private report. Retain attempted trials even when a model cannot run.
@@ -442,11 +622,19 @@ def analyze(payload, *, loader=None, report=None):
                     "shared_sessions":n,"warmup_sessions":pr.WARMUP},
         "execution_assumptions":{key:settings[key] for key in
               ("base_currency","commission_usd","fx_conversion_bps","slippage_bps")},
+        "eligibility_policy":{
+            "minimum_training_cagr_pct":settings["minimum_training_cagr_pct"],
+            "minimum_excess_cagr_pct_points":settings["minimum_excess_cagr_pct_points"],
+            "min_average_invested_pct":settings["min_average_invested_pct"],
+            "growth_target_is_a_hard_gate":False,
+            "reason":"Aspirational CAGR and Sharpe remain scoring objectives. Explicit minimum training growth and invested exposure are hard eligibility gates, not forced investments.",
+        },
         "targets":{"cagr_pct":settings["target_cagr_pct"],
                    "excess_sharpe":settings["target_sharpe"],
                    "max_drawdown_pct":settings["max_drawdown_pct"],
                    "risk_free_pct":settings["risk_free_pct"]},
         "model_search":{"width":settings["search_width"],
+                        "pre_audit_risk_frontier":risk_frontier,
                         "pre_audit_candidate_leaderboard":final_choice["candidate_diagnostics"],
                         "pre_audit_parameter_stability":pre_audit_stability,
                         "candidate_count":len(configs),
@@ -497,6 +685,9 @@ def analyze(payload, *, loader=None, report=None):
             "curve":final["equity_curve"],
         },
         "limitations":[
+            "Configurable minimum training growth and cash-hurdle excess growth are absolute candidate eligibility gates, separate from the aspirational CAGR/Sharpe scoring objectives. If no strategy passes, the report fails closed instead of choosing a low-return model.",
+            "Minimum average invested exposure is a training eligibility filter only; it never adds borrowed money or forces buying when a strategy signals cash.",
+            "The drawdown-constraint frontier compares training-only selections across fixed risk thresholds on the three pre-audit validation folds. It does not run alternate risk limits on the final audit and cannot select a replacement model from observed fold outcomes.",
             "Models and allocation parameters are reselected before each walk-forward fold from prior-only training data. No predictive model is fitted; each OOS fold and audit reset capital and positions.",
             "Three objective leaders (highest training growth, highest training Sharpe and balanced) are all chosen exclusively before the audit. Their final audit outcomes are comparison diagnostics, never a held-out selection mechanism.",
             "The final audit is never used to rank, select or retune candidates; do not manually retune based on this audit and still call it unseen.",
