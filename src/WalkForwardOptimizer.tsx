@@ -410,6 +410,57 @@ export default function WalkForwardOptimizer({spec}:{spec:TournamentSourceSpec})
             <td>{money(f.unseen_exposure_and_costs?.explicit_fees_and_financing_usd)}</td>
           </tr>)}</tbody></table></div>
         </details>
+        {result.model_search?.pre_audit_cost_review&&<details className="wfo-limit">
+          <summary>{l("Pre-audit cash exposure and trading-cost counterfactual",
+            "审计前现金敞口与交易成本对照")}</summary>
+          <p>{l("Only training prices before the final audit were used. Replays compare the same frozen model with and without modeled execution costs, plus a constrained equal-weight control on the same basket and dates. Different costs can change whole-share sizing, so the gap is not exact fee attribution. This report never changes model selection.",
+            "仅使用最终审计前的训练价格。同一冻结模型分别按已配置成本和零成本回放，并与同日期、同标的受限等权组合比较。费用变化可能改变整股购买数量，收益差并非精确费用归因。报告不会改变模型选择。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Training-only comparison","仅训练期对照")}</th>
+            <th>{l("Return","收益")}</th>
+            <th>{l("Gross invested","总敞口")}</th>
+            <th>{l("Turnover","换手额")}</th>
+            <th>{l("Fees and financing","费用及融资")}</th>
+          </tr></thead><tbody>
+            {([
+              [l("Selected: configured costs","所选：已配置成本"),result.model_search.pre_audit_cost_review.selected_with_configured_costs],
+              [l("Selected: no transaction costs","所选：零交易成本"),result.model_search.pre_audit_cost_review.selected_zero_transaction_costs],
+              [l("Same-basket equal weight","同标的等权"),result.model_search.pre_audit_cost_review.same_basket_equal_weight_with_configured_costs],
+            ] as const).map(([label,record])=><tr key={label}>
+              <td>{label}</td><td>{pct(record.return_pct)}</td>
+              <td>{pct(record.average_gross_invested_pct)}</td>
+              <td>{pct(record.turnover_pct_of_starting_capital)}</td>
+              <td>{money(record.fees_and_financing_usd)}</td>
+            </tr>)}
+          </tbody></table></div>
+          <p>{l("Estimated cost sensitivity","估计成本敏感性")}: {pct(result.model_search.pre_audit_cost_review.estimated_cost_sensitivity_pct_points)} {l("points","百分点")} ·
+            {" "}{l("Relative to equal weight","相对等权")}: {pct(result.model_search.pre_audit_cost_review.selected_minus_equal_weight_pct_points)} {l("points","百分点")}</p>
+          <p className="wfo-disclaimer">{l("Cash and category caps may represent intentional risk control. A return gap alone does not prove avoidable cash drag.",
+            "现金及资产类别上限可能属于主动风险控制。仅凭收益差无法证明现金拖累可以避免。")}</p>
+        </details>}
+        {result.data_provenance&&<details className="wfo-limit">
+          <summary>{l("Historical price provenance and survivorship check",
+            "历史价格来源与存活偏差核查")}</summary>
+          <p>{l("Real historical input sessions are checked for source, coverage, price-adjustment metadata and previous-close currency conversion. Missing metadata stays unverified. This is not a certified survivorship-free dataset.",
+            "检查历史数据的来源、覆盖、价格复权元数据与前一收盘日汇率换算。缺少的元数据标记为未核实，并不代表已经消除存活偏差。")}</p>
+          <div className="wfo-scroll"><table><thead><tr>
+            <th>{l("Asset","标的")}</th><th>{l("Source","来源")}</th>
+            <th>{l("Observed dates","实际观察日期")}</th>
+            <th>{l("Price adjustment","价格复权")}</th>
+            <th>{l("Calendar differences","日历差异")}</th>
+          </tr></thead><tbody>{result.data_provenance.instruments.map(item=><tr key={item.symbol}>
+            <td>{item.symbol.toUpperCase()}</td><td>{item.source}</td>
+            <td>{item.first_observed_date} - {item.last_observed_date}</td>
+            <td>{item.explicit_price_adjustment==="unverified"?l("Unverified","未核实"):item.explicit_price_adjustment}</td>
+            <td>{item.unmatched_dates_within_shared_span}</td>
+          </tr>)}</tbody></table></div>
+          <p>{l("Point-in-time historical universe and delisted assets",
+            "历史时点成分股及已退市资产")}: <strong>{l("Unverified","未核实")}</strong> ·
+            {" "}{l("USD/CAD conversion","美元与加元换算")}: {result.data_provenance.fx.status==="not_required"?
+              l("Not required","无需换算"):l("Previous completed daily close","上一已完成交易日的收盘价")}</p>
+          <p className="wfo-disclaimer">{l("Unmatched dates can reflect different exchange calendars, not necessarily corrupt prices. Corporate actions, dividends, delistings and past index membership require independently verified historical data.",
+            "日期不一致可能源于交易所日历不同，不一定是错误价格。公司行动、股息、退市和历史指数成分仍需独立核实。")}</p>
+        </details>}
         {result.model_search?.pre_audit_risk_frontier&&<section className="wfo-limit">
           <h5>{l("Controlled drawdown-limit comparison, pre-audit only",
             "受控回撤上限对比，仅限最终审计前")}</h5>
