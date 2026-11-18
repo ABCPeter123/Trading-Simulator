@@ -378,7 +378,7 @@ def test_llama_cpp_router_model_choices_and_per_request_override(monkeypatch):
     assert result.json()["model"] == "Qwen3.5-9B-Q4_K_M.gguf"
     assert result.json()["available_models"] == [
         "TwIL-8B-Q4_K_M-balanced.gguf", "Qwen3.5-9B-Q4_K_M.gguf"]
-    assert observed["url"] == "http://127.0.0.1:8081/v1/models"
+    assert observed["url"] == "http://127.0.0.1:8081/models"
     assert client.get("/api/ai/status?model=unapproved.gguf").status_code == 422
     assert client.get("/api/ai/status?model=../models/private.gguf").status_code == 422
 
@@ -451,7 +451,7 @@ def test_llama_cpp_router_stems_are_detected_and_protected(monkeypatch):
         def __enter__(self): return self
         def __exit__(self, *args): pass
         def get(self, url):
-            assert url == "http://127.0.0.1:8081/v1/models"
+            assert url == "http://127.0.0.1:8081/models"
             return FakeReply()
     monkeypatch.setattr(ai.httpx, "Client", FakeClient)
     status = client.get("/api/ai/status").json()
@@ -466,3 +466,82 @@ def test_llama_cpp_router_stems_are_detected_and_protected(monkeypatch):
     assert ai.selected_local_model("Qwen3.5-9B-Q4_K_M") == "Qwen3.5-9B-Q4_K_M"
     assert ai.selected_local_model("TwIL-8B-Q4_K_M-balanced.gguf") == "TwIL-8B-Q4_K_M-balanced"
     assert client.get("/api/ai/status?model=unapproved-private-model").status_code == 422
+
+
+def test_unloaded_router_models_are_ready_without_loading(monkeypatch):
+    """A fresh llama.cpp router exposes installed GGUFs via /models only."""
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL", "TwIL-8B-Q4_K_M-balanced.gguf")
+    endpoints = []
+    class Reply:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": [
+                {"id": "TwIL-8B-Q4_K_M-balanced", "status": {"value": "unloaded"}},
+                {"id": "Qwen3.5-9B-Q4_K_M", "status": {"value": "unloaded"}}]}
+    class Client:
+        def __init__(self, **kwargs): assert kwargs["trust_env"] is False
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def get(self, url):
+            endpoints.append(url)
+            assert url.endswith("/models") and not url.endswith("/v1/models")
+            return Reply()
+    monkeypatch.setattr(ai.httpx, "Client", Client)
+    status = client.get("/api/ai/status").json()
+    assert status["ready"] is True
+    assert status["loaded"] is False
+    assert status["router_reachable"] is True
+    assert status["connection_state"] == "ready"
+    assert status["model"] == "TwIL-8B-Q4_K_M-balanced"
+    assert status["available_models"] == [
+        "TwIL-8B-Q4_K_M-balanced", "Qwen3.5-9B-Q4_K_M"]
+    assert endpoints == ["http://127.0.0.1:8081/models"]
+
+
+def test_old_llama_cpp_can_use_legacy_model_endpoint(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    monkeypatch.setenv("TRADING_SIM_AI_MODEL", "TwIL-8B-Q4_K_M-balanced.gguf")
+    requests = []
+    class Reply:
+        def __init__(self, data): self.data = data
+        def raise_for_status(self): pass
+        def json(self): return {"data": self.data}
+    class Client:
+        def __init__(self, **kwargs): assert kwargs["trust_env"] is False
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def get(self, url):
+            requests.append(url)
+            if url.endswith("/models") and not url.endswith("/v1/models"):
+                return Reply([])
+            return Reply([{"id": "TwIL-8B-Q4_K_M-balanced.gguf"}])
+    monkeypatch.setattr(ai.httpx, "Client", Client)
+    status = client.get("/api/ai/status").json()
+    assert status["ready"] is True
+    assert len(requests) == 2
+    assert requests[0].endswith("/models")
+    assert requests[1].endswith("/v1/models")
+
+
+def test_router_unreachable_is_distinct_from_empty_models(monkeypatch):
+    monkeypatch.setenv("TRADING_SIM_AI_PROVIDER", "llama_cpp")
+    class Reply:
+        def raise_for_status(self): pass
+        def json(self): return {"data": []}
+    class Client:
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def get(self, url):
+            if getattr(self, "unreachable", False):
+                raise ai.httpx.ConnectError("connection refused")
+            return Reply()
+    monkeypatch.setattr(ai.httpx, "Client", Client)
+    empty = client.get("/api/ai/status").json()
+    assert empty["router_reachable"] is True
+    assert empty["connection_state"] == "no_models"
+    monkeypatch.setattr(Client, "unreachable", True)
+    down = client.get("/api/ai/status").json()
+    assert down["router_reachable"] is False
+    assert down["connection_state"] == "unreachable"
