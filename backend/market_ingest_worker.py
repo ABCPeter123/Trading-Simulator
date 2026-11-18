@@ -21,10 +21,13 @@ def main():
     if hasattr(signal,"SIGTERM"):signal.signal(signal.SIGTERM,stop)
     while not stopping:
         try:
-            for item in market_ingestion.run_due():
+            market_ingestion.record_heartbeat("polling")
+            updates = market_ingestion.run_due()
+            for item in updates:
                 # No prices, credentials, or owner strategy data are logged.
                 if "error" in item:
                     logging.warning("Market sync unavailable: %s",item["error"])
+            market_ingestion.record_heartbeat("idle", len(updates))
         except Exception as exc:
             logging.error("Market ingestion worker failed: %s",type(exc).__name__)
         if args.once:break
