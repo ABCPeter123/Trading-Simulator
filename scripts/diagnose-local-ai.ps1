@@ -5,6 +5,33 @@ $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $models = Join-Path $root "models\private"
 $logs = Join-Path $root ".local-state\logs"
 Write-Host "[ai] Checking local llama.cpp connectivity..." -ForegroundColor Cyan
+# The diagnostic is read-only. It never starts either service or prints .env.
+$registry = Join-Path $root ".local-state\local-services.json"
+if (Test-Path -LiteralPath $registry) {
+    try {
+        $savedServices = Get-Content -LiteralPath $registry -Raw | ConvertFrom-Json
+        foreach ($name in @("backend","ai","frontend")) {
+            $entry = $savedServices.PSObject.Properties[$name]
+            if (-not $entry) {
+                Write-Host "[launcher] $name : not tracked"
+                continue
+            }
+            $pidValue = [int]$entry.Value.pid
+            $proc = Get-Process -Id $pidValue -ErrorAction SilentlyContinue
+            $running = $false
+            if ($proc) {
+                $started = [datetime]::Parse([string]$entry.Value.started_utc).ToUniversalTime()
+                $running = [math]::Abs(($proc.StartTime.ToUniversalTime()-$started).TotalSeconds) -lt 5
+            }
+            $state = if ($running) { "running" } else { "not running" }
+            Write-Host "[launcher] $name : $state (tracked PID $pidValue)"
+        }
+    } catch {
+        Write-Host "[launcher] Service registry unreadable. Run start-local.ps1 -NoBrowser." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[launcher] No tracked service registry. Run start-local.ps1 -NoBrowser to start services." -ForegroundColor Yellow
+}
 # Hardware capacity, but no private process arguments or credentials.
 try {
     $machine = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
@@ -84,6 +111,7 @@ try {
     Write-Host "[app] Provider: $($status.provider); ready: $($status.ready); state: $($status.connection_state)"
 } catch {
     Write-Host "[app] Backend AI status unavailable ($($_.Exception.GetType().Name))." -ForegroundColor Yellow
+    Write-Host "[app] This diagnostic does not start FastAPI. Run .\start-local.ps1 -NoBrowser and inspect backend startup output." -ForegroundColor Yellow
 }
 foreach ($name in @("ai.err.log","ai.out.log")) {
     $path = Join-Path $logs $name
