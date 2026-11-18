@@ -35,6 +35,29 @@ export interface BacktestResponse {
   execution: string; data_source: string;
 }
 
+/** Extracts a safe, actionable message from FastAPI/Pydantic validation errors. */
+export function apiErrorMessage(status: number, payload: unknown): string {
+  const fallback = status === 422
+    ? "Request rejected (422). Check the submitted values and try again."
+    : `Request failed (${status})`;
+  if (!payload || typeof payload !== "object" || !("detail" in payload)) return fallback;
+  const detail = payload.detail;
+  if (typeof detail === "string") return detail.trim().slice(0, 500) || fallback;
+  if (!Array.isArray(detail)) return fallback;
+  const messages: string[] = [];
+  for (const issue of detail.slice(0, 3)) {
+    if (!issue || typeof issue !== "object") continue;
+    const location = "loc" in issue && Array.isArray(issue.loc) ? issue.loc : [];
+    const field = location.filter((item): item is string =>
+      typeof item === "string" && item !== "body" && item !== "query" &&
+      /^[A-Za-z_][A-Za-z0-9_]*$/.test(item)).slice(0, 2).join(".");
+    const message = "msg" in issue && typeof issue.msg === "string"
+      ? issue.msg.trim().slice(0, 160) : "";
+    if (message) messages.push((field ? field.replaceAll("_", " ") + ": " : "") + message);
+  }
+  return messages.length ? `Invalid request (${status}): ${messages.join("; ")}` : fallback;
+}
+
 export async function request<T>(route: string, options?: RequestInit): Promise<T> {
   const response = await fetch(apiUrl(`/api${route}`), {
     ...options,
@@ -45,8 +68,7 @@ export async function request<T>(route: string, options?: RequestInit): Promise<
   try { payload = await response.json(); }
   catch { throw new Error(cloudFrontend ? "Private engine connection failed. Check your tunnel and access token." : "Local API is unreachable. Start the Python backend on port 8000."); }
   if (!response.ok) {
-    const detail = typeof payload === "object" && payload !== null && "detail" in payload ? payload.detail : null;
-    throw new Error(typeof detail === "string" ? detail : `Request failed (${response.status})`);
+    throw new Error(apiErrorMessage(response.status, payload));
   }
   return payload as T;
 }
