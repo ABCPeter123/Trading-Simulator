@@ -1,7 +1,7 @@
 import {request} from "./api";
 
 export interface Deployment {
-  id:string;strategy_id:string;name:string;mode:"single"|"portfolio";
+  id:string;strategy_id:string;name:string;mode:"single"|"portfolio"|"portfolio_model";
   symbols:string[];state:"paper"|"live-monitor"|"paused"|"retired";
   capital:number;max_allocation_pct:number;max_realized_loss_pct:number;max_daily_signals:number;
   resolution:"1d"|"1h"|"15m";
