@@ -51,6 +51,16 @@ export default function AIAssistant({mode,runId,onDraft}: {
     return ()=>clearInterval(timer);
   },[status?.warming]);
 
+  useEffect(()=>{
+    if(status?.provider!=="llama_cpp" || status.ready)return;
+    // Quiet startup may bind the router after the first status request.
+    // Retry only while offline; stop polling once the router becomes ready.
+    const ticker=setInterval(()=>{
+      void getAIStatus(selectedModel||undefined).then(next=>setStatus(next)).catch(()=>{});
+    },6000);
+    return ()=>clearInterval(ticker);
+  },[status?.provider,status?.ready,selectedModel]);
+
   async function send(value:string) {
     const question=value.trim();
     if(!question||busy)return;
@@ -112,7 +122,7 @@ export default function AIAssistant({mode,runId,onDraft}: {
         ? `${t("Ollama is unavailable or the model is missing. Run:")} ollama pull ${status.model}` : status.provider==="ollama"
         ? status.warming?t("Ollama is preloading the model locally."):status.loaded?t("Ollama is loaded and ready for research."):t("Ollama runs locally. Install Ollama and pull the model to ask questions.")
         : status.provider==="llama_cpp"
-        ? status.ready?t("The selected llama.cpp model runs locally. AI output still requires validation."):t("Start the llama.cpp router with a supported GGUF model on port 8081.")
+        ? status.ready?t("The selected llama.cpp model runs locally. AI output still requires validation."):status.description
         : status.provider==="openai"
         ? t("OpenAI runs remotely. Each question sends summarized historical game data.")
         : t("AI is disabled.")) : t("Checking AI connection...")}</span>
