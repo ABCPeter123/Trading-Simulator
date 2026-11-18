@@ -38,7 +38,7 @@ const eligible = (i: CatalogInstrument) =>
   (i.currency==="USD" && i.tradable ||
     i.currency==="CAD" && ["Stocks","ETFs"].includes(i.asset_class));
 
-export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
+export default function PortfolioArcade({onExit,initialRunId}: {onExit:()=>void;initialRunId?:string}) {
   const {t} = useI18n();
   const [catalog, setCatalog] = useState<CatalogInstrument[]>([]);
   const [saved, setSaved] = useState<PortfolioSaved[]>([]);
@@ -118,7 +118,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       if (cancelled) return;
       setCatalog(instruments);
       setSaved(runs);
-      const preferred = localStorage.getItem(SAVED);
+      const preferred = initialRunId ?? localStorage.getItem(SAVED);
       const resume = runs.find(run=>run.id===preferred) ?? runs[0];
       if (resume) {
         const data = await loadPortfolioSeason(resume.id);
@@ -126,7 +126,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
       }
     }).catch(e=>{if(!cancelled)setError(errorText(e));});
     return ()=>{cancelled=true;};
-  }, [hydrate]);
+  }, [hydrate, initialRunId]);
 
   const update = async (task:()=>Promise<PortfolioSeason>) => {
     if (busyRef.current) return;
@@ -306,7 +306,7 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
             <button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(5)}><FastForward size={15}/> +5</button>
             <button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(20)}><FastForward size={15}/> +20</button>
             <button disabled={busy||playing||season.finished||viewingPast} onClick={()=>advance(100)}><FastForward size={15}/> +100</button>
-            <button disabled={busy||playing||season.finished||viewingPast||!season.strategy} onClick={()=>advance(100,true)}>{t("Next strategy signal")}</button>
+            <button disabled={busy||playing||season.finished||viewingPast||(!season.strategy&&!season.model_strategy)} onClick={()=>advance(100,true)}>{t("Next strategy signal")}</button>
             <label className="port-speed">{t("Autoplay step speed")}
               <select value={autoplaySpeed} onChange={e=>setAutoplaySpeed(Number(e.target.value))}>
                 {[1,5,10,25,50].map(i=><option value={i} key={i}>{i} / {t("tick")}</option>)}
@@ -381,6 +381,15 @@ export default function PortfolioArcade({onExit}: {onExit:()=>void}) {
           onDraft={draft=>{setStrategy(draft);setWorkspaceTab("strategy");}}/>
           :<p className="ts-past-note">{t("AI research uses the latest session. Return to latest to ask questions.")}</p>}
         <div className="port-strategy">
+          {season.model_strategy&&<div className="ops-message" role="status">
+            <strong>{t("Loaded tournament strategy")}: {season.model_strategy.name}</strong>
+            <p>{season.model_strategy.symbols.map(x=>x.toUpperCase()).join(", ")} ·
+              {t("Allocation model")}: {season.model_strategy.model.replaceAll("_"," ")} ·
+              {t("Maximum position weight (%)")}: {season.model_strategy.max_position_pct}% ·
+              {t("Rebalance every")} {season.model_strategy.rebalance_sessions} {t("shared sessions")} ·
+              {season.model_strategy.delay_sessions} {t("session execution delay")}</p>
+            <p>{t("The simulator executes model target allocations at common session opens using previously completed candles. Editing and activating a rule script replaces this model.")}</p>
+          </div>}
           <div className="arc-box-head"><div><Bot size={17}/><strong>{t("Cross-asset Strategy Editor")}</strong></div><span className="arc-tag">{t("Validated strategy syntax")}</span></div>
           <p>{t("A signal from one instrument can trade another. Orders queue after the signal candle closes and fill no earlier than the target symbol's next actual session.")}</p>
           <div className="port-rule-row">
