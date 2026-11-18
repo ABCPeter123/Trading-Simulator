@@ -1302,6 +1302,10 @@ const zh: Record<string, string> = {
   "Set gross_exposure = min(95%, 12% / estimated_annualized_volatility), then apply risk limits.": "设定总敞口为 min(95%, 12% / 估算年化波动率)，随后应用风险限制。",
   "Research asset basket": "研究资产组合",
   "This basket includes leveraged or inverse ETFs. The result is for research and simulation only, not approved live monitoring.": "该组合包含杠杆或反向 ETF，仅供研究和历史模拟，不允许启用实时监控。",
+  "Equities": "股票类",
+  "Bonds": "债券类",
+  "Commodities": "大宗商品类",
+  "Real estate": "房地产类",
 };
 
 const LocaleContext = createContext<{
