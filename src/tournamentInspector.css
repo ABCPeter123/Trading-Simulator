@@ -29,3 +29,9 @@
 .tsi-notice strong{color:#fff0c0}
 .tsi-notice p{margin:4px 0 0}
 @media(max-width:600px){.tsi{padding:12px}.tsi-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.tsi-stages{grid-template-columns:1fr}.tsi-limits{grid-template-columns:1fr}.tsi h5{margin-top:20px}}
+
+/* The model story and historical period engine are optional deep dives. */
+.tsi-explanation,.tsi-period-study{border:1px solid #365568;border-radius:8px;background:#162a39;padding:12px;margin:14px 0}
+.tsi-explanation>summary,.tsi-period-study>summary{cursor:pointer;color:#b9e7ed;font-size:13px;font-weight:700}
+.tsi-explanation>summary:focus-visible,.tsi-period-study>summary:focus-visible{outline:2px solid #79daca;outline-offset:2px}
+.tsi-explanation[open]>summary,.tsi-period-study[open]>summary{margin-bottom:12px}
