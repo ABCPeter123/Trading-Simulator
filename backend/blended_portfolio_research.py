@@ -34,7 +34,7 @@ def validate_sleeves(sleeves):
 
 
 def blend_weights(sleeves,symbols,closes,i,metadata,max_weight,
-                  gross_target,equity_cap,redistribute):
+                  gross_target,equity_cap,redistribute,*,annualization_periods=252):
     """Convex combination of contemporaneously evaluated sleeve allocations.
 
     Sleeve exposure controls and final position/asset-class limits are applied
@@ -50,7 +50,8 @@ def blend_weights(sleeves,symbols,closes,i,metadata,max_weight,
         if model in pr.MODELS:
             individual=pr._weights(model,symbols,closes,i,metadata,max_weight,
                                    gross_target=1.,equity_cap=1.,
-                                   redistribute=False)
+                                   redistribute=False,
+                                   annualization_periods=annualization_periods)
         else:
             individual=adv.weights(model,symbols,closes,i,metadata,max_weight)
         proportion=sleeve["weight_pct"]/100
