@@ -141,3 +141,36 @@ validated intraday market-impact model. Annual CAGR and Sharpe are deliberately
 not reported for short intraday samples. The existing historical daily
 tournament and paper-forward results stay separate and unchanged. The
 simulator never places real broker orders.
+
+## Candidate quality and benchmark-aware tournament ranking
+
+The tournament now includes two additional general-purpose cash-funded
+allocation methods: **adaptive momentum** (positive absolute medium-term
+trend plus ranked strength, with an optional real defensive sleeve) and
+**pullback in trend** (short-term price weakness within a positive
+long-horizon trend). These are fixed research algorithms, not learned
+predictions or owner-fitted private trading rules. Both use previously
+completed OHLC observations and existing position/asset-class exposure caps.
+On intraday bars, their lookback lengths are measured in bars, not days.
+
+Each basket's **validation-period** equal-weight control is independently
+replayed using the same shared cash, dates, position limits and estimated
+trading costs. A candidate that lags that control in return or excess
+Sharpe receives an inspectable soft ranking penalty. The penalty does
+not read from held-out dates. Balanced research also penalizes losing
+validation subwindows, instead of relying on overall return alone.
+
+The displayed **Top 10** now means the actual ten highest validation
+scores, not a forced one-per-family shortlist. A separate explicit
+quality label states whether a displayed candidate beat its basket
+reference on **both** return and excess Sharpe during validation.
+A candidate lacking both advantages is *not yet demonstrated* to
+have a superior trading rule; its positive raw or audit return alone
+must not be interpreted as evidence of an edge.
+
+The original sealed test window, selection protocol, private source
+storage, risk constraints and human-approved execution boundaries are
+unchanged. These modifications increase selection rigor but do not
+guarantee higher unseen returns or a usable strategy. Previously
+completed private research and frozen strategy versions remain unchanged;
+new rules take effect on **new** research scans.
