@@ -153,3 +153,15 @@ summary reports only the main held-out metrics; historical explanations,
 benchmark comparisons, diagnostics, and paper-forward monitoring remain
 available in explicit expandable sections. All existing local saved jobs and
 private study data are preserved; these are presentation changes only.
+
+
+## Cadence integrity
+
+Walk-forward uses the selected tournament source's immutable
+`rebalance_sessions` (1, 5 or 21), rather than silently reverting to
+monthly checks. Every fold, the final audit, same-basket benchmarks,
+retrospective source comparison, zero-cost training replay and prospective
+paper-forward study inherit that cadence. Each independently reset fold still
+starts flat, and the original one- or two-session execution delay still
+applies. This does not provide an intraday backtest; the research histories
+remain aligned daily OHLCV observations.
