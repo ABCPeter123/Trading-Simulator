@@ -350,7 +350,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               onChange={e=>setRedistributeUnused(e.target.checked)}/>
             {t("Redistribute unused weight among eligible assets")}
           </label>
-          <p>{t("Full-investment settings apply only to the five standard long-only models; advanced leverage and hedge models retain their own limits.")}</p>
+          <p>{t("Full-investment settings apply only to the standard long-only models; advanced leverage and hedge models retain their own limits.")}</p>
           <p>{t("Cash rate is held constant for metric calculations; it is not credited as portfolio income.")}</p>
         </div>}
         </details>
