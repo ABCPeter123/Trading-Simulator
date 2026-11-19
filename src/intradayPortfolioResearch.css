@@ -1,0 +1,27 @@
+.ipr{border:1px solid #36586b;border-radius:9px;padding:12px;margin:14px 0;background:#142a39;color:#d8e8f2;font-size:12px}
+.ipr>summary{font-size:13px;font-weight:700;color:#b8e9df;cursor:pointer}
+.ipr-body{padding-top:12px}.ipr-body p{line-height:1.7;color:#bed3df}
+.ipr-inputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:9px;margin:12px 0}
+.ipr-inputs label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#c8dae4}
+.ipr-inputs input,.ipr-inputs select{min-width:0;width:100%;box-sizing:border-box;background:#1b3447;border:1px solid #4c697a;border-radius:7px;padding:9px;color:#e9f5fc}
+.ipr-actions{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0}
+.ipr-actions button{border:1px solid #489caa;border-radius:7px;background:#176b7a;color:#f1fcff;font-weight:700;padding:9px 13px;cursor:pointer}
+.ipr-actions button:disabled{opacity:.5;cursor:not-allowed}
+.ipr-advanced{margin:12px 0;border:1px solid #344d60;border-radius:7px;padding:10px}
+.ipr-advanced>summary{cursor:pointer;font-weight:650}
+.ipr-advanced[open]>summary{margin-bottom:10px}
+.ipr-small{font-size:11px;color:#b8cbd6!important}
+.ipr-warning{border-left:3px solid #cca45d;padding:9px;background:#302e2a;color:#f9debb!important}
+.ipr-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin:15px 0}
+.ipr-kpis>div{background:#203b4b;border:1px solid #385b6c;border-radius:8px;padding:11px;min-width:0}
+.ipr-kpis small{display:block;color:#acc8d4;font-size:11px;margin-bottom:8px}
+.ipr-kpis strong{font-size:17px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.ipr-chart{display:block;width:100%;height:auto;background:#182c3d;border:1px solid #385468;border-radius:8px}
+.ipr-legend{display:flex;align-items:center;gap:8px;color:#c4dbe4;font-size:11px;margin:7px 0}
+.ipr-dot{display:inline-block;width:14px;height:3px;background:#66d1bd}
+.ipr-dot-muted{background:#a0a9b6}
+.ipr-scroll{max-width:100%;overflow:auto}
+.ipr-scroll table{border-collapse:collapse;min-width:600px;width:100%;font-size:11px}
+.ipr-scroll th,.ipr-scroll td{padding:8px;text-align:left;border-bottom:1px solid #3b5263}
+.ipr button:focus-visible,.ipr summary:focus-visible,.ipr input:focus-visible,.ipr select:focus-visible{outline:2px solid #7cdbca;outline-offset:2px}
+@media(max-width:600px){.ipr{padding:10px}.ipr-inputs{grid-template-columns:repeat(2,minmax(0,1fr))}.ipr-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
