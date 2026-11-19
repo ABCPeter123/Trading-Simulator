@@ -63,7 +63,7 @@ def validate_spec(spec):
         raise HTTPException(422, detail="Invalid tournament position cap.")
     if type(spec.get("delay_sessions")) is not int or spec["delay_sessions"] not in (1, 2):
         raise HTTPException(422, detail="Invalid tournament execution latency.")
-    if spec.get("rebalance_sessions") != pr.REBALANCE_SESSIONS:
+    if type(spec.get("rebalance_sessions")) is not int or spec["rebalance_sessions"] not in pr.SUPPORTED_REBALANCE_SESSIONS:
         raise HTTPException(422, detail="Unsupported tournament rebalance cadence.")
     keys=("target_investment_pct","equity_class_cap_pct","redistribute_excess")
     if any(k in spec for k in keys):
@@ -141,7 +141,7 @@ def import_rank(job_id: str, rank: int):
         **({"sleeves":winner["sleeves"]} if winner["model"]=="blended_portfolio" else {}),
         "max_position_pct": float(study["params"]["max_position_pct"]),
         "delay_sessions": int(study["params"]["delay_sessions"]),
-        "rebalance_sessions": pr.REBALANCE_SESSIONS,
+        "rebalance_sessions": int(study["params"].get("rebalance_sessions",pr.REBALANCE_SESSIONS)),
         "restricted_research": bool(winner.get("restricted_research", False)),
         "short_proxy_research": bool(winner.get("short_proxy_research", False)),
         "research_only":bool(winner.get("research_only",False)),
