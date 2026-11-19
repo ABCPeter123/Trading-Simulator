@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState} from "react";
 import {useI18n} from "./i18n";
 import {createIntradayStudy,getIntradayStudy,cancelIntradayStudy} from "./tournamentApi";
-import type {TournamentSourceSpec,IntradayStudyJob,IntradayResolution,IntradayWindow} from "./tournamentApi";
+import type {TournamentSourceSpec,IntradayStudyJob,IntradayStudyResult,IntradayResolution,IntradayWindow} from "./tournamentApi";
 import "./intradayPortfolioResearch.css";
 
 const WINDOWS:Record<IntradayResolution,readonly IntradayWindow[]>={
@@ -14,8 +14,7 @@ const CASH_MODELS=new Set(["equal_weight","inverse_volatility","trend_filter","r
 const pct=(n:number)=>Number.isFinite(n)?n.toFixed(2)+"%":"N/A";
 const dollars=(n:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(n);
 
-function MiniChart({job}:{job:IntradayStudyJob}){
-  const curves=job.result;
+function MiniChart({curves}:{curves:IntradayStudyResult}){
   const paths=useMemo(()=>{
     if(!curves?.equity_curve?.length)return null;
     const a=curves.equity_curve,b=curves.benchmark_curve;
@@ -149,7 +148,7 @@ export default function IntradayPortfolioResearch({spec}:{spec:TournamentSourceS
             {" "}{new Date(result.first_bar*1000).toLocaleDateString()} – {new Date(result.last_bar*1000).toLocaleDateString()}</p>
           <div className="ipr-legend">{l("Portfolio","组合")} <span className="ipr-dot"/>
             {" "}{l("Equal-weight control","等权对照")} <span className="ipr-dot ipr-dot-muted"/></div>
-          <MiniChart job={job}/>
+          <MiniChart curves={result}/>
           <details className="ipr-advanced"><summary>{l("Executed order sample","模拟成交样本")} ({result.fills_total})</summary>
             <div className="ipr-scroll"><table><thead><tr>
               <th>{l("Time","时间")}</th><th>{l("Asset","标的")}</th><th>{l("Side","方向")}</th>
