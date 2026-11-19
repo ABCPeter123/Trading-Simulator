@@ -111,10 +111,17 @@ actual recorded provider candles via `backend/intraday.py`, with:
   regular US-session times. One allocation check can yield multiple orders or
   no order when portfolio targets are unchanged.
 
-Only USD cash-funded stocks/ETFs and the five standard long-only portfolio
-allocation models are supported in this first release. Short-share, margin,
-blended portfolios, CAD funding and cross-exchange asynchronous price paths
-are explicitly rejected rather than silently rerouted through the daily engine.
+USD-funded portfolios can now use the five standard cash-only models or
+long-only shared-cash model blends. USD- and CAD-listed stocks and ETFs are
+supported when their actual minute candles overlap. CAD prices are converted
+into USD using the **previous completed daily USD/CAD close**, never the
+contemporaneous or future daily rate. Rate observations older than five
+calendar days are rejected. CAD orders incur the explicit per-order FX
+conversion bps in addition to spread, slippage and commissions. The report
+records the real daily FX source and whether it came from a local snapshot.
+There is **no interpolated intraday FX**. Short-share, margin, CAD funding and
+asynchronous unmatched price paths remain unsupported and are rejected rather
+than silently rerouted through the daily engine.
 
 At the opening of a shared intraday candle, the selected allocation model
 observes **only prior completed shared closes**. It computes target cash
