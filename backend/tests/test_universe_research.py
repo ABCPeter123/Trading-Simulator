@@ -193,3 +193,16 @@ def test_actual_shortlist_is_global_validation_top_ten_only(isolated,monkeypatch
             for x in after["top10"]]
     assert all(x["score_breakdown"]["components"][
         "same_basket_underperformance_points"]<=0 for x in before["top10"])
+
+
+def test_balanced_ranking_debits_unstable_validation_windows():
+    valid={"return_pct":16.,"max_drawdown_pct":-8.,
+           "turnover_pct":95.,"annualized_volatility_pct":14.,"trades":20}
+    regimes={"worst_regime_return_pct":-10.}
+    stable={"sufficient_history":True,"window_count":3,"positive_windows":3}
+    unstable={**stable,"positive_windows":1}
+    strong=ur._balanced_breakdown(valid,regimes,stable)
+    weak=ur._balanced_breakdown(valid,regimes,unstable)
+    assert strong["components"]["losing_validation_windows_points"]==0
+    assert weak["components"]["losing_validation_windows_points"]==-16
+    assert strong["total"]-weak["total"]==pytest.approx(16)
