@@ -7,7 +7,7 @@ import type {TournamentModelSpec} from "./TournamentStrategyInspector";
 import {useI18n} from "./i18n";
 import "./universeResearch.css";
 
-type Metric={return_pct:number;max_drawdown_pct:number;trades:number;fees:number;turnover_pct:number;
+type Metric={return_pct:number;max_drawdown_pct:number;trades:number;rebalance_checks?:number;fees:number;turnover_pct:number;
   sharpe?:number|null;sortino?:number|null;annualized_volatility_pct?:number|null;
   peak_gross_leverage?:number;margin_interest?:number;short_borrow_cost?:number;
   margin_calls?:number;short_executions?:number;average_gross_exposure_pct?:number};
@@ -475,6 +475,11 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 <div><small>{bilingual("Unseen test return","未见测试期收益")}</small><strong>{pct(chosen.held_out.return_pct)}</strong></div>
                 <div><small>{bilingual("Test drawdown","测试期回撤")}</small><strong>{pct(chosen.held_out.max_drawdown_pct)}</strong></div>
               </div>}
+              {detailTab==="overview"&&<p className="ur-subtitle" role="note">
+                {bilingual("Historical test activity:","历史测试交易活动：")} {chosen.held_out.rebalance_checks??"N/A"} {bilingual("allocation checks,","次配置检查，")}
+                {" "}{chosen.held_out.trades} {bilingual("executed asset orders.","笔资产订单。")}
+                {" "}{bilingual("A check only trades if a target position changes.","只有目标仓位变化时才会产生交易。")}
+              </p>}
               {detailTab==="validation"&&<>
               {chosen.validation_execution_stress&&<div className="ur-objective-results">
                 <h4>{bilingual("Validation execution robustness","验证期执行稳健性")}</h4>
