@@ -166,11 +166,13 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
             target_investment_pct=95., equity_class_cap_pct=70.,
             redistribute_excess=False,base_currency="USD",slippage_bps=8.,
             commission_usd=0.,fx_conversion_bps=150.,include_blends=True,
-            basket_search="focused",selection_policy="return_risk"):
+            basket_search="focused",selection_policy="return_risk",rebalance_sessions=21):
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
         raise HTTPException(403,detail="Owner research is unavailable in public demos.")
     if scope not in ("all","etfs","stocks") or delay_sessions not in (1,2):
         raise HTTPException(422, detail="Invalid research scope or fill latency.")
+    if type(rebalance_sessions) is not int or rebalance_sessions not in pr.SUPPORTED_REBALANCE_SESSIONS:
+        raise HTTPException(422, detail="Unsupported portfolio rebalance cadence.")
     if not 5<=max_drawdown_pct<=60 or not 10<=max_position_pct<=50:
         raise HTTPException(422,detail="Invalid research risk parameters.")
     if research_objective not in ("balanced","high_performance"):
@@ -203,6 +205,7 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
             raise HTTPException(409,detail="Archive old universe research before adding more jobs.")
         identity=str(uuid4()); now=_now()
         args={"scope":scope,"delay_sessions":delay_sessions,
+              "rebalance_sessions":rebalance_sessions,
               "max_drawdown_pct":max_drawdown_pct,"max_position_pct":max_position_pct,
               "research_objective":research_objective,
               "target_cagr_pct":float(target_cagr_pct),
@@ -476,7 +479,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             for model,sleeves in _model_configs(params.get("include_blends",True)):
                 evaluated+=1
                 broker={**broker_assumptions,
-                        "delay_sessions":params["delay_sessions"]}
+                        "delay_sessions":params["delay_sessions"],
+                        "rebalance_sessions":params.get("rebalance_sessions",pr.REBALANCE_SESSIONS)}
                 if mode=="high_performance" and (model in pr.MODELS or sleeves is not None):
                     broker.update(target_investment_pct=investment,
                                   equity_class_cap_pct=equity_cap,
@@ -609,7 +613,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
     chosen.sort(key=lambda x:(-x["score"],x["basket_type"],x["model"]))
     leaders=[]
     for i,item in enumerate(chosen):
-        broker={**broker_assumptions,"delay_sessions":params["delay_sessions"]}
+        broker={**broker_assumptions,"delay_sessions":params["delay_sessions"],
+                "rebalance_sessions":params.get("rebalance_sessions",pr.REBALANCE_SESSIONS)}
         if mode=="high_performance" and (item["model"] in pr.MODELS or item["sleeves"] is not None):
             broker.update(target_investment_pct=investment,
                           equity_class_cap_pct=equity_cap,
@@ -718,6 +723,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "global top ten. Held-out tests and future scenarios never determine selection.")),
         "shortlist_is_global_top_ten":False,
         "execution_assumptions":{**broker_assumptions,"configured_delay_sessions":params["delay_sessions"],
+                                  "rebalance_sessions":params.get("rebalance_sessions",pr.REBALANCE_SESSIONS),
                                  "long_only_target_investment_pct":investment if mode=="high_performance" else 95.,
                                  "long_only_equity_class_cap_pct":equity_cap if mode=="high_performance" else 70.,
                                  "long_only_redistribute_excess":redistribute if mode=="high_performance" else False,
@@ -737,6 +743,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "Research-only short and margin models use synthetic negative holdings, 6% annual short borrow and 8.5% margin funding assumptions, with 25% maintenance margin. These are approximations and cannot be deployed as Wealthsimple share shorts.",
             "No direct Wealthsimple broker-price API, order routing, options margin engine, cash settlement, borrowing, taxes or dividend-adjusted total returns.",
             "Signals from completed daily candles can take more than 12 calendar hours to reach the next regular-session open. A two-session stress test measures a longer delay.",
+            "Rebalance sessions count daily shared close signals, not intraday opportunities. Daily cadence can increase costs and does not guarantee trades.",
             "Hypothetical future paths resample historical strategy outcomes and add shocks. They are not predictions or calibrated probabilities.",
             "Ticker universe and available listings introduce survivorship bias. Historical OHLCV can be incomplete and requires point-in-time symbol membership and corporate-action data for stronger conclusions.",
         ],
