@@ -43,7 +43,7 @@ function EquityChart({result,title}:{result:CustomPeriodResult;title:string}){
       <text x="36" y="207" fill="#bed2df" fontSize="11">{shortDate(primary[0].time)}</text>
       <text x="724" y="207" fill="#bed2df" fontSize="11" textAnchor="end">{shortDate(primary[primary.length-1].time)}</text>
     </svg>
-    <div className="csa-legend"><span className="csa-strategy-dot"/>Strategy / 策略 <span className="csa-benchmark-dot"/>Equal-weight benchmark / 等权基准</div>
+    <div className="csa-legend"><span className="csa-strategy-dot"/>Strategy / 策略 {baseline.length>0&&<><span className="csa-benchmark-dot"/>Equal-weight benchmark / 等权基准</>}</div>
   </div>;
 }
 
@@ -180,13 +180,16 @@ export default function CustomStrategyAnalysis({spec,initialJob=null}: {spec:Tou
           [l("Average invested","平均已投资比例"),pct(m.average_invested_pct)],
           [l("Trading costs","模拟交易成本"),money(m.fees)],
           [l("Trades","成交次数"),String(m.trades)],
-          [l("Equal-weight return","等权基准收益"),pct(result.benchmark.return_pct)],
-          [l("Extra-delay stress return","额外延迟压力测试收益"),pct(result.execution_stress.return_pct)],
-          [l("Return versus benchmark","相对基准收益"),pct(m.return_pct-result.benchmark.return_pct)],
+          [l("Equal-weight return","等权基准收益"),pct(result.benchmark?.return_pct)],
+          [l("Extra-delay stress return","额外延迟压力测试收益"),pct(result.execution_stress?.return_pct)],
+          [l("Return versus benchmark","相对基准收益"),pct(result.benchmark?m.return_pct-result.benchmark.return_pct:null)],
         ].map(([title,value])=><div key={title}><small>{title}</small><strong>{value}</strong></div>)}
       </div>
+      {Boolean(result.unavailable_comparisons?.length)&&<p className="csa-small" role="note">{l(
+        "The selected strategy completed, but some optional reference simulations were unavailable for these dates. Unavailable comparisons show N/A, not an estimated return.",
+        "所选策略已完成计算，但部分对照测试在该区间不可用。对应指标显示N/A，而非估算收益。")}</p>}
       <h5>{l("Historical simulated account value","历史模拟账户净值")}</h5>
-      <EquityChart result={result} title={l("Historical portfolio equity versus equal-weight benchmark","历史组合净值与等权基准")}/>
+      <EquityChart result={result} title={l("Historical portfolio equity and available equal-weight benchmark","历史组合净值及可用的等权基准")}/>
       <h5>{l("Worst observed outcomes","历史最差表现")}</h5>
       <div className="csa-kpis">
         {[
