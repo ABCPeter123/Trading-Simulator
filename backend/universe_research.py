@@ -65,6 +65,35 @@ def _balanced_breakdown(valid,regimes):
             "definition":"Validation-only heuristic points, not a forecast."}
 
 
+def _same_basket_validation_penalty(valid,quality,control,control_quality):
+    """No final test data; soft penalty for failing an identical basket control.
+
+    Keep a zero debit for a genuine win, and a separately inspectable
+    diagnostic for an underperformer. Do not treat equal weight as a strategy
+    winner by itself or force the winner to beat a particular risk preference.
+    """
+    if control is None or control_quality is None:
+        return 0.,None
+    gap=float(valid["return_pct"])-float(control["return_pct"])
+    reference=control_quality.get("excess_sharpe")
+    selected=quality.get("excess_sharpe")
+    sharpe_gap=(selected-reference if selected is not None and reference is not None
+                else None)
+    loss=min(60.,max(0.,-gap))
+    if sharpe_gap is not None:
+        loss+=min(20.,12.*max(0.,-sharpe_gap))
+    penalty=round(loss,6)
+    return penalty,{
+        "same_basket_return_pct":round(control["return_pct"],4),
+        "excess_return_points":round(gap,4),
+        "same_basket_excess_sharpe":reference,
+        "excess_sharpe_delta":round(sharpe_gap,4) if sharpe_gap is not None else None,
+        "beats_same_basket_return":gap>0,
+        "beats_same_basket_risk_adjusted":sharpe_gap is not None and sharpe_gap>0,
+        "note":"Validation-only; no audit data used in model selection.",
+    }
+
+
 def _execution_cost_audit(result,market,metadata,slippage):
     """Separate cash ledger charges from adverse modeled fill-price adjustments.
 
@@ -546,32 +575,13 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                 # Relative performance is part of validation ranking, not
                 # evaluated from the sealed 20% test. Underperforming a
                 # same-basket equal-weight control earns no fake alpha credit.
-                benchmark_advantage=None
-                if equal_control is not None and equal_quality is not None:
-                    delta=valid["return_pct"]-equal_control["return_pct"]
-                    base_sharpe=equal_quality.get("excess_sharpe")
-                    current_sharpe=quality.get("excess_sharpe")
-                    sharpe_delta=(current_sharpe-base_sharpe
-                                  if current_sharpe is not None and base_sharpe is not None
-                                  else None)
-                    downside=max(0.,-delta)
-                    penalty=min(60.,1.0*downside)
-                    if sharpe_delta is not None:
-                        penalty+=min(20.,12.*max(0.,-sharpe_delta))
-                    penalty=round(penalty,6)
-                    benchmark_advantage={
-                        "same_basket_return_pct":round(equal_control["return_pct"],4),
-                        "excess_return_points":round(delta,4),
-                        "same_basket_excess_sharpe":base_sharpe,
-                        "excess_sharpe_delta":round(sharpe_delta,4) if sharpe_delta is not None else None,
-                        "beats_same_basket_return":delta>0,
-                        "beats_same_basket_risk_adjusted":sharpe_delta is not None and sharpe_delta>0,
-                        "note":"Validation-only; no audit data used in model selection."}
-                    breakdown={**breakdown,
-                               "components":{**breakdown["components"],
-                                             "same_basket_underperformance_points":-penalty},
-                               "total":round(score-penalty,4)}
-                    score=breakdown["total"]
+                benchmark_penalty,benchmark_advantage=_same_basket_validation_penalty(
+                    valid,quality,equal_control,equal_quality)
+                breakdown={**breakdown,
+                           "components":{**breakdown["components"],
+                                         "same_basket_underperformance_points":-benchmark_penalty},
+                           "total":round(score-benchmark_penalty,4)}
+                score=breakdown["total"]
                 validation_stress=None
                 if passes and score>-1e5 and params.get("selection_policy","return_risk")=="execution_robust":
                     stressed_broker={**broker,"delay_sessions":2,
@@ -598,7 +608,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                         if not stress_details["eligible"]:continue
                         # Only downside execution deterioration is penalized;
                         # an unexpectedly better stress outcome cannot earn bonus points.
-                        score_without_reference=score+(penalty if benchmark_advantage is not None else 0.)
+                        score_without_reference=score+benchmark_penalty
                         penalty=round(-.5*max(0.,score_without_reference-stress_details["total"]),6)
                         breakdown={**breakdown,
                                    "components":{**breakdown["components"],
