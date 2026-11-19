@@ -144,7 +144,7 @@ export interface IntradayStudyResult {
 export type IntradayStudyJob = Omit<CustomPeriodJob,"result"> & {result:IntradayStudyResult|null};
 export const createIntradayStudy=(body:{
   spec:TournamentSourceSpec;mode:"intraday";resolution:IntradayResolution;
-  period:IntradayWindow;checks_per_day:1|2|4;slippage_bps:number;commission_usd:number;
+  period:IntradayWindow;checks_per_day:1|2|4;slippage_bps:number;commission_usd:number;fx_conversion_bps:number;
 })=>request<IntradayStudyJob>("/live/research/strategy-period/jobs",{
   method:"POST",body:JSON.stringify(body),
 });

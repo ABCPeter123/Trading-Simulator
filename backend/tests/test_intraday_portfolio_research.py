@@ -147,3 +147,98 @@ def test_private_queue_replays_intraday_and_persists_verified_fills(monkeypatch,
     saved=client.get("/api/live/research/strategy-period/jobs/"+done["id"]).json()
     assert saved["result"]["mode"]=="intraday"
     assert saved["result"]["metrics"]["checks"]>0
+
+
+def mixed_blend_request():
+    """Independent fictional blend, not an imported owner strategy."""
+    spec={"version":2,"model":"blended_portfolio",
+          "symbols":["spy","qqq","ief","xiu"],
+          "max_position_pct":40,"delay_sessions":1,"rebalance_sessions":5,
+          "base_currency":"USD","research_only":True,
+          "sleeves":[{"model":"inverse_volatility","weight_pct":30},
+                     {"model":"equity_hedge","weight_pct":70}],
+          "target_investment_pct":95,"equity_class_cap_pct":70,
+          "redistribute_excess":False}
+    return {"mode":"intraday","spec":spec,"resolution":"5m","period":"60D",
+            "checks_per_day":2,"slippage_bps":8,"commission_usd":0,
+            "fx_conversion_bps":75}
+
+
+def mixed_provider():
+    usd=dataset()
+    spy=usd["spy"]["bars"]
+    qqq=usd["qqq"]["bars"]
+    records={**usd,
+             "ief":{"bars":[{**bar,**{x:bar[x]*.82 for x in ("open","high","low","close")}}
+                            for bar in spy],"source":"Synthetic defensive proxy"},
+             "xiu":{"bars":[{**bar,**{x:bar[x]*1.15 for x in ("open","high","low","close")}}
+                            for bar in qqq],"source":"Synthetic CAD listing"}}
+    base=datetime(2026,8,1,tzinfo=timezone.utc)
+    fx={"bars":[{"time":int((base+timedelta(days=i)).timestamp()),
+                 "close":1.29+.0001*i} for i in range(100)],
+        "source":"Synthetic historical CAD per USD"}
+    return records,fx
+
+
+def test_mixed_currency_blended_minute_portfolio_uses_previous_fx_and_costs():
+    records,fx=mixed_provider()
+    params=mixed_blend_request()
+    now=datetime(2026,10,30,tzinfo=timezone.utc)
+    outcome=ipr.analyze(params,loader=lambda s,p,r:records[s],
+                        fx_loader=lambda:fx,now=now)
+    assert outcome["model"]=="blended_portfolio"
+    assert outcome["common_bars"]==12*78
+    assert outcome["metrics"]["checks"]>0
+    assert outcome["metrics"]["trades"]>0
+    assert outcome["sources"]["usdcad"]["observed_bars"]>0
+    assert any(f["symbol"]=="xiu" for f in outcome["fills"])
+    # CAD notional is converted from the last completed daily FX close.
+    params=ipr.validate_request(params)
+    shared,market,meta,_=ipr._prepare(params,lambda s,p,r:records[s],now,
+                                      fx_loader=lambda:fx)
+    assert meta["xiu"]["currency"]=="CAD"
+    sample=records["xiu"]["bars"][0]
+    # September 7 must use a rate from before September 7.
+    day=datetime.fromtimestamp(sample["time"],NY).date().isoformat()
+    rates,_=ipr._previous_session_fx(fx,now)
+    previous=max(d for d in rates if d<day)
+    assert market["xiu"][0]["open"]==pytest.approx(sample["open"]/rates[previous])
+    original_first=market["xiu"][0]["open"]
+    revised={**fx,"bars":[{**r,"close":r["close"]*5}
+                           if datetime.fromtimestamp(r["time"],timezone.utc).date().isoformat()>=day
+                           else r for r in fx["bars"]]}
+    _,revised_market,_,_=ipr._prepare(params,lambda s,p,r:records[s],now,
+                                      fx_loader=lambda:revised)
+    assert revised_market["xiu"][0]["open"]==pytest.approx(original_first)
+    zero_cost=ipr.analyze({**mixed_blend_request(),"fx_conversion_bps":0},
+                          loader=lambda s,p,r:records[s],fx_loader=lambda:fx,now=now)
+    assert outcome["metrics"]["fees"]>zero_cost["metrics"]["fees"]
+    assert outcome["metrics"]["return_pct"]<zero_cost["metrics"]["return_pct"]
+
+
+def test_mixed_cad_portfolio_requires_real_fx_and_rejects_funding_in_cad():
+    records,fx=mixed_provider()
+    params=mixed_blend_request()
+    now=datetime(2026,10,30,tzinfo=timezone.utc)
+    with pytest.raises(ValueError,match="USD/CAD"):
+        ipr.analyze(params,loader=lambda s,p,r:records[s],
+                    fx_loader=lambda:{"is_demo":True,"bars":fx["bars"]},now=now)
+    fx_stale={"bars":[{"time":int((datetime(2025,1,1,tzinfo=timezone.utc)+timedelta(days=i)).timestamp()),
+                        "close":1.3} for i in range(10)]}
+    with pytest.raises(ValueError,match="synchronized"):
+        ipr.analyze(params,loader=lambda s,p,r:records[s],
+                    fx_loader=lambda:fx_stale,now=now)
+    cad_funded={**params,"spec":{**params["spec"],"base_currency":"CAD"}}
+    with pytest.raises(HTTPException) as exc:
+        ipr.validate_request(cad_funded)
+    assert exc.value.status_code==422
+
+
+def test_mixed_cash_blend_rejected_for_signed_sleeve():
+    req=mixed_blend_request()
+    req["spec"]={**req["spec"],
+                  "sleeves":[{"model":"inverse_volatility","weight_pct":40},
+                             {"model":"market_neutral","weight_pct":60}]}
+    with pytest.raises(HTTPException) as exc:
+        ipr.validate_request(req)
+    assert exc.value.status_code==422
