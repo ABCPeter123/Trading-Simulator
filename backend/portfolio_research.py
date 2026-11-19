@@ -387,8 +387,9 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
 
 
 def _compact(metric):
-    return {k:v for k,v in metric.items()
-            if k not in ("equity_curve","executions","rebalances")}
+    return {**{k:v for k,v in metric.items()
+               if k not in ("equity_curve","executions","rebalances")},
+            "rebalance_checks":len(metric.get("rebalances",[]))}
 
 
 def _correlations(symbols, market, end):
