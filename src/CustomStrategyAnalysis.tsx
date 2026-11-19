@@ -163,9 +163,16 @@ export default function CustomStrategyAnalysis({spec,initialJob=null}: {spec:Tou
     {job?.status==="queued"&&<p className="csa-small">{l(
       "The local research worker must be running to process queued studies. Start the local app with start-local.ps1 and keep it running; this is not a live brokerage order.",
       "排队任务需要本地研究工作进程运行。请使用 start-local.ps1 启动本地程序并保持运行；这不是实际券商订单。")}</p>}
-    {job?.status==="failed"&&<p className="csa-error" role="alert">{l(
-      "The study could not complete. Check the available common historical dates, selected instruments and local market data. You can adjust the settings and rerun.",
-      "研究任务未能完成。请检查共同历史日期、所选资产和本地行情数据。可以调整设置后重新运行。")}</p>}
+    {job?.status==="failed"&&<p className="csa-error" role="alert">{
+      job.error_code==="period_statistics_failed"
+      ?l("Strategy replay completed, but historical risk statistics could not be calculated. Re-running with a different window may isolate the issue.",
+         "策略回放已完成，但历史风险指标无法计算。尝试不同时间区间有助于定位问题。")
+      :job.error_code==="primary_replay_failed"
+      ?l("The model could not execute on the selected historical sessions. Inspect allocation limits and market data coverage.",
+         "模型无法在所选历史交易日执行。请检查仓位限制和行情数据覆盖范围。")
+      :l("Historical analysis could not finish this stage. Inspect the safe failure stage shown above, and retry with a different date range if needed.",
+         "历史分析未能完成当前阶段。请查看上方的安全错误阶段，并在需要时更换时间区间重试。")
+    }</p>}
     {result&&m&&p&&<>
       <div className="csa-window"><strong>{l("Actual tested period","实际测试区间")}:</strong> {result.actual_window.start_date} – {result.actual_window.end_date} · {result.actual_window.sessions} {l("shared sessions","个共同交易日")}</div>
       <h5>{l("Performance and risk","收益与风险")}</h5>
