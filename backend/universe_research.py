@@ -97,6 +97,20 @@ def _same_basket_validation_penalty(valid,quality,control,control_quality):
     }
 
 
+def _basket_correlation_penalty(symbols,market,train_end):
+    """Training-only diversification diagnostic, no held-out return reads."""
+    correlations=pr._correlations(symbols,market,train_end)
+    pairs=[correlations[left][right]
+           for i,left in enumerate(symbols) for right in symbols[i+1:]
+           if correlations[left][right] is not None]
+    if not pairs:
+        return 0.,None
+    avg_positive=sum(max(0.,value) for value in pairs)/len(pairs)
+    # A small soft debit discourages collections of near-identical indexes,
+    # without blocking an all-equity-only or defensively hedged strategy.
+    return round(16*max(0.,avg_positive-.50),6),round(avg_positive,4)
+
+
 def _execution_cost_audit(result,market,metadata,slippage):
     """Separate cash ledger charges from adverse modeled fill-price adjustments.
 
@@ -508,6 +522,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             n=len(days);train_end=int(n*.6);test_start=int(n*.8)
             if train_end<=pr.WARMUP or test_start-train_end<50:
                 raise ValueError("Insufficient separate validation history")
+            corr_penalty,avg_positive_corr=_basket_correlation_penalty(
+                symbols,market,train_end)
             common_broker={**broker_assumptions,
                            "delay_sessions":params["delay_sessions"],
                            "rebalance_sessions":params.get("rebalance_sessions",pr.REBALANCE_SESSIONS)}
@@ -584,6 +600,10 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                            "components":{**breakdown["components"],
                                          "same_basket_underperformance_points":-benchmark_penalty},
                            "total":round(score-benchmark_penalty,4)}
+                breakdown={**breakdown,
+                           "components":{**breakdown["components"],
+                                         "training_basket_correlation_points":-corr_penalty},
+                           "total":round(score-corr_penalty,4)}
                 score=breakdown["total"]
                 validation_stress=None
                 if passes and score>-1e5 and params.get("selection_policy","return_risk")=="execution_robust":
@@ -614,7 +634,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                         if not stress_details["eligible"]:continue
                         # Only downside execution deterioration is penalized;
                         # an unexpectedly better stress outcome cannot earn bonus points.
-                        score_without_reference=score+benchmark_penalty
+                        score_without_reference=score+benchmark_penalty+corr_penalty
                         penalty=round(-.5*max(0.,score_without_reference-stress_details["total"]),6)
                         breakdown={**breakdown,
                                    "components":{**breakdown["components"],
@@ -633,6 +653,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                     ranked.append({"basket_type":label,"symbols":symbols,
                                    "model":model,"sleeves":sleeves,
                                    "validation_benchmark_advantage":benchmark_advantage,
+                                   "training_avg_positive_pair_correlation":avg_positive_corr,
                                    "score_breakdown":breakdown,"score":score,
                                    "validation_execution_stress":validation_stress,
                                    "validation_objectives":quality,
@@ -711,6 +732,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "validation_objectives":validation_quality,
             "validation_stability":item["validation_stability"],
             "validation_benchmark_advantage":item["validation_benchmark_advantage"],
+            "training_avg_positive_pair_correlation":item["training_avg_positive_pair_correlation"],
             "validation_quality_label":(
                 "benchmark_advantage" if item["validation_benchmark_advantage"] is not None
                 and item["validation_benchmark_advantage"]["beats_same_basket_return"]
