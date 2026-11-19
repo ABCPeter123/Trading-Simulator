@@ -43,7 +43,7 @@ function EquityChart({result,title}:{result:CustomPeriodResult;title:string}){
       <text x="36" y="207" fill="#bed2df" fontSize="11">{shortDate(primary[0].time)}</text>
       <text x="724" y="207" fill="#bed2df" fontSize="11" textAnchor="end">{shortDate(primary[primary.length-1].time)}</text>
     </svg>
-    <div className="csa-legend"><span className="csa-strategy-dot"/>Strategy / 策略 <span className="csa-benchmark-dot"/>Equal-weight benchmark / 等权基准</div>
+    <div className="csa-legend"><span className="csa-strategy-dot"/>Strategy / 策略 {baseline.length>0&&<><span className="csa-benchmark-dot"/>Equal-weight benchmark / 等权基准</>}</div>
   </div>;
 }
 
@@ -163,9 +163,16 @@ export default function CustomStrategyAnalysis({spec,initialJob=null}: {spec:Tou
     {job?.status==="queued"&&<p className="csa-small">{l(
       "The local research worker must be running to process queued studies. Start the local app with start-local.ps1 and keep it running; this is not a live brokerage order.",
       "排队任务需要本地研究工作进程运行。请使用 start-local.ps1 启动本地程序并保持运行；这不是实际券商订单。")}</p>}
-    {job?.status==="failed"&&<p className="csa-error" role="alert">{l(
-      "The study could not complete. Check the available common historical dates, selected instruments and local market data. You can adjust the settings and rerun.",
-      "研究任务未能完成。请检查共同历史日期、所选资产和本地行情数据。可以调整设置后重新运行。")}</p>}
+    {job?.status==="failed"&&<p className="csa-error" role="alert">{
+      job.error_code==="period_statistics_failed"
+      ?l("Strategy replay completed, but historical risk statistics could not be calculated. Re-running with a different window may isolate the issue.",
+         "策略回放已完成，但历史风险指标无法计算。尝试不同时间区间有助于定位问题。")
+      :job.error_code==="primary_replay_failed"
+      ?l("The model could not execute on the selected historical sessions. Inspect allocation limits and market data coverage.",
+         "模型无法在所选历史交易日执行。请检查仓位限制和行情数据覆盖范围。")
+      :l("Historical analysis could not finish this stage. Inspect the safe failure stage shown above, and retry with a different date range if needed.",
+         "历史分析未能完成当前阶段。请查看上方的安全错误阶段，并在需要时更换时间区间重试。")
+    }</p>}
     {result&&m&&p&&<>
       <div className="csa-window"><strong>{l("Actual tested period","实际测试区间")}:</strong> {result.actual_window.start_date} – {result.actual_window.end_date} · {result.actual_window.sessions} {l("shared sessions","个共同交易日")}</div>
       <h5>{l("Performance and risk","收益与风险")}</h5>
@@ -180,13 +187,16 @@ export default function CustomStrategyAnalysis({spec,initialJob=null}: {spec:Tou
           [l("Average invested","平均已投资比例"),pct(m.average_invested_pct)],
           [l("Trading costs","模拟交易成本"),money(m.fees)],
           [l("Trades","成交次数"),String(m.trades)],
-          [l("Equal-weight return","等权基准收益"),pct(result.benchmark.return_pct)],
-          [l("Extra-delay stress return","额外延迟压力测试收益"),pct(result.execution_stress.return_pct)],
-          [l("Return versus benchmark","相对基准收益"),pct(m.return_pct-result.benchmark.return_pct)],
+          [l("Equal-weight return","等权基准收益"),pct(result.benchmark?.return_pct)],
+          [l("Extra-delay stress return","额外延迟压力测试收益"),pct(result.execution_stress?.return_pct)],
+          [l("Return versus benchmark","相对基准收益"),pct(result.benchmark?m.return_pct-result.benchmark.return_pct:null)],
         ].map(([title,value])=><div key={title}><small>{title}</small><strong>{value}</strong></div>)}
       </div>
+      {Boolean(result.unavailable_comparisons?.length)&&<p className="csa-small" role="note">{l(
+        "The selected strategy completed, but some optional reference simulations were unavailable for these dates. Unavailable comparisons show N/A, not an estimated return.",
+        "所选策略已完成计算，但部分对照测试在该区间不可用。对应指标显示N/A，而非估算收益。")}</p>}
       <h5>{l("Historical simulated account value","历史模拟账户净值")}</h5>
-      <EquityChart result={result} title={l("Historical portfolio equity versus equal-weight benchmark","历史组合净值与等权基准")}/>
+      <EquityChart result={result} title={l("Historical portfolio equity and available equal-weight benchmark","历史组合净值及可用的等权基准")}/>
       <h5>{l("Worst observed outcomes","历史最差表现")}</h5>
       <div className="csa-kpis">
         {[

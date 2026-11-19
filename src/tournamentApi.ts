@@ -92,7 +92,8 @@ export interface CustomPeriodResult {
     warmup_sessions:number;available_start:string;available_end:string};
   model:string;research_only:boolean;
   assumptions:Record<string,string|number|boolean>;
-  metrics:CustomPeriodMetric;benchmark:CustomPeriodMetric;execution_stress:CustomPeriodMetric;
+  metrics:CustomPeriodMetric;benchmark:CustomPeriodMetric|null;execution_stress:CustomPeriodMetric|null;
+  unavailable_comparisons?:("equal_weight_benchmark"|"delayed_execution_stress")[];
   periods:{
     monthly:{month:string;ending_equity:number;return_pct:number;pnl_usd:number;observed_sessions:number}[];
     best_month:{month:string;return_pct:number;pnl_usd:number};
