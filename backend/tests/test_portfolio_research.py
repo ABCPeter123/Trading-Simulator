@@ -58,7 +58,7 @@ def test_multi_asset_portfolio_compares_five_models_and_persists(isolated):
     result=p.compare(list(SYMBOLS),max_drawdown_pct=50,data=synthetic())
     assert result["basket"]==list(SYMBOLS)
     assert len(result["groups"])>=3
-    assert len(result["candidates"])==5
+    assert len(result["candidates"])==len(p.MODELS)
     assert {c["model"] for c in result["candidates"]}==set(p.MODELS)
     assert not result["test_used_for_selection"]
     assert result["sessions"]>=450
