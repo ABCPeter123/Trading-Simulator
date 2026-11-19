@@ -6,16 +6,17 @@ with an open of the NEXT candle used for fills. No invented minute bars.
 """
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import defaultdict
 from datetime import datetime, timezone
-from math import floor, isfinite, sqrt
-from statistics import mean
+from math import floor, isfinite
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 
 from . import portfolio_research as pr
-from . import intraday
+from . import blended_portfolio_research as blended
+from . import intraday, market
 from .assets import get_instrument
 
 NY = ZoneInfo("America/New_York")
@@ -37,12 +38,17 @@ MAX_BARS = 20000
 
 def validate_request(payload):
     spec = payload["spec"]
-    if spec["model"] not in pr.MODELS:
-        raise HTTPException(422, "Intraday research currently supports cash-funded standard portfolio models only.")
-    if any(get_instrument(s).currency != "USD" or
+    if spec["model"] not in pr.MODELS and spec["model"] != "blended_portfolio":
+        raise HTTPException(422, "Intraday research supports long-only standard and blended portfolio models.")
+    if spec["model"]=="blended_portfolio":
+        try:
+            blended.validate_sleeves(spec.get("sleeves"))
+        except (ValueError,TypeError) as exc:
+            raise HTTPException(422, "Invalid cash-only blend sleeves.") from exc
+    if any(get_instrument(s).currency not in ("USD","CAD") or
            get_instrument(s).kind not in ("Stocks", "ETFs")
            for s in spec["symbols"]):
-        raise HTTPException(422, "Intraday portfolio research currently requires USD stocks and ETFs.")
+        raise HTTPException(422, "Intraday research requires USD/CAD stocks or ETFs.")
     if spec.get("base_currency", "USD") != "USD":
         raise HTTPException(422, "Use a USD research account for intraday tests; intraday CAD funding is not modeled.")
     resolution = payload.get("resolution", "5m")
@@ -50,6 +56,7 @@ def validate_request(payload):
     checks = payload.get("checks_per_day", 2)
     slippage = payload.get("slippage_bps", spec.get("slippage_bps", 8.))
     commission = payload.get("commission_usd", spec.get("commission_usd", 0.))
+    fx_bps = payload.get("fx_conversion_bps", spec.get("fx_conversion_bps", 150.))
     if resolution not in WINDOWS or period not in WINDOWS[resolution]:
         raise HTTPException(422, "Unavailable intraday resolution or provider lookback window.")
     if type(checks) is not int or checks not in CHECKS:
@@ -58,20 +65,63 @@ def validate_request(payload):
         raise HTTPException(422, "Invalid intraday slippage.")
     if type(commission) not in (int, float) or not isfinite(commission) or not 0 <= commission <= 30:
         raise HTTPException(422, "Invalid per-order commission.")
+    if type(fx_bps) not in (int,float) or not isfinite(fx_bps) or not 0 <= fx_bps <= 300:
+        raise HTTPException(422, "Invalid cross-currency conversion cost.")
     return {"spec": spec, "mode": "intraday", "resolution": resolution,
             "period": period, "checks_per_day": checks,
-            "slippage_bps": float(slippage), "commission_usd": float(commission)}
+            "slippage_bps": float(slippage), "commission_usd": float(commission),
+            "fx_conversion_bps":float(fx_bps)}
 
 
 def _time(bar):
     return datetime.fromtimestamp(int(bar["time"]), NY)
 
 
-def _prepare(params, load, now):
+
+def _previous_session_fx(fx_data, now):
+    """Daily CAD-per-USD rates; only a STRICTLY previous calendar day's close.
+
+    Dates are UTC for daily FX source and New York-local for stock trading.
+    Missing/stale observations are excluded rather than inferred.
+    """
+    if not isinstance(fx_data,dict) or fx_data.get("is_demo"):
+        raise ValueError("Verified historical USD/CAD observations required.")
+    rows=fx_data.get("bars")
+    if not isinstance(rows,list) or len(rows)<2:
+        raise ValueError("Insufficient real USD/CAD daily history.")
+    rates={}
+    last=-1
+    for bar in rows:
+        try:
+            ts=int(bar["time"])
+            rate=float(bar["close"])
+        except (KeyError,TypeError,ValueError) as exc:
+            raise ValueError("Malformed historical USD/CAD observation.") from exc
+        if ts<=last or rate<=0 or not isfinite(rate):
+            raise ValueError("Invalid or unsorted historical USD/CAD observation.")
+        last=ts
+        if ts<=now.timestamp():
+            date_key=datetime.fromtimestamp(ts,timezone.utc).date().isoformat()
+            if date_key in rates:
+                raise ValueError("Multiple FX observations per daily session.")
+            rates[date_key]=rate
+    return rates,{"source":str(fx_data.get("source") or "historical FX feed")[:120],
+                  "offline_snapshot":bool(fx_data.get("offline_cache")),
+                  "observed_bars":len(rates)}
+
+
+def _prepare(params, load, now, *, fx_loader=None):
     spec = params["spec"]
     symbols = spec["symbols"]
     arrays = {}
     sources = {}
+    currencies = {s:get_instrument(s).currency for s in symbols}
+    rates, rate_dates = {}, []
+    if any(c=="CAD" for c in currencies.values()):
+        # FX is a separate real DAILY feed; do not derive fake intraday FX.
+        raw_fx=(fx_loader or (lambda:market.history("usdcad","2Y")))()
+        rates,sources["usdcad"]=_previous_session_fx(raw_fx,now)
+        rate_dates=sorted(rates)
     for symbol in symbols:
         payload = load(symbol, params["period"], params["resolution"])
         if payload.get("is_demo"):
@@ -92,7 +142,20 @@ def _prepare(params, load, now):
             if (timestamp + STEP_SECONDS[params["resolution"]] > now.timestamp()
                     or local.weekday() > 4 or not 570 <= minute < 960):
                 continue
-            available[timestamp] = bar
+            converted=bar
+            if currencies[symbol]=="CAD":
+                day=local.date().isoformat()
+                index=bisect_left(rate_dates,day)-1
+                if index<0:
+                    continue
+                previous_day=rate_dates[index]
+                age=(local.date()-datetime.fromisoformat(previous_day).date()).days
+                if age>5:
+                    continue
+                rate=rates[previous_day]
+                converted={**bar,**{key:float(bar[key])/rate for key in
+                                   ("open","high","low","close")}}
+            available[timestamp] = converted
         arrays[symbol] = available
         sources[symbol] = {"source": str(payload.get("source", "unknown"))[:120],
                            "offline_snapshot": bool(payload.get("offline_cache")),
@@ -104,7 +167,7 @@ def _prepare(params, load, now):
     metadata = {s: {"kind": get_instrument(s).kind,
                     "group": pr._group(s, get_instrument(s).kind),
                     "spread_bps": float(get_instrument(s).spread_bps),
-                    "currency": "USD"} for s in symbols}
+                    "currency": currencies[s]} for s in symbols}
     return shared, market, metadata, sources
 
 
@@ -125,7 +188,7 @@ def _schedule(shared, checks):
     return chosen
 
 
-def _simulate(spec, shared, market, metadata, checks, slippage, commission, model):
+def _simulate(spec, shared, market, metadata, checks, slippage, commission, model, *, fx_bps=0.):
     symbols = spec["symbols"]
     closes = {s: [float(bar["close"]) for bar in market[s]] for s in symbols}
     capital = pr.STARTING_CAPITAL
@@ -149,10 +212,15 @@ def _simulate(spec, shared, market, metadata, checks, slippage, commission, mode
         opens = {s: float(market[s][i]["open"]) for s in symbols}
         if i in timestamps:
             # At candle i OPEN, only completed candles 0...i-1 may be read.
-            weights = pr._weights(model["name"], symbols, closes, i, metadata,
-                                  max_weight, gross_target=gross_target,
-                                  equity_cap=equity_cap, redistribute=redistribute,
-                                  annualization_periods=yearly_bars)
+            weights = (blended.blend_weights(
+                spec["sleeves"],symbols,closes,i,metadata,max_weight,
+                gross_target,equity_cap,redistribute,
+                annualization_periods=yearly_bars)
+                if model["name"]=="blended_portfolio" else
+                pr._weights(model["name"], symbols, closes, i, metadata,
+                            max_weight, gross_target=gross_target,
+                            equity_cap=equity_cap, redistribute=redistribute,
+                            annualization_periods=yearly_bars))
             if (set(weights) != set(symbols) or any(not isfinite(w) or w < -1e-9
                    or w > max_weight + 1e-8 for w in weights.values())
                     or sum(weights.values()) > gross_target + 1e-8):
@@ -164,13 +232,17 @@ def _simulate(spec, shared, market, metadata, checks, slippage, commission, mode
                     fill = opens[s]*(1+(1 if side=="buy" else -1)*(half_spread+slippage)/10000)
                     wanted = floor(max(0., weights[s]*total/fill))
                     delta = wanted - holdings[s]
+                    conversion = (fx_bps / 10000 if metadata[s]["currency"]=="CAD" else 0.)
                     if side=="sell":
                         qty = max(0, -delta)
                     else:
-                        qty = min(max(0, delta), floor(max(0., cash-commission-1)/fill))
+                        # Purchase budget includes currency conversion on
+                        # CAD assets; no overdraft or borrowed cash.
+                        buying_power = max(0.,cash-commission-1)
+                        qty = min(max(0,delta),floor(buying_power/(fill*(1+conversion))))
                     if qty <= 0:
                         continue
-                    fee = commission
+                    fee = commission + qty*fill*conversion
                     if side=="sell":
                         cash += qty*fill-fee
                         holdings[s] -= qty
@@ -199,25 +271,27 @@ def _simulate(spec, shared, market, metadata, checks, slippage, commission, mode
     return summary, marks, orders
 
 
-def analyze(params, *, loader=None, report=None, now=None):
+def analyze(params, *, loader=None, report=None, now=None, fx_loader=None):
     """No fitting or candidate selection; result is exploratory, not unseen proof."""
     params = validate_request(params)
     report = report or (lambda pct, stage: None)
     now = now or datetime.now(timezone.utc)
     provider = loader or intraday.replay_history
     report(5, "Loading actual provider intraday bars")
-    shared, market, meta, sources = _prepare(params, provider, now)
+    shared, market, meta, sources = _prepare(params, provider, now, fx_loader=fx_loader)
     report(60, "Replaying completed-bar portfolio decisions")
     spec = params["spec"]
     model = {"name":spec["model"], "resolution":params["resolution"]}
     selected, curve, fills = _simulate(
         spec, shared, market, meta, params["checks_per_day"],
-        params["slippage_bps"], params["commission_usd"], model)
+        params["slippage_bps"], params["commission_usd"], model,
+        fx_bps=params["fx_conversion_bps"])
     report(80, "Running same-data, same-cost constrained equal-weight control")
     benchmark, benchmark_curve, _ = _simulate(
         spec, shared, market, meta, params["checks_per_day"],
         params["slippage_bps"], params["commission_usd"],
-        {"name":"equal_weight","resolution":params["resolution"]})
+        {"name":"equal_weight","resolution":params["resolution"]},
+        fx_bps=params["fx_conversion_bps"])
     report(98, "Preparing private intraday result")
     def decimate(series):
         step = max(1, (len(series)+499)//500)
@@ -232,11 +306,12 @@ def analyze(params, *, loader=None, report=None, now=None):
         "equity_curve":decimate(curve), "benchmark_curve":decimate(benchmark_curve),
         "fills":fills[:150], "fills_total":len(fills),
         "sources":sources,
-        "execution":"Signal uses only prior completed intraday closes; fills at next shared candle open with assumed spread, slippage and commission.",
+        "execution":"Signal uses only prior completed intraday closes; next shared candle open fills include spread, slippage, commissions and CAD FX conversion when applicable.",
         "limitations":[
             "Exploratory recent-history replay, not a walk-forward selection or sealed independent audit.",
             "The selected daily model is re-evaluated on intraday BAR lookbacks. A 126-bar moving average is not a 126-day moving average.",
-            "Only synchronized observed regular-session USD stock/ETF candles are used; missing candles are not invented or forward-filled.",
+            "Only synchronized observed regular-session USD/CAD stock/ETF candles are used; missing candles are not invented or forward-filled.",
+            "CAD assets are converted using a STRICTLY previous completed daily USD/CAD FX session; 5-calendar-day max freshness and explicit FX fees. No intraday FX movements are modeled.",
             "One, two, or four allocation decisions per market day are allowed; a decision may generate no orders or several asset orders.",
             "Annualized return and Sharpe are intentionally omitted for short intraday samples.",
             "Provider minute history is restricted to its published window. Local archived candles are flagged and may be stale.",
