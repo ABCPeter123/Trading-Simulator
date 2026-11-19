@@ -145,3 +145,21 @@ def test_tournament_version_accepts_daily_and_weekly_but_rejects_invalid_cadence
         with pytest.raises(HTTPException) as exc:
             saved.validate_spec(source)
         assert exc.value.status_code==422
+
+
+
+def test_weekly_scan_import_freezes_cadence_and_replay(model_fixture):
+    with closing(tour._connection()) as conn:
+        row=conn.execute("SELECT params FROM universe_jobs WHERE id=?",("fixture-job",)).fetchone()
+        values=json.loads(row["params"])
+        values["rebalance_sessions"]=5
+        conn.execute("UPDATE universe_jobs SET params=? WHERE id=?",
+                     (json.dumps(values),"fixture-job"))
+        conn.commit()
+    version=saved.import_rank("fixture-job",1)
+    assert version["rebalance_sessions"]==5
+    result=TestClient(app).post("/api/portfolio-seasons/from-tournament",
+                                json={"strategy_id":version["id"],"period":"MAX"})
+    assert result.status_code==200,result.text
+    replay=result.json()
+    assert replay["model_strategy"]["rebalance_sessions"]==5
