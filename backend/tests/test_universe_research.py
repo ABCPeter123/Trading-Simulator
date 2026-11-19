@@ -210,3 +210,19 @@ def test_balanced_ranking_debits_unstable_validation_windows():
     assert strong["components"]["losing_validation_windows_points"]==0
     assert weak["components"]["losing_validation_windows_points"]==-16
     assert strong["total"]-weak["total"]==pytest.approx(16)
+
+
+def test_identical_training_returns_receive_diversification_debit():
+    bars=synthetic()
+    names=["spy","qqq","ief"]
+    histories={name:{"bars":bars} for name in names}
+    _,aligned,_,_=pr._prepare(names,histories)
+    debit,correlation=ur._basket_correlation_penalty(names,aligned,450)
+    assert correlation==pytest.approx(1.,abs=.0001)
+    assert debit>0
+    for name in names:
+        for bar in aligned[name][451:]:
+            bar["close"]*=.2
+    later_debit,later_corr=ur._basket_correlation_penalty(names,aligned,450)
+    assert debit==later_debit
+    assert correlation==later_corr
