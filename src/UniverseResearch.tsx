@@ -34,6 +34,10 @@ type Winner={rank:number;basket_type:string;symbols:string[];model:string;valida
   validation_objectives?:ObjectiveMetrics;held_out_objectives?:ObjectiveMetrics;
   delayed_stress_objectives?:ObjectiveMetrics;
   validation_stability?:ValidationStability;pareto_optimal_validation?:boolean;
+  validation_benchmark_advantage?:{same_basket_return_pct:number;excess_return_points:number;
+    same_basket_excess_sharpe:number|null;excess_sharpe_delta:number|null;
+    beats_same_basket_return:boolean;beats_same_basket_risk_adjusted:boolean}|null;
+  validation_quality_label?:"benchmark_advantage"|"not_yet_demonstrated";
   held_out_target_observed?:boolean;held_out_target_evaluable?:boolean;
   validation:Metric;held_out:Metric;delayed_execution_stress:Metric;restricted_research:boolean;
   short_proxy_research:boolean;research_only?:boolean;
@@ -476,11 +480,32 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 <div><small>{bilingual("Test drawdown","测试期回撤")}</small><strong>{pct(chosen.held_out.max_drawdown_pct)}</strong></div>
               </div>}
               {detailTab==="overview"&&<p className="ur-subtitle" role="note">
+                <strong>{chosen.validation_quality_label==="benchmark_advantage"
+                  ?bilingual("Validation: beat the same-basket return and Sharpe reference.","验证期：收益率和夏普比率均超越同篮子基准。")
+                  :bilingual("No demonstrated return AND Sharpe advantage over the same-basket reference.","尚未证明相对同篮子基准在收益和夏普比率上均占优。")}</strong>
+                {chosen.validation_benchmark_advantage&&<>{" "}
+                  {bilingual("Validation return difference:","验证期收益差：")}
+                  {pct(chosen.validation_benchmark_advantage.excess_return_points)}.
+                </>}
+              </p>}
+              {detailTab==="overview"&&<p className="ur-subtitle" role="note">
                 {bilingual("Historical test activity:","历史测试交易活动：")} {chosen.held_out.rebalance_checks??"N/A"} {bilingual("allocation checks,","次配置检查，")}
                 {" "}{chosen.held_out.trades} {bilingual("executed asset orders.","笔资产订单。")}
                 {" "}{bilingual("A check only trades if a target position changes.","只有目标仓位变化时才会产生交易。")}
               </p>}
               {detailTab==="validation"&&<>
+              {chosen.validation_benchmark_advantage&&<div className="ur-objective-results">
+                <h4>{bilingual("Validation advantage vs identical basket","相同资产篮子验证期超额表现")}</h4>
+                <div className="ur-kpis">
+                  <div><small>{bilingual("Selected strategy return","策略验证收益")}</small><strong>{pct(chosen.validation.return_pct)}</strong></div>
+                  <div><small>{bilingual("Equal-weight return","等权验证收益")}</small><strong>{pct(chosen.validation_benchmark_advantage.same_basket_return_pct)}</strong></div>
+                  <div><small>{bilingual("Return difference","收益差额")}</small><strong>{pct(chosen.validation_benchmark_advantage.excess_return_points)}</strong></div>
+                  <div><small>{bilingual("Excess Sharpe difference","超额夏普差")}</small><strong>{
+                    chosen.validation_benchmark_advantage.excess_sharpe_delta?.toFixed(2)??"N/A"}</strong></div>
+                </div>
+                <p>{bilingual("Ranking uses validation only. A good score is not proof of a profitable future strategy.",
+                  "排名只使用验证期数据。较高得分不代表未来策略必然盈利。")}</p>
+              </div>}
               {chosen.validation_execution_stress&&<div className="ur-objective-results">
                 <h4>{bilingual("Validation execution robustness","验证期执行稳健性")}</h4>
                 <div className="ur-kpis">
