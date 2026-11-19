@@ -427,7 +427,11 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 <div key={name}><small>{label(name)}</small><strong>{count}</strong></div>)}</div>
             </details>}
             </details>
-            <h2>{t("Top 10 research strategies")}</h2>
+            <h2>{bilingual("Validation-ranked research candidates","按验证期表现排名的研究候选策略")}</h2>
+            {result.top10.length>0&&result.top10.every(row=>row.validation_quality_label!=="benchmark_advantage")&&
+              <p className="ur-warning">{bilingual(
+                "No candidate has demonstrated both higher validation returns and higher excess Sharpe than its same-basket equal-weight control. These are research candidates, not recommended live strategies.",
+                "没有候选策略在验证期收益率及超额夏普比率上同时超过同资产组合的等权对照。这些仅为研究候选策略，不代表可直接实盘使用。")}</p>}
             <details className="ur-batch-actions"><summary>{bilingual("Save all ranked models","保存全部排名模型")}</summary>
               <button type="button" className="ur-secondary" disabled={busy||!result.top10.length}
                 onClick={()=>void importAll()}>{t("Save all top 10 strategy models")}</button>
