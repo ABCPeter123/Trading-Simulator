@@ -140,7 +140,8 @@ def _prepare(params, load, now, *, fx_loader=None):
             minute = local.hour * 60 + local.minute
             # Only completed regular-session candles. Exclude pre/post-market.
             if (timestamp + STEP_SECONDS[params["resolution"]] > now.timestamp()
-                    or local.weekday() > 4 or not 570 <= minute < 960):
+                    or local.weekday() > 4
+                    or not 570 <= minute or minute + STEP_SECONDS[params["resolution"]]//60 > 960):
                 continue
             converted=bar
             if currencies[symbol]=="CAD":
