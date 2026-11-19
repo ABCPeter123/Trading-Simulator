@@ -74,7 +74,7 @@ def test_queue_survives_browser_lifecycle_and_worker_completes(workspace):
     assert detail["status"]=="completed"
     study=CLIENT.get("/api/live/research/portfolio/runs/"+job["id"])
     assert study.status_code==200
-    assert len(study.json()["candidates"])==len(portfolio.MODELS)
+    assert len(study.json()["candidates"])==len(portfolio_research.MODELS)
     assert research_queue.process_one() is None
 
 
