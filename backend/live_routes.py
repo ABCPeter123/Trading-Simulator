@@ -260,6 +260,7 @@ def cancel_portfolio_job(job_id:str):
 class UniverseStudyBody(BaseModel):
     scope:Literal["all","etfs","stocks"]="all"
     delay_sessions:Literal[1,2]=1
+    rebalance_sessions:Literal[1,5,21]=21
     max_drawdown_pct:float=Field(default=30,ge=5,le=60)
     max_position_pct:float=Field(default=35,ge=10,le=50)
     research_objective:Literal["balanced","high_performance"]="balanced"
