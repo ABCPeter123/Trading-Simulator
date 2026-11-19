@@ -108,3 +108,17 @@ def test_tournament_expands_candidate_models_without_returning_raw_private_serie
     assert adv.SHORT_MODELS.issubset(set(universe.CANDIDATE_MODELS))
     assert "defensive_rotation" in universe.CANDIDATE_MODELS
     assert "MAX" in universe._read.__doc__ or "longest" in universe._read.__doc__
+
+
+
+def test_signed_research_respects_daily_weekly_monthly_checks():
+    symbols,market,meta=fixture()
+    checks={}
+    for cadence in (1,5,21):
+        run=adv.segment("equity_hedge",symbols,market,meta,180,222,.35,
+                        broker={"rebalance_sessions":cadence,"slippage_bps":8})
+        checks[cadence]=len(run["rebalances"])
+    assert checks=={1:42,5:9,21:2}
+    with pytest.raises(ValueError,match="rebalance cadence"):
+        adv.segment("equity_hedge",symbols,market,meta,180,222,.35,
+                    broker={"rebalance_sessions":2})
