@@ -202,16 +202,30 @@ def analyze(params, *, loader=None, report=None):
     argument=spec["sleeves"] if spec["model"]=="blended_portfolio" else spec["model"]
     metrics=segment(argument,symbols,market,metadata,start,end,
                     params["max_position_pct"]/100,broker=broker)
-    report(75,"Calculating historical risk and benchmark")
+    report(75,"Calculating historical risk statistics")
     basis=_period_metrics(metrics["equity_curve"],pr.STARTING_CAPITAL)
-    # An identical date window, cost model and per-asset cap for the baseline.
-    benchmark=pr._segment("equal_weight",symbols,market,metadata,start,end,
-                          params["max_position_pct"]/100,broker=broker)
-    # Execution-delay stress always uses a slower setup and >= 20 bps slippage.
+    # A comparison failing on this selected window must not discard a valid,
+    # already-executed primary study. Mark missing comparisons explicitly;
+    # never substitute the selected curve or invent benchmark performance.
+    unavailable=[]
+    report(81,"Calculating same-period equal-weight comparison")
+    try:
+        benchmark=pr._segment("equal_weight",symbols,market,metadata,start,end,
+                              params["max_position_pct"]/100,broker=broker)
+    except (ValueError,ArithmeticError):
+        benchmark=None
+        unavailable.append("equal_weight_benchmark")
+    # Execution-delay stress uses the same model with a slower fill and >=20bps
+    # slippage; failure is reported as unavailable, not a fabricated stress score.
+    report(88,"Calculating execution-delay stress comparison")
     stress_broker={**broker,"delay_sessions":2,
                    "slippage_bps":max(20.,params["slippage_bps"])}
-    stressed=segment(argument,symbols,market,metadata,start,end,
-                     params["max_position_pct"]/100,broker=stress_broker)
+    try:
+        stressed=segment(argument,symbols,market,metadata,start,end,
+                         params["max_position_pct"]/100,broker=stress_broker)
+    except (ValueError,ArithmeticError):
+        stressed=None
+        unavailable.append("delayed_execution_stress")
     report(95,"Preparing private period report")
     compact_keys=("return_pct","max_drawdown_pct","annualized_volatility_pct",
                   "sharpe","sortino","trades","fees","turnover_pct",
@@ -229,11 +243,12 @@ def analyze(params, *, loader=None, report=None):
                        "rebalance_sessions":spec["rebalance_sessions"],
                        "starting_capital":pr.STARTING_CAPITAL},
         "metrics":{key:metrics.get(key) for key in compact_keys},
-        "benchmark":{key:benchmark.get(key) for key in compact_keys},
-        "execution_stress":{key:stressed.get(key) for key in compact_keys},
+        "benchmark":{key:benchmark.get(key) for key in compact_keys} if benchmark is not None else None,
+        "execution_stress":{key:stressed.get(key) for key in compact_keys} if stressed is not None else None,
         "periods":basis,
         "equity_curve":metrics["equity_curve"],
-        "benchmark_curve":benchmark["equity_curve"],
+        "benchmark_curve":benchmark["equity_curve"] if benchmark is not None else [],
+        "unavailable_comparisons":unavailable,
         "fills":metrics["executions"][:200],
         "fills_total":len(metrics["executions"]),
         "sources":source,
@@ -243,5 +258,7 @@ def analyze(params, *, loader=None, report=None):
             "Actual trading outcomes can differ because of spreads, dividends, corporate actions, borrow availability, liquidity, fees, taxes and intraday price changes.",
             "All instruments are aligned to common observed sessions. A 180-session price-history warmup is required before the first simulation trade.",
             "Each custom run starts from the same virtual capital with zero positions; holdings do not carry over from a tournament segment.",
+            *([ "Equal-weight benchmark could not be simulated for this window; no reference return is reported." ] if benchmark is None else []),
+            *([ "Extra-delay execution stress could not be simulated for this window; no stress return is reported." ] if stressed is None else []),
         ],
     }
