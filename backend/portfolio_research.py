@@ -31,6 +31,7 @@ LOCK = RLock()
 MAX_SYMBOLS = 16
 STARTING_CAPITAL = 100000.0
 REBALANCE_SESSIONS = 21
+SUPPORTED_REBALANCE_SESSIONS = (1, 5, 21)  # Daily, weekly, monthly shared sessions
 WARMUP = 180
 MODELS = ("equal_weight", "inverse_volatility", "trend_filter",
           "relative_momentum", "volatility_target")
@@ -284,6 +285,9 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
     delay_sessions = int(broker.get("delay_sessions", 1))
     if delay_sessions not in (1, 2):
         raise ValueError("Supported research delay is one or two common sessions.")
+    cadence = broker.get("rebalance_sessions", REBALANCE_SESSIONS)
+    if type(cadence) is not int or cadence not in SUPPORTED_REBALANCE_SESSIONS:
+        raise ValueError("Unsupported portfolio rebalance cadence.")
     slip_bps = float(broker.get("slippage_bps", 2))
     commission = float(broker.get("commission_usd", 1))
     fx_bps = float(broker.get("fx_conversion_bps", 0))
@@ -298,7 +302,7 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
     rebalance_samples = []
     for i in range(start, stop):
         opens = {s:market[s][i]["open"] for s in symbols}
-        if (i-start)%REBALANCE_SESSIONS==0:
+        if (i-start)%cadence==0:
             signal_index=max(1,i-(delay_sessions-1))
             targets = (allocator(symbols,closes,signal_index,metadata,max_weight,
                                  gross_target,equity_cap,redistribute)
@@ -383,8 +387,9 @@ def _segment(model, symbols, market, metadata, start, stop, max_weight, *,
 
 
 def _compact(metric):
-    return {k:v for k,v in metric.items()
-            if k not in ("equity_curve","executions","rebalances")}
+    return {**{k:v for k,v in metric.items()
+               if k not in ("equity_curve","executions","rebalances")},
+            "rebalance_checks":len(metric.get("rebalances",[]))}
 
 
 def _correlations(symbols, market, end):

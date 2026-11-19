@@ -180,6 +180,7 @@ def analyze(params, *, loader=None, report=None):
     report(60,"Executing strategy with historical opening prices")
     broker={**universe.COST_ASSUMPTIONS,
             "delay_sessions":params["delay_sessions"],
+            "rebalance_sessions":spec["rebalance_sessions"],
             "slippage_bps":params["slippage_bps"],
             "base_currency":params["base_currency"],
             "commission_usd":params["commission_usd"],
@@ -217,7 +218,7 @@ def analyze(params, *, loader=None, report=None):
         "model":spec["model"],"sleeves":spec.get("sleeves"),
         "research_only":spec["model"] in adv.RESEARCH_ONLY or spec["model"]=="blended_portfolio",
         "assumptions":{**broker,"max_position_pct":params["max_position_pct"],
-                       "rebalance_sessions":pr.REBALANCE_SESSIONS,
+                       "rebalance_sessions":spec["rebalance_sessions"],
                        "starting_capital":pr.STARTING_CAPITAL},
         "metrics":{key:metrics.get(key) for key in compact_keys},
         "benchmark":{key:benchmark.get(key) for key in compact_keys},

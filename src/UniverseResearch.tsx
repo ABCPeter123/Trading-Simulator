@@ -7,7 +7,7 @@ import type {TournamentModelSpec} from "./TournamentStrategyInspector";
 import {useI18n} from "./i18n";
 import "./universeResearch.css";
 
-type Metric={return_pct:number;max_drawdown_pct:number;trades:number;fees:number;turnover_pct:number;
+type Metric={return_pct:number;max_drawdown_pct:number;trades:number;rebalance_checks?:number;fees:number;turnover_pct:number;
   sharpe?:number|null;sortino?:number|null;annualized_volatility_pct?:number|null;
   peak_gross_leverage?:number;margin_interest?:number;short_borrow_cost?:number;
   margin_calls?:number;short_executions?:number;average_gross_exposure_pct?:number};
@@ -56,7 +56,7 @@ type Outcome={universe_count:number;eligible_count:number;excluded_count:number;
   shortlist_is_global_top_ten?:boolean};
 type Job={id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";created_at:string;
   progress:number;stage:string;scanned:number;eligible:number;error_code:string|null;
-  params:{scope:string;delay_sessions:1|2;max_drawdown_pct:number;max_position_pct:number;
+  params:{scope:string;delay_sessions:1|2;rebalance_sessions?:1|5|21;max_drawdown_pct:number;max_position_pct:number;
     research_objective?:"balanced"|"high_performance";target_cagr_pct?:number;
     target_sharpe?:number;risk_free_pct?:number;
     target_investment_pct?:number;equity_class_cap_pct?:number;
@@ -74,6 +74,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   const bilingual=(en:string,cn:string)=>locale==="zh-CN"?cn:en;
   const [scope,setScope]=useState<"all"|"etfs"|"stocks">("all");
   const [delay,setDelay]=useState<1|2>(1);
+  const [rebalance,setRebalance]=useState<1|5|21>(5);
   const [baseCurrency,setBaseCurrency]=useState<"USD"|"CAD">("USD");
   const [slippage,setSlippage]=useState("8");
   const [commission,setCommission]=useState("0");
@@ -140,7 +141,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
       const commission_usd=validatedPercent(commission,"Commission in USD",0,30);
       const fx_conversion_bps=validatedPercent(fxBps,"FX conversion in basis points",0,300);
       const job=await request<Job>("/live/research/universe/jobs",{method:"POST",
-        body:JSON.stringify({scope,delay_sessions:delay,
+        body:JSON.stringify({scope,delay_sessions:delay,rebalance_sessions:rebalance,
           max_drawdown_pct,max_position_pct,research_objective:objective,
           base_currency:baseCurrency,slippage_bps,commission_usd,fx_conversion_bps,
           include_blends:includeBlends,basket_search:basketSearch,
@@ -231,7 +232,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     commission_usd:active.params.commission_usd??0,
     fx_conversion_bps:active.params.fx_conversion_bps??150,
     max_position_pct:active.params.max_position_pct,
-    delay_sessions:active.params.delay_sessions,rebalance_sessions:21,
+    delay_sessions:active.params.delay_sessions,rebalance_sessions:active.params.rebalance_sessions??21,
     restricted_research:chosen.restricted_research,
     short_proxy_research:chosen.short_proxy_research,
     research_only:chosen.research_only,
@@ -272,6 +273,13 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
           </select></label>
         <label>{t("Maximum validation drawdown (%)")}
           <input type="number" min="5" max="60" value={drawdown} onChange={e=>setDrawdown(e.target.value)}/></label>
+        <label>{bilingual("Rebalance frequency","再平衡频率")}
+          <select value={rebalance} onChange={event=>setRebalance(Number(event.target.value) as 1|5|21)}>
+            <option value={1}>{bilingual("Daily · every trading session","每日 · 每个交易日")}</option>
+            <option value={5}>{bilingual("Weekly · every 5 sessions","每周 · 每5个交易日")}</option>
+            <option value={21}>{bilingual("Monthly · every 21 sessions","每月 · 每21个交易日")}</option>
+          </select></label>
+        <p className="ur-subtitle">{bilingual("An evaluation is not necessarily a trade. Daily candles allow at most one portfolio rebalance check per session, not intraday trading.","评估机会不等于实际成交。日线数据最多支持每个交易日检查一次组合再平衡，不属于日内交易。")}</p>
         <label>{t("Maximum position weight (%)")}
           <input type="number" min="10" max="50" value={weight} onChange={e=>setWeight(e.target.value)}/></label>
         <details className="ur-advanced">
@@ -467,6 +475,11 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 <div><small>{bilingual("Unseen test return","未见测试期收益")}</small><strong>{pct(chosen.held_out.return_pct)}</strong></div>
                 <div><small>{bilingual("Test drawdown","测试期回撤")}</small><strong>{pct(chosen.held_out.max_drawdown_pct)}</strong></div>
               </div>}
+              {detailTab==="overview"&&<p className="ur-subtitle" role="note">
+                {bilingual("Historical test activity:","历史测试交易活动：")} {chosen.held_out.rebalance_checks??"N/A"} {bilingual("allocation checks,","次配置检查，")}
+                {" "}{chosen.held_out.trades} {bilingual("executed asset orders.","笔资产订单。")}
+                {" "}{bilingual("A check only trades if a target position changes.","只有目标仓位变化时才会产生交易。")}
+              </p>}
               {detailTab==="validation"&&<>
               {chosen.validation_execution_stress&&<div className="ur-objective-results">
                 <h4>{bilingual("Validation execution robustness","验证期执行稳健性")}</h4>
@@ -525,7 +538,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               </>}
               {detailTab==="overview"&&<>
               <p>{t(chosen.research_only?"Synthetic research model":"Executable allocation model")}: {label(chosen.model)} · {active?.params.max_position_pct}% {t("Maximum position weight (%)")} ·
-                {t("Every 21 common sessions")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
+                {bilingual("Every","每")} {active?.params.rebalance_sessions??21} {bilingual("shared sessions","个共同交易日")} · {active?.params.delay_sessions} {t("session execution delay")}</p>
               <div className="ur-actions">
                 {chosen.research_only?
                   <button type="button" className="ur-primary" disabled={busy}

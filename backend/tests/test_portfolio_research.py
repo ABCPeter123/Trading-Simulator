@@ -195,3 +195,23 @@ def test_reit_and_bitcoin_etf_use_exposure_group_caps(isolated):
     assert p._group("ibit","ETFs")=="crypto"
     assert p.GROUP_CAPS["real_estate"]<=.2
     assert p.GROUP_CAPS["crypto"]<=.1
+
+
+
+def test_rebalance_cadence_changes_check_frequency_without_intraday_fills(isolated):
+    symbols=["spy","ief","gld"]
+    days, market, meta, _ = p._prepare(symbols, synthetic())
+    reports={}
+    for cadence in (1,5,21):
+        run=p._segment("equal_weight",symbols,market,meta,180,222,.35,
+                       broker={"rebalance_sessions":cadence,"slippage_bps":8.,
+                               "commission_usd":0.,"base_currency":"USD"})
+        reports[cadence]=run
+        assert len(run["rebalances"])==(42+cadence-1)//cadence
+        assert all(t["execution"]=="next_session_open" for t in run["executions"])
+    assert len(reports[1]["rebalances"])>len(reports[5]["rebalances"])>len(reports[21]["rebalances"])
+    # More decisions need not imply more trades; actual target changes determine orders.
+    for invalid in (0,2,3,True,1.0):
+        with pytest.raises(ValueError,match="rebalance cadence"):
+            p._segment("equal_weight",symbols,market,meta,180,222,.35,
+                       broker={"rebalance_sessions":invalid})

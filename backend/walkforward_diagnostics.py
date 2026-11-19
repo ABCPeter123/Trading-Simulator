@@ -96,6 +96,7 @@ def baseline_comparison(selected, symbols, market, metadata, start, stop,
             "fx_conversion_bps":settings["fx_conversion_bps"],
             "slippage_bps":settings["slippage_bps"],
             "delay_sessions":settings["spec"]["delay_sessions"],
+            "rebalance_sessions":settings["spec"].get("rebalance_sessions",portfolio.REBALANCE_SESSIONS),
             "target_investment_pct":95.,
             "equity_class_cap_pct":70.,
             "redistribute_excess":False}

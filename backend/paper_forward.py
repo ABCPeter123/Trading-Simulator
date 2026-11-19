@@ -579,7 +579,7 @@ def _advance(c, row, days, market, meta, fx_rates, at):
             row["status"]="paused"
             row["last_error"]="Paper drawdown stop reached. Inspect the paper ledger."
             break
-        if state["since_signal"]>=REBALANCE and state["pending"] is None:
+        if state["since_signal"]>=config.get("rebalance_sessions",REBALANCE) and state["pending"] is None:
             known={s:[b["close"] for b in market[s][:index+1]] for s in symbols}
             state["pending"]={"weights":_safe_targets(config,symbols,known,meta,index+1),
                               "remaining":config["delay_sessions"],

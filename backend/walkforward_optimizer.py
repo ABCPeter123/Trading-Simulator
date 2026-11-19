@@ -106,6 +106,7 @@ def candidates(spec, width="focused"):
                   "sleeves":blended.validate_sleeves(spec["sleeves"]),
                   "max_position_pct":cap,
                   "delay_sessions":spec["delay_sessions"],
+                  "rebalance_sessions":spec["rebalance_sessions"],
                   "target_investment_pct":base_target,
                   "equity_class_cap_pct":base_equity,
                   "redistribute_excess":base_redistribute}
@@ -120,7 +121,8 @@ def candidates(spec, width="focused"):
             if key in seen:continue
             seen.add(key)
             config={"model":model,"max_position_pct":variant[0],
-                    "delay_sessions":spec["delay_sessions"]}
+                    "delay_sessions":spec["delay_sessions"],
+                    "rebalance_sessions":spec["rebalance_sessions"]}
             if model in pr.MODELS:
                 config.update(target_investment_pct=variant[1],
                               equity_class_cap_pct=variant[2],
@@ -136,6 +138,7 @@ def candidates(spec, width="focused"):
                        "sleeves":[{"model":m,"weight_pct":w} for m,w in mix],
                        "max_position_pct":variant[0],
                        "delay_sessions":spec["delay_sessions"],
+                       "rebalance_sessions":spec["rebalance_sessions"],
                        "target_investment_pct":variant[1],
                        "equity_class_cap_pct":variant[2],
                        "redistribute_excess":variant[3]}
@@ -147,6 +150,7 @@ def _execute(config,symbols,market,metadata,start,end,slippage,settings=None):
             **{key:settings[key] for key in ("base_currency","commission_usd","fx_conversion_bps")
                if settings is not None and key in settings},
             "delay_sessions":config["delay_sessions"],
+            "rebalance_sessions":config.get("rebalance_sessions",pr.REBALANCE_SESSIONS),
             "slippage_bps":slippage}
     if config["model"] in pr.MODELS or config["model"]=="blended_portfolio":
         broker.update(target_investment_pct=config["target_investment_pct"],

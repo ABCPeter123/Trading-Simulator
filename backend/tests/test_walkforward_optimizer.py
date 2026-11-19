@@ -369,3 +369,13 @@ def test_original_source_reference_uses_exact_updated_training_gates():
     assert tournament_reference.training_eligibility(
         snapshot,scoring,cfg,{"cagr_pct":12.}
     )=="qualified"
+
+
+
+def test_walkforward_inherits_source_cadence_in_every_candidate():
+    source=spec()
+    source["rebalance_sessions"]=5
+    validated=optimizer.validate_request({"spec":source})
+    configs=list(optimizer.candidates(validated["spec"],"focused"))
+    assert configs and all(c["rebalance_sessions"]==5 for c in configs)
+    assert all("delay_sessions" in c for c in configs)

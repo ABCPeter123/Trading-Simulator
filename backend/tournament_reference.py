@@ -24,6 +24,7 @@ def source_config(spec):
         "model":spec["model"],
         "max_position_pct":spec["max_position_pct"],
         "delay_sessions":spec["delay_sessions"],
+        "rebalance_sessions":spec["rebalance_sessions"],
     }
     if candidate["model"] in portfolio.MODELS or candidate["model"]=="blended_portfolio":
         candidate.update({

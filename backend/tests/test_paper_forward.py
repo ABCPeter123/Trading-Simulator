@@ -211,3 +211,24 @@ def test_private_http_endpoints_and_demo_isolation(isolated,monkeypatch):
     denied_create=client.post("/api/live/research/paper-forward",
                    json={"job_id":"synthetic-5"})
     assert denied_create.status_code==403
+
+
+
+def test_forward_paper_preserves_weekly_cadence_across_new_observed_sessions(isolated,monkeypatch):
+    def job(_):
+        source=paper_job()
+        source["result"]["final_audit"]["selected"]["rebalance_sessions"]=5
+        return source
+    monkeypatch.setattr(paper.walkforward_queue,"get_job",job)
+    created=paper.create("synthetic-weekly",now=asof(510),loader=provider(510))
+    assert created["pending_execution"] is True
+    for count in range(511,515):
+        paper.process_one(created["id"],now=asof(count),loader=provider(count))
+        assert paper.get_study(created["id"])["pending_execution"] is False
+    paper.process_one(created["id"],now=asof(515),loader=provider(515))
+    queued=paper.get_study(created["id"])
+    assert queued["pending_execution"] is True
+    assert queued["observed_sessions"]==5
+    repeated=paper.process_one(created["id"],now=asof(515),loader=provider(515))
+    assert repeated["observed_sessions"]==5
+    assert repeated["pending_execution"] is True

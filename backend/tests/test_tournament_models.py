@@ -130,3 +130,36 @@ def test_live_rejects_undercapped_model_instead_of_changing_its_rules(model_fixt
         live.deploy(version["id"],max_allocation_pct=10,max_daily_signals=20)
     assert err.value.status_code==422
     assert "position cap" in err.value.detail
+
+
+
+def test_tournament_version_accepts_daily_and_weekly_but_rejects_invalid_cadence():
+    source={"version":1,"model":"equal_weight","symbols":["spy","qqq"],
+            "max_position_pct":35,"delay_sessions":1,"rebalance_sessions":21,
+            "restricted_research":False,"short_proxy_research":False}
+    for cadence in (1,5,21):
+        source["rebalance_sessions"]=cadence
+        assert saved.validate_spec(source)["rebalance_sessions"]==cadence
+    for cadence in (0,2,True,1.5):
+        source["rebalance_sessions"]=cadence
+        with pytest.raises(HTTPException) as exc:
+            saved.validate_spec(source)
+        assert exc.value.status_code==422
+
+
+
+def test_weekly_scan_import_freezes_cadence_and_replay(model_fixture):
+    with closing(tour._connection()) as conn:
+        row=conn.execute("SELECT params FROM universe_jobs WHERE id=?",("fixture-job",)).fetchone()
+        values=json.loads(row["params"])
+        values["rebalance_sessions"]=5
+        conn.execute("UPDATE universe_jobs SET params=? WHERE id=?",
+                     (json.dumps(values),"fixture-job"))
+        conn.commit()
+    version=saved.import_rank("fixture-job",1)
+    assert version["rebalance_sessions"]==5
+    result=TestClient(app).post("/api/portfolio-seasons/from-tournament",
+                                json={"strategy_id":version["id"],"period":"MAX"})
+    assert result.status_code==200,result.text
+    replay=result.json()
+    assert replay["model_strategy"]["rebalance_sessions"]==5

@@ -73,3 +73,27 @@ FX conversion, and financing where applicable.
 Optimization targets do not imply a forecast, statistical confidence,
 or an achievable future return. Never describe a high research score as
 a trading recommendation without forward evaluation.
+
+
+## Portfolio rebalance frequency
+
+The Strategy Tournament Test Ground now supports **daily (1)**, **weekly (5)**
+and **monthly (21)** shared-session rebalance checks. The UI defaults to weekly
+for **new** scans. Previously saved scans and imported strategies keep their
+original 21-session cadence unless a new study is explicitly created.
+
+The selected cadence travels with each private tournament strategy version
+and its subsequent date-scoped study, historical replay, walk-forward
+selection, forward-paper ledger or compatible live monitoring. Daily bars
+support at most one new portfolio allocation decision for each completed
+session; a check can produce zero orders when target weights do not change.
+The number of executed orders is not a user-specified trading quota.
+
+The engine continues to use **completed daily closes** and modeled **next
+open / second next open** fills, with configurable slippage, FX and commissions.
+Neither a daily cadence nor several individual asset orders during a daily
+rebalance represents an intraday multi-signal strategy. Intraday portfolio
+backtesting requires synchronized 15-minute/hourly data, appropriately lagged
+features and independent fill and liquidity assumptions before it can be
+presented as tested. Higher cadence increases possible turnover and modeled
+costs; compare candidates on identical assumptions.
