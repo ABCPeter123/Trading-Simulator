@@ -651,6 +651,17 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         except (HTTPException,ValueError,ArithmeticError,TypeError,KeyError) as exc:
             discarded.append({"basket":label,"reason":type(exc).__name__})
     ranked.sort(key=lambda x:(-x["score"],x["basket_type"],x["model"]))
+    # An identical set of symbols and sleeve rules cannot count as multiple
+    # independent candidates just because two basket-screening labels found it.
+    unique=[];keys=set()
+    for row in ranked:
+        identifier=(tuple(sorted(row["symbols"])),row["model"],
+                    tuple((sleeve["model"],sleeve["weight_pct"])
+                          for sleeve in row["sleeves"] or []))
+        if identifier in keys:continue
+        keys.add(identifier)
+        unique.append(row)
+    ranked=unique
     # The Pareto frontier is diagnostic only. Neither it nor the held-out test
     # can override the explicitly validation-only ranking.
     if mode=="high_performance":
