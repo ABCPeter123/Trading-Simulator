@@ -28,6 +28,7 @@ def cash_cost_counterfactual(config, selected_train, symbols, market, metadata,
               "fx_conversion_bps": settings["fx_conversion_bps"],
               "slippage_bps": settings["slippage_bps"],
               "delay_sessions": config["delay_sessions"],
+              "rebalance_sessions": config.get("rebalance_sessions",portfolio.REBALANCE_SESSIONS),
               "target_investment_pct": 95.,
               "equity_class_cap_pct": 70.,
               "redistribute_excess": False}
