@@ -146,3 +146,50 @@ def test_tournament_queue_preserves_weekly_cadence_and_rejects_unsupported(isola
         res=client.post("/api/live/research/universe/jobs",json={
             "scope":"all","rebalance_sessions":bad})
         assert res.status_code==422
+
+
+
+def test_validation_penalty_prefers_same_basket_outperformance():
+    control={"return_pct":14.}
+    ref={"excess_sharpe":.72}
+    weak={"return_pct":8.}
+    quality={"excess_sharpe":.41}
+    penalty,detail=ur._same_basket_validation_penalty(weak,quality,control,ref)
+    assert penalty>6.
+    assert detail["excess_return_points"]==-6.
+    assert detail["excess_sharpe_delta"]==pytest.approx(-.31)
+    assert not detail["beats_same_basket_return"]
+    assert not detail["beats_same_basket_risk_adjusted"]
+    improved,better=ur._same_basket_validation_penalty(
+        {"return_pct":20.},{"excess_sharpe":1.1},control,ref)
+    assert improved==0.
+    assert better["beats_same_basket_return"]
+    assert better["beats_same_basket_risk_adjusted"]
+    missing,info=ur._same_basket_validation_penalty(weak,quality,None,None)
+    assert missing==0. and info is None
+
+
+def test_actual_shortlist_is_global_validation_top_ten_only(isolated,monkeypatch):
+    """Ranking cannot reserve low-score families or peek at held-out prices."""
+    initial=synthetic()
+    changed=[dict(bar) for bar in initial]
+    for bar in changed[int(len(changed)*.81):]:
+        bar["open"]*=.75
+        bar["close"]*=.75
+        bar["high"]*=.75
+        bar["low"]*=.75
+    symbols=["spy","qqq","ief","gld","vti","xlp"]
+    monkeypatch.setattr(ur,"_universe",lambda _:symbols)
+    def scan(rows):
+        return ur.run_study({"scope":"all","delay_sessions":1,
+            "max_drawdown_pct":60,"max_position_pct":40},
+            loader=lambda _:{"bars":rows,"source":"Independent synthetic fixture"})
+    before=scan(initial)
+    after=scan(changed)
+    assert before["shortlist_is_global_top_ten"] is True
+    assert [(x["model"],x["symbols"],x["validation_score"])
+            for x in before["top10"]]==[
+            (x["model"],x["symbols"],x["validation_score"])
+            for x in after["top10"]]
+    assert all(x["score_breakdown"]["components"][
+        "same_basket_underperformance_points"]<=0 for x in before["top10"])
