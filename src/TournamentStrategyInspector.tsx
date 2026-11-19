@@ -1,5 +1,6 @@
 import {useI18n} from "./i18n";
 import CustomStrategyAnalysis from "./CustomStrategyAnalysis";
+import IntradayPortfolioResearch from "./IntradayPortfolioResearch";
 import WalkForwardOptimizer from "./WalkForwardOptimizer";
 import type {CustomPeriodJob} from "./tournamentApi";
 import {MODEL_EXPLANATIONS,explanationText} from "./strategyNarratives";
@@ -220,6 +221,7 @@ export default function TournamentStrategyInspector({
       <summary>{l("Historical period analysis","历史区间分析")}</summary>
       <CustomStrategyAnalysis spec={spec} initialJob={researchStudy}/>
     </details>
+    {context==="research"&&<IntradayPortfolioResearch spec={spec}/>}
     {context==="research"&&<WalkForwardOptimizer spec={spec}/>}
   </section>;
 }
