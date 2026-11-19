@@ -98,6 +98,9 @@ def segment(model,symbols,market,metadata,start,stop,max_weight,*,broker=None):
     broker=broker or {}
     delay=int(broker.get("delay_sessions",1))
     if delay not in (1,2):raise ValueError("Unsupported fill delay")
+    cadence=broker.get("rebalance_sessions",pr.REBALANCE_SESSIONS)
+    if type(cadence) is not int or cadence not in pr.SUPPORTED_REBALANCE_SESSIONS:
+        raise ValueError("Unsupported research rebalance cadence")
     slip=float(broker.get("slippage_bps",8))
     commission=float(broker.get("commission_usd",0))
     fx_bps=float(broker.get("fx_conversion_bps",0))
@@ -120,7 +123,7 @@ def segment(model,symbols,market,metadata,start,stop,max_weight,*,broker=None):
         opens={s:float(market[s][i]["open"]) for s in symbols}
         closed={s:float(market[s][i]["close"]) for s in symbols}
         marked=lambda prices: cash+sum(qty[s]*prices[s] for s in symbols)
-        if not stopped and ((i-start)%pr.REBALANCE_SESSIONS==0 or liquidate):
+        if not stopped and ((i-start)%cadence==0 or liquidate):
             if liquidate:
                 desired={s:0. for s in symbols}
                 margin_calls+=1
