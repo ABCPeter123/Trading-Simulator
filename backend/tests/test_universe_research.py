@@ -140,7 +140,7 @@ def test_tournament_queue_preserves_weekly_cadence_and_rejects_unsupported(isola
         "scope":"all","rebalance_sessions":5})
     assert post.status_code==202,post.text
     assert post.json()["params"]["rebalance_sessions"]==5
-    for bad in (0,2,3,22,True):
+    for bad in (0,2,3,22,True,1.0):
         res=client.post("/api/live/research/universe/jobs",json={
             "scope":"all","rebalance_sessions":bad})
         assert res.status_code==422
