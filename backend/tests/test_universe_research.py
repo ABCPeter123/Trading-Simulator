@@ -187,6 +187,10 @@ def test_actual_shortlist_is_global_validation_top_ten_only(isolated,monkeypatch
     before=scan(initial)
     after=scan(changed)
     assert before["shortlist_is_global_top_ten"] is True
+    keys=[(tuple(sorted(x["symbols"])),x["model"],
+           tuple((v["model"],v["weight_pct"]) for v in x["sleeves"] or []))
+          for x in before["top10"]]
+    assert len(keys)==len(set(keys))
     assert [(x["model"],x["symbols"],x["validation_score"])
             for x in before["top10"]]==[
             (x["model"],x["symbols"],x["validation_score"])
