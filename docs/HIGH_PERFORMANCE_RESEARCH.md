@@ -158,7 +158,10 @@ replayed using the same shared cash, dates, position limits and estimated
 trading costs. A candidate that lags that control in return or excess
 Sharpe receives an inspectable soft ranking penalty. The penalty does
 not read from held-out dates. Balanced research also penalizes losing
-validation subwindows, instead of relying on overall return alone.
+validation subwindows, instead of relying on overall return alone. Baskets of
+highly correlated instruments receive a small additional debit computed from
+**training-only** realized pairwise daily returns; this does not guarantee
+future diversification or cover issuer/factor overlap.
 
 The displayed **Top 10** now means the actual ten highest validation
 scores, not a forced one-per-family shortlist. A separate explicit
