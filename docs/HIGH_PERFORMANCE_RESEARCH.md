@@ -97,3 +97,40 @@ backtesting requires synchronized 15-minute/hourly data, appropriately lagged
 features and independent fill and liquidity assumptions before it can be
 presented as tested. Higher cadence increases possible turnover and modeled
 costs; compare candidates on identical assumptions.
+
+## Intraday portfolio research with observed minute candles
+
+**Strategy Tournament → selected strategy → Walk-forward & tools → Intraday
+portfolio test** opens a separate, private, durable historical study. It uses
+actual recorded provider candles via `backend/intraday.py`, with:
+
+- **1 minute:** up to 7 calendar days.
+- **5 or 15 minutes:** up to 60 calendar days.
+- **1 hour:** up to 2 years, subject to what the provider actually returns.
+- **One, two, or four** shared portfolio allocation checks per market day, at
+  regular US-session times. One allocation check can yield multiple orders or
+  no order when portfolio targets are unchanged.
+
+Only USD cash-funded stocks/ETFs and the five standard long-only portfolio
+allocation models are supported in this first release. Short-share, margin,
+blended portfolios, CAD funding and cross-exchange asynchronous price paths
+are explicitly rejected rather than silently rerouted through the daily engine.
+
+At the opening of a shared intraday candle, the selected allocation model
+observes **only prior completed shared closes**. It computes target cash
+positions on those observed bars and simulates sells then buys at the current
+candle's provider open, plus estimated spread, slippage and commission.
+The baseline uses an identical basket, cash ledger, timestamps, limits,
+decision cadence and execution costs. Missing per-asset candle timestamps are
+not forward-filled, and partial/uncompleted bars are excluded. The report
+records source names, offline-cache provenance, common-bar coverage, full
+realized order count, drawdown, turnover, fees and account-value paths.
+
+Important: this re-evaluates **intraday bar-period indicators**, not the
+unchanged daily strategy. For example, the trend filter's 126-period moving
+average becomes 126 intraday bars, not 126 days. It is **exploratory research**,
+not a new walk-forward optimizer, sealed audit, live trading signal or
+validated intraday market-impact model. Annual CAGR and Sharpe are deliberately
+not reported for short intraday samples. The existing historical daily
+tournament and paper-forward results stay separate and unchanged. The
+simulator never places real broker orders.
