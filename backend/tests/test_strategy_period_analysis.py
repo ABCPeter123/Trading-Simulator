@@ -147,3 +147,51 @@ def test_engine_risk_caps_and_reallocation_do_not_bypass_signal():
     rejected=portfolio._weights("trend_filter",symbols,closes,180,meta,.5,
                                 gross_target=1,equity_cap=1,redistribute=True)
     assert all(x==0 for x in rejected.values())
+
+
+def test_benchmark_replay_failure_preserves_primary_backtest(offline,monkeypatch):
+    original=portfolio._segment
+    def fail_reference(model,*args,**kwargs):
+        if model=="equal_weight":
+            raise ValueError("Synthetic reference ledger failure")
+        return original(model,*args,**kwargs)
+    monkeypatch.setattr(portfolio,"_segment",fail_reference)
+    request=base_request()
+    request["spec"]=fixture_spec("trend_filter")
+    result=analysis.analyze(request)
+    assert result["metrics"]["return_pct"] is not None
+    assert result["periods"]["monthly"]
+    assert result["benchmark"] is None
+    assert result["benchmark_curve"]==[]
+    assert result["execution_stress"] is not None
+    assert result["unavailable_comparisons"]==["equal_weight_benchmark"]
+    assert any("not" in line.lower() for line in result["limitations"])
+
+
+def test_extra_delay_failure_does_not_erase_valid_historical_result(offline,monkeypatch):
+    original=portfolio._segment
+    def fail_stress(model,*args,**kwargs):
+        if kwargs.get("broker",{}).get("delay_sessions")==2:
+            raise ValueError("Synthetic delayed comparison unavailable")
+        return original(model,*args,**kwargs)
+    monkeypatch.setattr(portfolio,"_segment",fail_stress)
+    result=analysis.analyze(base_request())
+    assert result["metrics"]["return_pct"] is not None
+    assert result["benchmark"] is not None
+    assert result["benchmark_curve"]
+    assert result["execution_stress"] is None
+    assert result["unavailable_comparisons"]==["delayed_execution_stress"]
+
+
+def test_failed_period_study_identifies_safe_phase_without_leaking_exception(offline,monkeypatch):
+    def fail_metrics(*_):
+        raise ValueError("Owner-specific synthetic payload must never reach the response")
+    monkeypatch.setattr(analysis,"_period_metrics",fail_metrics)
+    queued=TestClient(app).post("/api/live/research/strategy-period/jobs",
+                                json=base_request())
+    assert queued.status_code==202,queued.text
+    finished=queue.process_one()
+    assert finished["status"]=="failed"
+    assert finished["error_code"]=="period_statistics_failed"
+    assert finished["stage"]=="Historical risk statistics failed"
+    assert "Owner-specific" not in str(finished)
