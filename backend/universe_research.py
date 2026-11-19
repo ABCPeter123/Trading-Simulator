@@ -598,7 +598,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                         if not stress_details["eligible"]:continue
                         # Only downside execution deterioration is penalized;
                         # an unexpectedly better stress outcome cannot earn bonus points.
-                        penalty=round(-.5*max(0.,score-stress_details["total"]),6)
+                        score_without_reference=score+(penalty if benchmark_advantage is not None else 0.)
+                        penalty=round(-.5*max(0.,score_without_reference-stress_details["total"]),6)
                         breakdown={**breakdown,
                                    "components":{**breakdown["components"],
                                                  "execution_stress_points":penalty},
