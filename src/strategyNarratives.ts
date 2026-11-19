@@ -73,6 +73,28 @@ export const MODEL_EXPLANATIONS:Record<string,ModelExplanation>={
     ],
     caveat:b("The 12% figure is a target based on past price changes, not a volatility guarantee. Sudden losses and overnight gaps can exceed the estimate.","12%是依据历史价格变化估计的目标，而非波动率保证。突发亏损和隔夜跳空可能超出估计。"),
   },
+  adaptive_momentum:{
+    name:b("Adaptive Momentum","自适应动量"),
+    goal:b("Combine positive absolute trends with ranked recent strength, investing in a limited group of leaders or qualifying defensive assets.","结合正向绝对趋势与近期相对强度，选择少量强势资产，必要时配置符合趋势条件的防御资产。"),
+    steps:[
+      s("Compute strength","计算综合动量","Use 22-, 64- and 127-session past-price returns, weighted 35%, 40% and 25%. Only completed candles up to the previous close are visible.","使用过去22、64、127个交易时段的涨跌幅，权重依次为35%、40%、25%。信号只读取前一根及更早的已完成K线。"),
+      s("Demand positive trend","要求正向趋势","An instrument must show positive composite momentum and a last completed close above its prior 100-bar mean. Select the strongest qualifying assets, normally two to six depending on basket size.","资产必须具有正综合动量，并且最近已完成的收盘价高于此前100根K线均值。根据篮子大小，通常选择最强的2至6个合格资产。"),
+      s("Fallback to defensives","转向防御资产","When no asset qualifies, consider actual bond or commodity assets above their 100-bar mean. Without such assets, hold cash. No synthetic hedge prices are created.","若无合格资产，则考虑真实存在且价格高于100根K线均值的债券或商品资产；否则持有现金。不会生成虚构的对冲价格。"),
+      s("Size and cap","权重与上限","Allocate inversely to recent 60-bar volatility. Apply configured total investment, single-asset and asset-class caps, leaving unused capacity in cash unless redistribution was enabled.","根据最近60根K线波动率倒数分配资金。执行总投资、单项资产和资产类别上限；未启用重新分配时剩余部分保留现金。"),
+    ],
+    caveat:b("Momentum can reverse sharply. The defensive fallback is backward-looking, not guaranteed to hedge equity losses; intraday use measures lookbacks in bars, not days.","动量可能快速反转。防御性选择基于历史数据，无法保证抵消股票损失；日内周期的回看长度以K线根数计算，而非天数。"),
+  },
+  pullback_in_trend:{
+    name:b("Pullback in Trend","趋势内回调"),
+    goal:b("Look for short-horizon weakness among assets with positive longer-term trends, rather than always buying the strongest recent movers.","在长期趋势为正的资产中寻找短期回调机会，而不是一味追买近期涨幅最大的品种。"),
+    steps:[
+      s("Identify the long trend","识别长期趋势","Require the latest completed close to exceed its prior 126-bar mean and the close from 127 bars earlier.","要求最近已完成的收盘价高于此前126根K线均值及127根K线之前的价格。"),
+      s("Detect a short pullback","识别短期回调","Compare the mean of bars 20 through 6 back with the latest five completed bars. The newest five-bar average must be lower than the earlier fifteen-bar average.","比较之前第20至第6根K线的平均价，与最近五根已完成K线平均价。最近五根均价必须较低。"),
+      s("Rank and hold","排序与配置","Rank eligible assets by pullback depth, select a bounded subset (normally two to six), then size inversely to recent volatility within the cash and exposure limits.","按回调幅度对合格资产排序，选择有限数量（通常2至6项），再按近期波动率倒数及资金敞口限制计算仓位。"),
+      s("Remain in cash if absent","无信号时持有现金","If no assets meet both the long-term trend and short-term pullback conditions, hold cash instead of forcing a position.","若没有资产同时满足长期趋势和短期回调条件，则保留现金，不强制开仓。"),
+    ],
+    caveat:b("A pullback can develop into a sustained decline. This is a fixed historical rule, not a prediction, and does not include stop-loss orders or intrabar execution.","短期回调可能演变成持续下跌。这是固定的历史规则，不是预测，也不包含止损指令或K线内部成交。"),
+  },
   defensive_rotation:{
     name:b("Defensive Rotation","防御轮动"),
     goal:b("Switch between equity exposure and actual bond or commodity holdings according to the breadth of equity trends.","根据股票整体趋势强弱，在股票与实际债券或商品资产之间切换。"),
