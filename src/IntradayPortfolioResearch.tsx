@@ -10,7 +10,7 @@ const WINDOWS:Record<IntradayResolution,readonly IntradayWindow[]>={
   "15m":["7D","30D","60D"],
   "1h":["7D","30D","60D","6M","1Y","2Y"],
 };
-const CASH_MODELS=new Set(["equal_weight","inverse_volatility","trend_filter","relative_momentum","volatility_target"]);
+const CASH_MODELS=new Set(["equal_weight","inverse_volatility","trend_filter","relative_momentum","volatility_target","blended_portfolio"]);
 const pct=(n:number)=>Number.isFinite(n)?n.toFixed(2)+"%":"N/A";
 const dollars=(n:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(n);
 
@@ -43,11 +43,12 @@ export default function IntradayPortfolioResearch({spec}:{spec:TournamentSourceS
   const [checks,setChecks]=useState<1|2|4>(2);
   const [slippage,setSlippage]=useState(String(spec.slippage_bps??8));
   const [commission,setCommission]=useState(String(spec.commission_usd??0));
+  const [fxBps,setFxBps]=useState(String(spec.fx_conversion_bps??150));
   const [job,setJob]=useState<IntradayStudyJob|null>(null);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const modelKey=JSON.stringify([spec.symbols,spec.model,spec.max_position_pct,spec.target_investment_pct,
-    spec.equity_class_cap_pct,spec.redistribute_excess,spec.base_currency]);
+    spec.equity_class_cap_pct,spec.redistribute_excess,spec.base_currency,spec.sleeves]);
   useEffect(()=>{setJob(null);setError("");},[modelKey]);
   useEffect(()=>{
     if(!job||!["queued","running"].includes(job.status))return;
@@ -62,14 +63,15 @@ export default function IntradayPortfolioResearch({spec}:{spec:TournamentSourceS
   const supported=CASH_MODELS.has(spec.model) && spec.base_currency!=="CAD";
   const run=async()=>{
     setError("");
-    const slip=Number(slippage),fee=Number(commission);
-    if(!Number.isFinite(slip)||slip<0||slip>100||!Number.isFinite(fee)||fee<0||fee>30){
-      setError(l("Check slippage (0-100 bps) and commission (0-30 USD).","检查滑点（0-100基点）与佣金（0-30美元）。"));return;
+    const slip=Number(slippage),fee=Number(commission),fx=Number(fxBps);
+    if(!Number.isFinite(slip)||slip<0||slip>100||!Number.isFinite(fee)||fee<0||fee>30||
+       !Number.isFinite(fx)||fx<0||fx>300){
+      setError(l("Check slippage, commissions and FX conversion cost (0-300 bps).","检查滑点、佣金及汇兑成本（0-300基点）。"));return;
     }
     setBusy(true);
     try{
       const next=await createIntradayStudy({spec,mode:"intraday",resolution,period,
-        checks_per_day:checks,slippage_bps:slip,commission_usd:fee});
+        checks_per_day:checks,slippage_bps:slip,commission_usd:fee,fx_conversion_bps:fx});
       setJob(next);
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);}
@@ -88,8 +90,8 @@ export default function IntradayPortfolioResearch({spec}:{spec:TournamentSourceS
       <p>{l("Test the selected allocation model on real intraday candles. Each signal reads completed bars and fills at the following shared candle open. Shorter bars change the model's indicator lookbacks; this is a separate exploratory test, not the original daily strategy's walk-forward audit.",
         "使用真实日内K线测试当前配置模型。每次信号只读取已完成K线，按下一根共同K线开盘价模拟成交。更短周期会改变指标回看时长，此结果是独立探索性测试，不属于原日线策略的滚动验证。")}</p>
       {!supported?<p className="ipr-warning">{l(
-        "Intraday testing currently supports cash-funded standard portfolio models in USD. Short, margin and blended strategies retain their daily research engine.",
-        "日内测试目前仅支持美元现金账户的标准组合模型。做空、融资及混合策略仍使用日线研究引擎。")}</p>:<>
+        "Intraday testing supports cash-funded long-only and blended portfolios using a USD account, including CAD-listed assets with historical FX conversion. Short and margin models still require the daily engine.",
+        "日内测试支持以美元账户交易的纯多头和混合组合，包括使用历史汇率换算的加元资产。做空及融资策略仍使用日线引擎。")}</p>:<>
         <div className="ipr-inputs">
           <label>{l("Candles","K线周期")}
             <select value={resolution} onChange={e=>{
@@ -118,6 +120,8 @@ export default function IntradayPortfolioResearch({spec}:{spec:TournamentSourceS
               <input type="number" min="0" max="100" value={slippage} onChange={e=>setSlippage(e.target.value)}/></label>
             <label>{l("Commission per asset order (USD)","每笔资产订单佣金（美元）")}
               <input type="number" min="0" max="30" value={commission} onChange={e=>setCommission(e.target.value)}/></label>
+            <label>{l("CAD/USD conversion (bps per CAD order)","加元订单换汇成本（基点）")}
+              <input type="number" min="0" max="300" value={fxBps} onChange={e=>setFxBps(e.target.value)}/></label>
           </div>
         </details>
         <div className="ipr-actions">
@@ -131,8 +135,8 @@ export default function IntradayPortfolioResearch({spec}:{spec:TournamentSourceS
         {error&&<p role="alert" className="ipr-warning">{error}</p>}
         {job&&<p role="status">{l("Study","研究")}: {job.status} · {job.stage} · {job.progress}%{job.error_code?" · "+job.error_code:""}</p>}
         {job?.status==="failed"&&<p className="ipr-warning">{l(
-          "The requested portfolio may lack sufficiently aligned real candles, or the data provider may be unavailable. Try fewer USD symbols, a 5/15-minute interval, or a shorter window.",
-          "该组合可能缺乏足够的共同真实K线，或数据提供方暂时不可用。请减少美元标的、改用5/15分钟周期或缩短历史区间。")}</p>}
+          "The requested portfolio may lack enough synchronized stock/ETF candles or previous-day USD/CAD FX data. Try fewer assets, a 5/15-minute interval, or a shorter window.",
+          "该组合可能缺少同步股票或ETF K线，或缺少上一交易日的美元加元汇率。请减少资产数量、选择5/15分钟周期或缩短区间。")}</p>}
         {result&&<>
           <div className="ipr-kpis">
             {[[l("Simulated return","模拟收益"),pct(result.metrics.return_pct)],
