@@ -26,7 +26,7 @@ WINDOWS = {
     "15m": ("7D", "30D", "60D"),
     "1h": ("7D", "30D", "60D", "6M", "1Y", "2Y"),
 }
-BARS_PER_SESSION = {"1m": 390, "5m": 78, "15m": 26, "1h": 7}
+BARS_PER_SESSION = {"1m": 390, "5m": 78, "15m": 26, "1h": 6}
 STEP_SECONDS = intraday.SECONDS
 CHECKS = {
     1: ((12, 0),),
