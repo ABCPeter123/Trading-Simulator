@@ -50,8 +50,10 @@ def _model_configs(include_blends=True):
                 yield model,[{"model":name,"weight_pct":weight} for name,weight in template]
 
 
-def _balanced_breakdown(valid,regimes):
+def _balanced_breakdown(valid,regimes,stability=None):
     worst=regimes["worst_regime_return_pct"]
+    missed=(max(0,stability["window_count"]-stability["positive_windows"])
+            if stability is not None and stability["sufficient_history"] else 0)
     components={
         "return_points":round(valid["return_pct"],6),
         "drawdown_points":round(-1.7*abs(valid["max_drawdown_pct"]),6),
@@ -59,6 +61,7 @@ def _balanced_breakdown(valid,regimes):
         "volatility_points":round(-.08*(valid.get("annualized_volatility_pct") or 0.),6),
         "worst_regime_points":round(-.12*abs(min(0,worst)),6),
         "few_trades_points":-4. if valid["trades"]<2 else 0.,
+        "losing_validation_windows_points":-8.*missed,
     }
     return {"eligible":True,"components":components,
             "total":round(sum(components.values()),4),
@@ -566,12 +569,12 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                         target_cagr_pct=target_cagr,target_sharpe=target_sharpe)
                     score=breakdown["total"]
                 else:
-                    breakdown=_balanced_breakdown(valid,regimes)
-                    score=breakdown["total"]
                     quality=objectives.performance(valid["equity_curve"],
                                                    risk_free_pct=risk_free)
                     stability=objectives.validation_windows(
                         valid["equity_curve"],risk_free_pct=risk_free)
+                    breakdown=_balanced_breakdown(valid,regimes,stability)
+                    score=breakdown["total"]
                 # Relative performance is part of validation ranking, not
                 # evaluated from the sealed 20% test. Underperforming a
                 # same-basket equal-weight control earns no fake alpha credit.
@@ -604,7 +607,10 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                         else:
                             stress_regimes=adv.scenario_grade(stressed["equity_curve"],
                                                                market,symbols,train_end)
-                            stress_details=_balanced_breakdown(stressed,stress_regimes)
+                            stress_stability=objectives.validation_windows(
+                                stressed["equity_curve"],risk_free_pct=risk_free)
+                            stress_details=_balanced_breakdown(stressed,stress_regimes,
+                                                               stress_stability)
                         if not stress_details["eligible"]:continue
                         # Only downside execution deterioration is penalized;
                         # an unexpectedly better stress outcome cannot earn bonus points.
