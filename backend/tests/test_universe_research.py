@@ -77,12 +77,14 @@ def test_run_study_uses_validation_and_reports_unavailable_assets(isolated,monke
     assert result["qualified_candidates"] >= len(result["top10"])
     assert all(x["validation_score"]>=y["validation_score"]
                for x,y in zip(result["top10"],result["top10"][1:]))
-    assert result["shortlist_is_global_top_ten"] is False
+    assert result["shortlist_is_global_top_ten"] is True
     assert "leveraged_trend" in result["candidate_model_counts"]
     assert "long_short_momentum" in result["candidate_model_counts"]
     assert result["historical_coverage"]["universe_earliest_session"] is not None
     for pick in result["top10"]:
         assert pick["no_real_order"] is True
+        assert "validation_quality_label" in pick
+        assert "same_basket_underperformance_points" in pick["score_breakdown"]["components"]
         assert pick["rank"]>=1
         assert "held_out" in pick
         assert "validation_regimes" in pick
