@@ -220,7 +220,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   const result=active?.result;
   const chosen=result?.top10[pick];
   const standardModel=Boolean(chosen&&["equal_weight","inverse_volatility",
-    "trend_filter","relative_momentum","volatility_target"].includes(chosen.model));
+    "trend_filter","relative_momentum","volatility_target","adaptive_momentum","pullback_in_trend"].includes(chosen.model));
   const customResearchExposure=Boolean(standardModel&&active?.params.research_objective==="high_performance"&&(
     (active.params.target_investment_pct??95)!==95||
     (active.params.equity_class_cap_pct??70)!==70||
