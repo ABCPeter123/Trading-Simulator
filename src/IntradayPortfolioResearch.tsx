@@ -10,7 +10,7 @@ const WINDOWS:Record<IntradayResolution,readonly IntradayWindow[]>={
   "15m":["7D","30D","60D"],
   "1h":["7D","30D","60D","6M","1Y","2Y"],
 };
-const CASH_MODELS=new Set(["equal_weight","inverse_volatility","trend_filter","relative_momentum","volatility_target","blended_portfolio"]);
+const CASH_MODELS=new Set(["equal_weight","inverse_volatility","trend_filter","relative_momentum","volatility_target","adaptive_momentum","pullback_in_trend","blended_portfolio"]);
 const pct=(n:number)=>Number.isFinite(n)?n.toFixed(2)+"%":"N/A";
 const dollars=(n:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(n);
 

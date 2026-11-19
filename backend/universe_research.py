@@ -50,8 +50,10 @@ def _model_configs(include_blends=True):
                 yield model,[{"model":name,"weight_pct":weight} for name,weight in template]
 
 
-def _balanced_breakdown(valid,regimes):
+def _balanced_breakdown(valid,regimes,stability=None):
     worst=regimes["worst_regime_return_pct"]
+    missed=(max(0,stability["window_count"]-stability["positive_windows"])
+            if stability is not None and stability["sufficient_history"] else 0)
     components={
         "return_points":round(valid["return_pct"],6),
         "drawdown_points":round(-1.7*abs(valid["max_drawdown_pct"]),6),
@@ -59,10 +61,54 @@ def _balanced_breakdown(valid,regimes):
         "volatility_points":round(-.08*(valid.get("annualized_volatility_pct") or 0.),6),
         "worst_regime_points":round(-.12*abs(min(0,worst)),6),
         "few_trades_points":-4. if valid["trades"]<2 else 0.,
+        "losing_validation_windows_points":-8.*missed,
     }
     return {"eligible":True,"components":components,
             "total":round(sum(components.values()),4),
             "definition":"Validation-only heuristic points, not a forecast."}
+
+
+def _same_basket_validation_penalty(valid,quality,control,control_quality):
+    """No final test data; soft penalty for failing an identical basket control.
+
+    Keep a zero debit for a genuine win, and a separately inspectable
+    diagnostic for an underperformer. Do not treat equal weight as a strategy
+    winner by itself or force the winner to beat a particular risk preference.
+    """
+    if control is None or control_quality is None:
+        return 0.,None
+    gap=float(valid["return_pct"])-float(control["return_pct"])
+    reference=control_quality.get("excess_sharpe")
+    selected=quality.get("excess_sharpe")
+    sharpe_gap=(selected-reference if selected is not None and reference is not None
+                else None)
+    loss=min(60.,max(0.,-gap))
+    if sharpe_gap is not None:
+        loss+=min(20.,12.*max(0.,-sharpe_gap))
+    penalty=round(loss,6)
+    return penalty,{
+        "same_basket_return_pct":round(control["return_pct"],4),
+        "excess_return_points":round(gap,4),
+        "same_basket_excess_sharpe":reference,
+        "excess_sharpe_delta":round(sharpe_gap,4) if sharpe_gap is not None else None,
+        "beats_same_basket_return":gap>0,
+        "beats_same_basket_risk_adjusted":sharpe_gap is not None and sharpe_gap>0,
+        "note":"Validation-only; no audit data used in model selection.",
+    }
+
+
+def _basket_correlation_penalty(symbols,market,train_end):
+    """Training-only diversification diagnostic, no held-out return reads."""
+    correlations=pr._correlations(symbols,market,train_end)
+    pairs=[correlations[left][right]
+           for i,left in enumerate(symbols) for right in symbols[i+1:]
+           if correlations[left][right] is not None]
+    if not pairs:
+        return 0.,None
+    avg_positive=sum(max(0.,value) for value in pairs)/len(pairs)
+    # A small soft debit discourages collections of near-identical indexes,
+    # without blocking an all-equity-only or defensively hedged strategy.
+    return round(16*max(0.,avg_positive-.50),6),round(avg_positive,4)
 
 
 def _execution_cost_audit(result,market,metadata,slippage):
@@ -476,15 +522,35 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             n=len(days);train_end=int(n*.6);test_start=int(n*.8)
             if train_end<=pr.WARMUP or test_start-train_end<50:
                 raise ValueError("Insufficient separate validation history")
+            corr_penalty,avg_positive_corr=_basket_correlation_penalty(
+                symbols,market,train_end)
+            common_broker={**broker_assumptions,
+                           "delay_sessions":params["delay_sessions"],
+                           "rebalance_sessions":params.get("rebalance_sessions",pr.REBALANCE_SESSIONS)}
+            if mode=="high_performance":
+                common_broker.update(target_investment_pct=investment,
+                                     equity_class_cap_pct=equity_cap,
+                                     redistribute_excess=redistribute)
+            # Calculate once per basket on validation ONLY. Equal-weight is a
+            # real independently funded control with identical fees and dates,
+            # not an invented performance hurdle or a future-data lookup.
+            try:
+                equal_control=pr._segment("equal_weight",symbols,market,metadata,
+                                           train_end,test_start,
+                                           params["max_position_pct"]/100,
+                                           broker=common_broker)
+                equal_quality=objectives.performance(equal_control["equity_curve"],
+                                                      risk_free_pct=risk_free)
+            except (ValueError,ArithmeticError,ZeroDivisionError):
+                equal_control=None
+                equal_quality=None
             for model,sleeves in _model_configs(params.get("include_blends",True)):
                 evaluated+=1
-                broker={**broker_assumptions,
-                        "delay_sessions":params["delay_sessions"],
-                        "rebalance_sessions":params.get("rebalance_sessions",pr.REBALANCE_SESSIONS)}
-                if mode=="high_performance" and (model in pr.MODELS or sleeves is not None):
-                    broker.update(target_investment_pct=investment,
-                                  equity_class_cap_pct=equity_cap,
-                                  redistribute_excess=redistribute)
+                broker={**common_broker}
+                if mode!="high_performance":
+                    broker.pop("target_investment_pct",None)
+                    broker.pop("equity_class_cap_pct",None)
+                    broker.pop("redistribute_excess",None)
                 if sleeves is not None:
                     researcher=blends.segment;argument=sleeves
                 else:
@@ -519,12 +585,26 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                         target_cagr_pct=target_cagr,target_sharpe=target_sharpe)
                     score=breakdown["total"]
                 else:
-                    breakdown=_balanced_breakdown(valid,regimes)
-                    score=breakdown["total"]
                     quality=objectives.performance(valid["equity_curve"],
                                                    risk_free_pct=risk_free)
                     stability=objectives.validation_windows(
                         valid["equity_curve"],risk_free_pct=risk_free)
+                    breakdown=_balanced_breakdown(valid,regimes,stability)
+                    score=breakdown["total"]
+                # Relative performance is part of validation ranking, not
+                # evaluated from the sealed 20% test. Underperforming a
+                # same-basket equal-weight control earns no fake alpha credit.
+                benchmark_penalty,benchmark_advantage=_same_basket_validation_penalty(
+                    valid,quality,equal_control,equal_quality)
+                breakdown={**breakdown,
+                           "components":{**breakdown["components"],
+                                         "same_basket_underperformance_points":-benchmark_penalty},
+                           "total":round(score-benchmark_penalty,4)}
+                breakdown={**breakdown,
+                           "components":{**breakdown["components"],
+                                         "training_basket_correlation_points":-corr_penalty},
+                           "total":round(score-corr_penalty,4)}
+                score=breakdown["total"]
                 validation_stress=None
                 if passes and score>-1e5 and params.get("selection_policy","return_risk")=="execution_robust":
                     stressed_broker={**broker,"delay_sessions":2,
@@ -547,11 +627,15 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                         else:
                             stress_regimes=adv.scenario_grade(stressed["equity_curve"],
                                                                market,symbols,train_end)
-                            stress_details=_balanced_breakdown(stressed,stress_regimes)
+                            stress_stability=objectives.validation_windows(
+                                stressed["equity_curve"],risk_free_pct=risk_free)
+                            stress_details=_balanced_breakdown(stressed,stress_regimes,
+                                                               stress_stability)
                         if not stress_details["eligible"]:continue
                         # Only downside execution deterioration is penalized;
                         # an unexpectedly better stress outcome cannot earn bonus points.
-                        penalty=round(-.5*max(0.,score-stress_details["total"]),6)
+                        score_without_reference=score+benchmark_penalty+corr_penalty
+                        penalty=round(-.5*max(0.,score_without_reference-stress_details["total"]),6)
                         breakdown={**breakdown,
                                    "components":{**breakdown["components"],
                                                  "execution_stress_points":penalty},
@@ -568,6 +652,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                 if passes and score>-1e5:
                     ranked.append({"basket_type":label,"symbols":symbols,
                                    "model":model,"sleeves":sleeves,
+                                   "validation_benchmark_advantage":benchmark_advantage,
+                                   "training_avg_positive_pair_correlation":avg_positive_corr,
                                    "score_breakdown":breakdown,"score":score,
                                    "validation_execution_stress":validation_stress,
                                    "validation_objectives":quality,
@@ -586,6 +672,17 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         except (HTTPException,ValueError,ArithmeticError,TypeError,KeyError) as exc:
             discarded.append({"basket":label,"reason":type(exc).__name__})
     ranked.sort(key=lambda x:(-x["score"],x["basket_type"],x["model"]))
+    # An identical set of symbols and sleeve rules cannot count as multiple
+    # independent candidates just because two basket-screening labels found it.
+    unique=[];keys=set()
+    for row in ranked:
+        identifier=(tuple(sorted(row["symbols"])),row["model"],
+                    tuple((sleeve["model"],sleeve["weight_pct"])
+                          for sleeve in row["sleeves"] or []))
+        if identifier in keys:continue
+        keys.add(identifier)
+        unique.append(row)
+    ranked=unique
     # The Pareto frontier is diagnostic only. Neither it nor the held-out test
     # can override the explicitly validation-only ranking.
     if mode=="high_performance":
@@ -596,21 +693,10 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                 quality["excess_sharpe"] is not None and
                 not any(other is not item and objectives.dominates(other,item)
                         for other in ranked))
-    # Expose the best qualifying representative of each model family before
-    # filling additional spots by validation score. This is a *diversity-
-    # constrained shortlist*, never mislabel it as global top-ten by score.
-    # Results remain sorted by the same validation score afterward.
-    chosen=[];chosen_models=set();chosen_keys=set()
-    for row in ranked:
-        if row["model"] not in chosen_models and len(chosen)<10:
-            chosen.append(row);chosen_models.add(row["model"])
-            chosen_keys.add((row["model"],row["basket_type"],tuple(row["symbols"])))
-    for row in ranked:
-        key=(row["model"],row["basket_type"],tuple(row["symbols"]))
-        if len(chosen)>=10:break
-        if key not in chosen_keys:
-            chosen.append(row);chosen_keys.add(key)
-    chosen.sort(key=lambda x:(-x["score"],x["basket_type"],x["model"]))
+    # Top ten now means the ACTUAL ten best validation-ranked candidates.
+    # Weak strategy families no longer get a reserved position. Distinctive
+    # family alternatives are research diagnostics, never forced winners.
+    chosen=ranked[:10]
     leaders=[]
     for i,item in enumerate(chosen):
         broker={**broker_assumptions,"delay_sessions":params["delay_sessions"],
@@ -645,6 +731,13 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "rank":i+1,
             "validation_objectives":validation_quality,
             "validation_stability":item["validation_stability"],
+            "validation_benchmark_advantage":item["validation_benchmark_advantage"],
+            "training_avg_positive_pair_correlation":item["training_avg_positive_pair_correlation"],
+            "validation_quality_label":(
+                "benchmark_advantage" if item["validation_benchmark_advantage"] is not None
+                and item["validation_benchmark_advantage"]["beats_same_basket_return"]
+                and item["validation_benchmark_advantage"]["beats_same_basket_risk_adjusted"]
+                else "not_yet_demonstrated"),
             "held_out_objectives":heldout_quality,
             "delayed_stress_objectives":stress_quality,
             "pareto_optimal_validation":bool(item.get("pareto_optimal",False)),
@@ -713,15 +806,15 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "annualized compound growth and cash-rate-adjusted Sharpe with caps, "
             "penalties for drawdowns, turnover and negative validation subperiods. "
             "The final 20% is evaluated only AFTER ranking. A three-window stability "
-            "diagnostic is not a trained walk-forward model. Top ten retain family "
-            "diversity and are not the unrestricted ten highest scores."
+            "diagnostic is not a trained walk-forward model. Validation ranking "
+            "penalizes underperformance versus a same-basket equal-weight control; "
+            "the top ten are the ten highest validation scores."
             if mode=="high_performance" else
-            "Validation-only family-diversified shortlist: include best qualifying "
-            "representative of distinct models, then fill remaining places by score. "
-            "Sort selected finalists by validation return minus drawdown, turnover, "
-            "volatility and weak historical regimes. This is not the unrestricted "
-            "global top ten. Held-out tests and future scenarios never determine selection.")),
-        "shortlist_is_global_top_ten":False,
+            "Select the ten highest scores on validation only, using return, drawdown, "
+            "turnover, volatility, adverse regimes, and same-basket equal-weight "
+            "underperformance penalties. No family gets a reserved slot. "
+            "Held-out tests and scenarios never determine selection.")),
+        "shortlist_is_global_top_ten":True,
         "execution_assumptions":{**broker_assumptions,"configured_delay_sessions":params["delay_sessions"],
                                   "rebalance_sessions":params.get("rebalance_sessions",pr.REBALANCE_SESSIONS),
                                  "long_only_target_investment_pct":investment if mode=="high_performance" else 95.,

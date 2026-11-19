@@ -77,12 +77,14 @@ def test_run_study_uses_validation_and_reports_unavailable_assets(isolated,monke
     assert result["qualified_candidates"] >= len(result["top10"])
     assert all(x["validation_score"]>=y["validation_score"]
                for x,y in zip(result["top10"],result["top10"][1:]))
-    assert result["shortlist_is_global_top_ten"] is False
+    assert result["shortlist_is_global_top_ten"] is True
     assert "leveraged_trend" in result["candidate_model_counts"]
     assert "long_short_momentum" in result["candidate_model_counts"]
     assert result["historical_coverage"]["universe_earliest_session"] is not None
     for pick in result["top10"]:
         assert pick["no_real_order"] is True
+        assert "validation_quality_label" in pick
+        assert "same_basket_underperformance_points" in pick["score_breakdown"]["components"]
         assert pick["rank"]>=1
         assert "held_out" in pick
         assert "validation_regimes" in pick
@@ -144,3 +146,83 @@ def test_tournament_queue_preserves_weekly_cadence_and_rejects_unsupported(isola
         res=client.post("/api/live/research/universe/jobs",json={
             "scope":"all","rebalance_sessions":bad})
         assert res.status_code==422
+
+
+
+def test_validation_penalty_prefers_same_basket_outperformance():
+    control={"return_pct":14.}
+    ref={"excess_sharpe":.72}
+    weak={"return_pct":8.}
+    quality={"excess_sharpe":.41}
+    penalty,detail=ur._same_basket_validation_penalty(weak,quality,control,ref)
+    assert penalty>6.
+    assert detail["excess_return_points"]==-6.
+    assert detail["excess_sharpe_delta"]==pytest.approx(-.31)
+    assert not detail["beats_same_basket_return"]
+    assert not detail["beats_same_basket_risk_adjusted"]
+    improved,better=ur._same_basket_validation_penalty(
+        {"return_pct":20.},{"excess_sharpe":1.1},control,ref)
+    assert improved==0.
+    assert better["beats_same_basket_return"]
+    assert better["beats_same_basket_risk_adjusted"]
+    missing,info=ur._same_basket_validation_penalty(weak,quality,None,None)
+    assert missing==0. and info is None
+
+
+def test_actual_shortlist_is_global_validation_top_ten_only(isolated,monkeypatch):
+    """Ranking cannot reserve low-score families or peek at held-out prices."""
+    initial=synthetic()
+    changed=[dict(bar) for bar in initial]
+    for bar in changed[int(len(changed)*.81):]:
+        bar["open"]*=.75
+        bar["close"]*=.75
+        bar["high"]*=.75
+        bar["low"]*=.75
+    symbols=["spy","qqq","ief","gld","vti","xlp"]
+    monkeypatch.setattr(ur,"_universe",lambda _:symbols)
+    def scan(rows):
+        return ur.run_study({"scope":"all","delay_sessions":1,
+            "max_drawdown_pct":60,"max_position_pct":40},
+            loader=lambda _:{"bars":rows,"source":"Independent synthetic fixture"})
+    before=scan(initial)
+    after=scan(changed)
+    assert before["shortlist_is_global_top_ten"] is True
+    keys=[(tuple(sorted(x["symbols"])),x["model"],
+           tuple((v["model"],v["weight_pct"]) for v in x["sleeves"] or []))
+          for x in before["top10"]]
+    assert len(keys)==len(set(keys))
+    assert [(x["model"],x["symbols"],x["validation_score"])
+            for x in before["top10"]]==[
+            (x["model"],x["symbols"],x["validation_score"])
+            for x in after["top10"]]
+    assert all(x["score_breakdown"]["components"][
+        "same_basket_underperformance_points"]<=0 for x in before["top10"])
+
+
+def test_balanced_ranking_debits_unstable_validation_windows():
+    valid={"return_pct":16.,"max_drawdown_pct":-8.,
+           "turnover_pct":95.,"annualized_volatility_pct":14.,"trades":20}
+    regimes={"worst_regime_return_pct":-10.}
+    stable={"sufficient_history":True,"window_count":3,"positive_windows":3}
+    unstable={**stable,"positive_windows":1}
+    strong=ur._balanced_breakdown(valid,regimes,stable)
+    weak=ur._balanced_breakdown(valid,regimes,unstable)
+    assert strong["components"]["losing_validation_windows_points"]==0
+    assert weak["components"]["losing_validation_windows_points"]==-16
+    assert strong["total"]-weak["total"]==pytest.approx(16)
+
+
+def test_identical_training_returns_receive_diversification_debit():
+    bars=synthetic()
+    names=["spy","qqq","ief"]
+    histories={name:{"bars":bars} for name in names}
+    _,aligned,_,_=pr._prepare(names,histories)
+    debit,correlation=ur._basket_correlation_penalty(names,aligned,450)
+    assert correlation==pytest.approx(1.,abs=.0001)
+    assert debit>0
+    for name in names:
+        for bar in aligned[name][451:]:
+            bar["close"]*=.2
+    later_debit,later_corr=ur._basket_correlation_penalty(names,aligned,450)
+    assert debit==later_debit
+    assert correlation==later_corr

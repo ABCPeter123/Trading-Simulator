@@ -34,7 +34,8 @@ REBALANCE_SESSIONS = 21
 SUPPORTED_REBALANCE_SESSIONS = (1, 5, 21)  # Daily, weekly, monthly shared sessions
 WARMUP = 180
 MODELS = ("equal_weight", "inverse_volatility", "trend_filter",
-          "relative_momentum", "volatility_target")
+          "relative_momentum", "volatility_target",
+          "adaptive_momentum", "pullback_in_trend")
 GROUP_CAPS = {"equity": .70, "bond": .55, "commodity": .35, "real_estate": .20, "crypto": .10}
 BONDS = frozenset(("tlt", "ief", "shy", "bnd", "lqd", "hyg", "tip", "agg", "vgit"))
 COMMODITIES = frozenset(("gld", "slv", "uso", "dbc", "pdbc", "iau", "sgol"))
@@ -208,6 +209,39 @@ def _weights(model, symbols, closes, i, metadata, max_weight, *,
                for s in symbols}
     elif model == "volatility_target":
         raw = inv
+    elif model == "adaptive_momentum":
+        # Absolute trend plus medium-horizon relative strength, not a static
+        # top-gainers basket. Select at most a few leaders to avoid diluting
+        # exposure across every highly correlated asset.
+        strength = {s:(.35*(recent[s]/closes[s][i-22]-1) +
+                       .40*(recent[s]/closes[s][i-64]-1) +
+                       .25*(recent[s]/closes[s][i-127]-1))
+                    for s in symbols}
+        eligible = [s for s in symbols if
+                    strength[s]>0 and recent[s]>mean(closes[s][i-100:i])]
+        selected = set(sorted(eligible,key=lambda s:(-strength[s],s))
+                       [:max(2,min(6,math.ceil(len(symbols)*.35)))])
+        raw = {s:inv[s] if s in selected else 0. for s in symbols}
+        # A risk-off sleeve uses actually available bond/commodity instruments.
+        # If none exists or trends are negative, hold cash instead.
+        if not selected:
+            defensive=[s for s in symbols
+                       if metadata[s]["group"] in ("bond","commodity") and
+                       recent[s]>mean(closes[s][i-100:i])]
+            raw={s:inv[s] if s in defensive else 0. for s in symbols}
+    elif model == "pullback_in_trend":
+        # Buy diversified, positive long-run trends after short-horizon
+        # weakness. This complements the pure momentum and inverse-vol models.
+        # The simple 5-vs-20-day condition reads only completed candles.
+        pullback = {s:(mean(closes[s][i-20:i-5]) /
+                        max(mean(closes[s][i-5:i]),1e-9)-1)
+                    for s in symbols}
+        eligible=[s for s in symbols if
+                  recent[s]>mean(closes[s][i-126:i]) and
+                  pullback[s]>0 and recent[s]>closes[s][i-127]]
+        selected=set(sorted(eligible,key=lambda s:(-pullback[s],s))
+                     [:max(2,min(6,math.ceil(len(symbols)*.40)))])
+        raw={s:inv[s] if s in selected else 0. for s in symbols}
     else:
         raise ValueError("Unknown allocation model")
     total = sum(raw.values())

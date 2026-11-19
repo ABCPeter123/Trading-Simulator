@@ -58,7 +58,7 @@ def test_multi_asset_portfolio_compares_five_models_and_persists(isolated):
     result=p.compare(list(SYMBOLS),max_drawdown_pct=50,data=synthetic())
     assert result["basket"]==list(SYMBOLS)
     assert len(result["groups"])>=3
-    assert len(result["candidates"])==5
+    assert len(result["candidates"])==len(p.MODELS)
     assert {c["model"] for c in result["candidates"]}==set(p.MODELS)
     assert not result["test_used_for_selection"]
     assert result["sessions"]>=450
@@ -215,3 +215,34 @@ def test_rebalance_cadence_changes_check_frequency_without_intraday_fills(isolat
         with pytest.raises(ValueError,match="rebalance cadence"):
             p._segment("equal_weight",symbols,market,meta,180,222,.35,
                        broker={"rebalance_sessions":invalid})
+
+
+def test_new_momentum_and_pullback_strategies_only_read_completed_closes():
+    names=["spy","ief","gld","eem"]
+    _,history,metadata,_=p._prepare(names,{s:synthetic()[s] for s in names})
+    closes={s:[bar["close"] for bar in history[s]] for s in names}
+    at=250
+    for model in ("adaptive_momentum","pullback_in_trend"):
+        before=p._weights(model,names,closes,at,metadata,.35,
+                          gross_target=.95,equity_cap=.70,redistribute=True)
+        shifted={s:[*values] for s,values in closes.items()}
+        for s in names:
+            for k in range(at,len(shifted[s])):
+                shifted[s][k]*=1.65
+        after=p._weights(model,names,shifted,at,metadata,.35,
+                         gross_target=.95,equity_cap=.70,redistribute=True)
+        assert before==after
+        assert set(before)==set(names)
+        assert all(0<=weight<=.35+1e-9 for weight in before.values())
+        assert sum(before.values())<=.95+1e-9
+        for group,limit in p.GROUP_CAPS.items():
+            assert sum(before[s] for s in names if metadata[s]["group"]==group)<=limit+1e-8
+
+
+def test_new_model_heldout_period_cannot_determine_validation_selection(isolated):
+    original=p.compare(list(SYMBOLS),max_drawdown_pct=50,data=synthetic())
+    stressed=p.compare(list(SYMBOLS),max_drawdown_pct=50,data=synthetic(shock=True))
+    left=[(v["model"],v["score"],v["qualified"]) for v in original["candidates"]]
+    right=[(v["model"],v["score"],v["qualified"]) for v in stressed["candidates"]]
+    assert left==right
+    assert {"adaptive_momentum","pullback_in_trend"}<=set(p.MODELS)

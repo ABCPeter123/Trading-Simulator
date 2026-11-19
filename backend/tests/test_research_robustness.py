@@ -105,7 +105,7 @@ def test_study_blends_and_cost_breakdown_are_read_only(monkeypatch):
         if choice["model"]=="blended_portfolio":
             assert len(choice["sleeves"]) in (2,3)
             assert choice["research_only"] is True
-    assert len(list(universe._model_configs(include_blends=False)))==11
+    assert len(list(universe._model_configs(include_blends=False)))==len(universe.pr.MODELS)+len(universe.adv.MODELS)
     assert len(list(universe._model_configs(include_blends=True)))>11
 
 
