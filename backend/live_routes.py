@@ -292,6 +292,10 @@ def tournament_strategy_source(body: TournamentSourceBody):
 
 class StrategyPeriodBody(BaseModel):
     spec: dict
+    mode:Literal["daily","intraday"]="daily"
+    resolution:Literal["1m","5m","15m","1h"]|None=None
+    period:Literal["7D","30D","60D","6M","1Y","2Y"]|None=None
+    checks_per_day:int|None=None
     start_date: str | None = Field(default=None,max_length=10)
     end_date: str | None = Field(default=None,max_length=10)
     max_position_pct: float | None = Field(default=None,ge=10,le=50)

@@ -185,7 +185,8 @@ def _corr(a, b):
 
 
 def _weights(model, symbols, closes, i, metadata, max_weight, *,
-             gross_target=.95, equity_cap=None, redistribute=False):
+             gross_target=.95, equity_cap=None, redistribute=False,
+             annualization_periods=252):
     """All signals and risk estimates read only through previous session i-1."""
     vol = {s:_vol(closes[s], i) for s in symbols}
     recent = {s:closes[s][i-1] for s in symbols}
@@ -222,7 +223,7 @@ def _weights(model, symbols, closes, i, metadata, max_weight, *,
         if days >= 25:
             series = [sum(base[s]*observations[j][-days+k]
                           for j,s in enumerate(symbols)) for k in range(days)]
-            realized = stdev(series)*math.sqrt(252)
+            realized = stdev(series)*math.sqrt(annualization_periods)
             if realized > 1e-8:
                 gross = min(gross, .12/realized)
     targets = {s:min(max_weight, gross*raw[s]/total) for s in symbols}

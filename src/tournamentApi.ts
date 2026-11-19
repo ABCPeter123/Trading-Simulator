@@ -125,6 +125,33 @@ export const cancelCustomPeriodStudy=(id:string)=>
     method:"POST",
   });
 
+export type IntradayResolution = "1m"|"5m"|"15m"|"1h";
+export type IntradayWindow = "7D"|"30D"|"60D"|"6M"|"1Y"|"2Y";
+export interface IntradayStudyResult {
+  mode:"intraday";model:string;symbols:string[];
+  resolution:IntradayResolution;period:IntradayWindow;checks_per_day:1|2|4;
+  common_bars:number;first_bar:number;last_bar:number;warmup_bars:number;
+  metrics:{return_pct:number;max_drawdown_pct:number;trades:number;fees:number;turnover_pct:number;average_invested_pct:number;checks:number;sessions:number};
+  benchmark:{return_pct:number;max_drawdown_pct:number;trades:number;fees:number;turnover_pct:number;average_invested_pct:number;checks:number;sessions:number};
+  equity_curve:{time:number;value:number}[];
+  benchmark_curve:{time:number;value:number}[];
+  fills:{time:number;symbol:string;side:string;quantity:number;price:number;fee:number;notional:number}[];
+  fills_total:number;
+  sources:Record<string,{source:string;offline_snapshot:boolean;observed_bars:number}>;
+  execution:string;limitations:string[];
+}
+export type IntradayStudyJob = Omit<CustomPeriodJob,"result"> & {result:IntradayStudyResult|null};
+export const createIntradayStudy=(body:{
+  spec:TournamentSourceSpec;mode:"intraday";resolution:IntradayResolution;
+  period:IntradayWindow;checks_per_day:1|2|4;slippage_bps:number;commission_usd:number;
+})=>request<IntradayStudyJob>("/live/research/strategy-period/jobs",{
+  method:"POST",body:JSON.stringify(body),
+});
+export const getIntradayStudy=(id:string)=>
+  request<IntradayStudyJob>("/live/research/strategy-period/jobs/"+encodeURIComponent(id));
+export const cancelIntradayStudy=(id:string)=>
+  request<IntradayStudyJob>("/live/research/strategy-period/jobs/"+encodeURIComponent(id)+"/cancel",{method:"POST"});
+
 export interface WalkForwardRequest {
   spec:TournamentSourceSpec;
   search_width:"focused"|"extended"|"comprehensive";

@@ -21,6 +21,11 @@ def validate_request(payload):
     if not isinstance(payload, dict):
         raise HTTPException(422, "Invalid period analysis request.")
     spec = tournament.validate_spec(payload.get("spec"))
+    if payload.get("mode")=="intraday":
+        from . import intraday_portfolio_research
+        return intraday_portfolio_research.validate_request({**payload,"spec":spec})
+    if payload.get("mode","daily") not in ("daily",None):
+        raise HTTPException(422,"Unsupported research timeframe.")
     begin, end = payload.get("start_date"), payload.get("end_date")
     def parse(value, label):
         if value is None or value == "":
@@ -155,6 +160,9 @@ def analyze(params, *, loader=None, report=None):
     """Run an isolated historical simulation with explicit selected date limits."""
     params = validate_request(params)
     report = report or (lambda pct, stage: None)
+    if params.get("mode")=="intraday":
+        from . import intraday_portfolio_research
+        return intraday_portfolio_research.analyze(params,loader=loader,report=report)
     spec=params["spec"]
     symbols=spec["symbols"]
     histories={}
