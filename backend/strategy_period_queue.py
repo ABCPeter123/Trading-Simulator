@@ -119,10 +119,28 @@ def process_one():
     except InterruptedError:
         return get_job(uid)
     except Exception as exc:
-        # No strategy symbols, private parameters, execution records or exception details in logs.
+        # Safe phase classification. Never publish raw exceptions, owner holdings,
+        # strategy configuration, dates or provider payloads through this API.
+        phase_codes={
+            "Loading historical market observations":("history_load_failed","Historical data loading failed"),
+            "Loading verified currency history":("fx_history_failed","Historical currency data loading failed"),
+            "Aligning completed observations":("alignment_failed","Historical alignment failed"),
+            "Executing strategy with historical opening prices":("primary_replay_failed","Historical strategy replay failed"),
+            "Calculating historical risk statistics":("period_statistics_failed","Historical risk statistics failed"),
+            "Calculating same-period equal-weight comparison":("reference_simulation_failed","Historical reference comparison failed"),
+            "Calculating execution-delay stress comparison":("execution_stress_failed","Historical stress comparison failed"),
+            "Preparing private period report":("report_serialization_failed","Historical report preparation failed"),
+        }
         with LOCK,closing(_connect()) as conn:
-            conn.execute("UPDATE period_jobs SET status='failed',stage='Historical analysis failed',"
+            existing=conn.execute("SELECT stage FROM period_jobs WHERE id=?",(uid,)).fetchone()
+            prior=existing["stage"] if existing is not None else ""
+            matched=next((value for marker,value in phase_codes.items()
+                          if prior==marker or (marker.startswith("Loading historical market")
+                          and prior.startswith(marker))),None)
+            if matched is None:
+                matched=("historical_analysis_failed","Historical analysis failed")
+            conn.execute("UPDATE period_jobs SET status='failed',stage=?,"
                          "error_code=?,updated_at=? WHERE id=? AND status='running'",
-                         (type(exc).__name__,_now(),uid))
+                         (matched[1],matched[0],_now(),uid))
             conn.commit()
     return get_job(uid)
