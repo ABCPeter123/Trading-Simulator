@@ -13,7 +13,7 @@ import signal
 import sys
 import time
 
-from . import research_queue, universe_research, strategy_period_queue, walkforward_queue
+from . import research_queue, universe_research, strategy_period_queue, walkforward_queue, historical_news
 
 
 def main(argv=None):
@@ -41,6 +41,8 @@ def main(argv=None):
                 job=universe_research.process_one()
             if job is None:
                 job=research_queue.process_one()
+            if job is None:
+                job=historical_news.process_one()
             if job is not None:
                 # No symbols, parameters or results in public/local logs.
                 logging.info("Research job finished with status %s",job["status"])
