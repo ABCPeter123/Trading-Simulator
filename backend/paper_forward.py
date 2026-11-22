@@ -230,6 +230,7 @@ def _public(row, details=False):
         "transaction_fees_paid":round(state["transaction_fees_paid"],2),
         "pending_execution":state["pending"] is not None,
         "delay_sessions":config["delay_sessions"],
+        "news_sentiment_overlay":bool(state.get("news_sentiment_overlay",False)),
         "audit_reference":audit,
         "frozen_strategy_fingerprint":state.get("frozen_strategy_fingerprint"),
         "forward_benchmark":{
