@@ -72,12 +72,14 @@ def test_run_study_uses_validation_and_reports_unavailable_assets(isolated,monke
     assert result["screened_count"]==10
     assert result["excluded_count"]==1
     assert result["exclusions"]["vnq"]=="missing_or_invalid_ohlcv"
-    assert 1<=len(result["top10"])<=10
+    assert 0<=len(result["top10"])<=1
     assert result["test_used_for_selection"] is False
     assert result["qualified_candidates"] >= len(result["top10"])
     assert all(x["validation_score"]>=y["validation_score"]
                for x,y in zip(result["top10"],result["top10"][1:]))
-    assert result["shortlist_is_global_top_ten"] is True
+    assert result["shortlist_is_global_top_ten"] is False
+    assert result["selection_is_single_practical_candidate"] is True
+    assert result["single_best_selection"]["eligible"]>=len(result["top10"])
     assert "leveraged_trend" in result["candidate_model_counts"]
     assert "long_short_momentum" in result["candidate_model_counts"]
     assert result["historical_coverage"]["universe_earliest_session"] is not None
@@ -186,7 +188,9 @@ def test_actual_shortlist_is_global_validation_top_ten_only(isolated,monkeypatch
             loader=lambda _:{"bars":rows,"source":"Independent synthetic fixture"})
     before=scan(initial)
     after=scan(changed)
-    assert before["shortlist_is_global_top_ten"] is True
+    assert before["shortlist_is_global_top_ten"] is False
+    assert len(before["top10"])<=1
+    assert before["selection_is_single_practical_candidate"]
     keys=[(tuple(sorted(x["symbols"])),x["model"],
            tuple((v["model"],v["weight_pct"]) for v in x["sleeves"] or []))
           for x in before["top10"]]
