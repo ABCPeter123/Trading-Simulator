@@ -20,6 +20,7 @@ from . import strategy_period_queue
 from . import walkforward_queue
 from . import paper_forward
 from . import news_sentiment
+from . import historical_news
 from . import execution_windows
 from . import broker_reconciliation
 
@@ -428,6 +429,42 @@ def read_news_sentiment(symbols:str="spy,qqq"):
 def update_news_sentiment(body:NewsRefreshBody):
     private()
     return news_sentiment.refresh(body.symbols)
+
+
+class HistoricalNewsBackfillBody(BaseModel):
+    symbols:list[str]=Field(min_length=1,max_length=5)
+    start_date:str=Field(min_length=10,max_length=10)
+    end_date:str=Field(min_length=10,max_length=10)
+
+
+@router.post("/research/news/history/jobs",status_code=202)
+def queue_historical_news(body:HistoricalNewsBackfillBody):
+    private()
+    return historical_news.enqueue(body.symbols,body.start_date,body.end_date)
+
+
+@router.get("/research/news/history/jobs")
+def list_historical_news_jobs():
+    private()
+    return historical_news.list_jobs()
+
+
+@router.get("/research/news/history/jobs/{job_id}")
+def get_historical_news_job(job_id:str):
+    private()
+    return historical_news.get_job(job_id)
+
+
+@router.post("/research/news/history/jobs/{job_id}/cancel")
+def cancel_historical_news_job(job_id:str):
+    private()
+    return historical_news.cancel(job_id)
+
+
+@router.get("/research/news/history")
+def read_historical_news(symbols:str,start_date:str,end_date:str):
+    private()
+    return historical_news.history(symbols.split(","),start_date,end_date)
 
 
 @router.get("/research/universe/strategies")
