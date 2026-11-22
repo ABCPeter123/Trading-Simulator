@@ -44,6 +44,8 @@ export default function NewsSentimentPanel({symbols}:{symbols:string[]}){
       onClick={()=>void refresh()}>{busy?l("Retrieving provider headlines","正在获取新闻"):l("Refresh free headlines","刷新免费新闻")}</button>
     <p className="ur-subtitle">{l("Each provider query is rate limited; only the first five selected instruments are scanned per refresh. No API key or subscription is required.",
       "为遵守接口限频，每次只扫描所选的前五个标的，无需API密钥或付费订阅。")}</p>
+    <p className="ur-subtitle">{l("A refresh sends public company or ETF search terms to GDELT. It does not send your portfolio weights, financial accounts or private strategy reports.",
+      "刷新会向GDELT发送公开公司或ETF搜索词，不会发送组合权重、金融账户或私人策略报告。")}</p>
     {error&&<p role="alert" className="ops-error">{error}</p>}
     {update&&<p role="status">{update.results.map(x=>x.symbol.toUpperCase()+": "+x.status+" (+"+x.new_articles+(x.result_truncated?", partial":"")+")").join(" · ")}</p>}
     {!snapshot?<p>{l("Reading local news archive…","读取本地新闻数据库中…")}</p>:
