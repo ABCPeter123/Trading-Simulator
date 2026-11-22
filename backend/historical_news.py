@@ -93,7 +93,7 @@ def _canonical(value):
 def _aliases(symbol):
     instrument=get_instrument(symbol)
     name=_canonical(instrument.name)
-    stripped=re.sub(r"\\b(incorporated|inc|corporation|corp|limited|ltd|holdings|company|co|class [a-z])\\b","",name)
+    stripped=re.sub(r"\b(incorporated|inc|corporation|corp|limited|ltd|holdings|company|co|class [a-z])\b","",name)
     values=set(ALIASES.get(symbol,()))
     values.update((name," ".join(stripped.split())))
     return {v for v in (_canonical(x) for x in values) if len(v)>=4}
