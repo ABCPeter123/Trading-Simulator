@@ -32,6 +32,7 @@ export default function NewsSentimentPanel({symbols}:{symbols:string[]}){
     try{
       const result=await request<Update>("/live/research/news/refresh",{
         method:"POST",body:JSON.stringify({symbols:names})});
+      if(!result||!Array.isArray(result.results))throw new Error("News refresh response unavailable");
       setUpdate(result);
       const fresh=await request<Snapshot>("/live/research/news/sentiment?symbols="+encodeURIComponent(key));
       if(!fresh||!fresh.scores||!fresh.instruments)throw new Error("News archive response unavailable");
