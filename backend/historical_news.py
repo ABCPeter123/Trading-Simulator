@@ -382,20 +382,21 @@ def history(symbols,start_date,end_date,*,now=None):
             "limitations":"Article headlines and individual-article tone are unavailable in this daily aggregate. Counts and organization matching may be biased."}
 
 
-def historical_score_at(symbol,decision_utc,*,lookback_days=7):
-    """Research-only: enforce original GKG archive availability.
+def historical_score_at(symbol,decision_utc):
+    """Research only. Require the exact GKG day eligible for this open.
 
-    Do not use this function in the private live/paper or production signal
-    engine. Never forward fill a missing day or silently treat it as neutral.
+    Daily GKG's observed publication cadence is conservatively modeled as
+    D+2 at the New York 09:30 open. Missing daily coverage is NEVER filled
+    from an older record, or replaced with a synthetic neutral score.
     """
+    from zoneinfo import ZoneInfo
     stamp=int(decision_utc)
-    day=(datetime.fromtimestamp(stamp,timezone.utc).date()).isoformat()
-    since=(datetime.fromtimestamp(stamp,timezone.utc).date() -
-           timedelta(days=lookback_days)).isoformat()
+    decision_day=datetime.fromtimestamp(stamp,ZoneInfo("America/New_York")).date()
+    relevant=(decision_day-timedelta(days=2)).isoformat()
     with LOCK,closing(_db()) as c:
-        rows=c.execute("""SELECT t.score,t.mentions,c.archive_research_available_utc
-            FROM historic_news_tone t JOIN historic_news_coverage c
-            USING(symbol,news_day) WHERE t.symbol=? AND t.news_day>=?
-            AND t.news_day<=? AND c.archive_research_available_utc<=?
-            ORDER BY t.news_day DESC LIMIT 1""",(symbol,since,day,stamp)).fetchall()
-    return rows[0]["score"] if rows else None
+        row=c.execute("""SELECT t.score FROM historic_news_coverage c
+            LEFT JOIN historic_news_tone t USING(symbol,news_day)
+            WHERE c.symbol=? AND c.news_day=?
+            AND c.archive_research_available_utc<=?""",
+            (symbol,relevant,stamp)).fetchone()
+    return row["score"] if row is not None else None
