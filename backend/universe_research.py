@@ -25,7 +25,7 @@ from fastapi import HTTPException
 
 from . import assets, portfolio_research as pr, advanced_portfolio_research as adv, performance_objectives as objectives
 from . import blended_portfolio_research as blends
-from . import basket_optimizer
+from . import basket_optimizer, practical_selection
 from .archive import load_archived_history
 from .market import history
 
@@ -212,7 +212,8 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
             target_investment_pct=95., equity_class_cap_pct=70.,
             redistribute_excess=False,base_currency="USD",slippage_bps=8.,
             commission_usd=0.,fx_conversion_bps=150.,include_blends=True,
-            basket_search="focused",selection_policy="return_risk",rebalance_sessions=21):
+            basket_search="focused",selection_policy="return_risk",rebalance_sessions=21,
+            assumed_gain_tax_pct=25.):
     if os.environ.get("TRADING_SIM_PUBLIC_DEMO")=="1":
         raise HTTPException(403,detail="Owner research is unavailable in public demos.")
     if scope not in ("all","etfs","stocks") or delay_sessions not in (1,2):
@@ -236,6 +237,8 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
     if basket_search not in ("focused","expanded") or selection_policy not in (
             "return_risk","execution_robust"):
         raise HTTPException(422,detail="Invalid basket search or validation selection policy.")
+    if type(assumed_gain_tax_pct) not in (int,float) or not math.isfinite(assumed_gain_tax_pct) or not 0<=assumed_gain_tax_pct<=50:
+        raise HTTPException(422,detail="Invalid effective tax sensitivity assumption.")
     if base_currency not in ("USD","CAD") or type(include_blends) is not bool:
         raise HTTPException(422,detail="Invalid research account or strategy mix setting.")
     if type(slippage_bps) not in (int,float) or not math.isfinite(slippage_bps) or not 0<=slippage_bps<=100:
@@ -264,7 +267,8 @@ def enqueue(scope="all", delay_sessions=1, max_drawdown_pct=30, max_position_pct
               "commission_usd":float(commission_usd),
               "fx_conversion_bps":float(fx_conversion_bps),
               "include_blends":include_blends,
-              "basket_search":basket_search,"selection_policy":selection_policy}
+              "basket_search":basket_search,"selection_policy":selection_policy,
+              "assumed_gain_tax_pct":float(assumed_gain_tax_pct)}
         c.execute("""INSERT INTO universe_jobs
           (id,status,created_at,updated_at,progress,stage,params)
           VALUES (?,'queued',?,?,0,'Awaiting local research worker',?)""",
@@ -662,6 +666,7 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                                    "validation":pr._compact(valid),
                                    "regime_validation":regimes,
                                    "_validation_curve":valid["equity_curve"],
+                                   "_validation_executions":valid["executions"],
                                    "_market":market,"_metadata":metadata,
                                    "_test_start":test_start,"_n":n,
                                    "_first_session":days[0],
@@ -693,10 +698,16 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
                 quality["excess_sharpe"] is not None and
                 not any(other is not item and objectives.dominates(other,item)
                         for other in ranked))
-    # Top ten now means the ACTUAL ten best validation-ranked candidates.
-    # Weak strategy families no longer get a reserved position. Distinctive
-    # family alternatives are research diagnostics, never forced winners.
-    chosen=ranked[:10]
+    # User-facing selection is ONE executable portfolio. No seeded bucket
+    # representatives, model-family quotas or final-audit return sorting.
+    # Price-ledger fees are already netted; taxes are an explicit reserve
+    # sensitivity and never masquerade as a legal tax estimate.
+    selected,practical=practical_selection.choose(
+        ranked,max_drawdown_pct=params["max_drawdown_pct"],
+        tax_rate_pct=float(params.get("assumed_gain_tax_pct",25.)),
+        base_currency=broker_assumptions["base_currency"],
+        require_delay_stress=params.get("selection_policy","return_risk")=="execution_robust")
+    chosen=[selected] if selected is not None else []
     leaders=[]
     for i,item in enumerate(chosen):
         broker={**broker_assumptions,"delay_sessions":params["delay_sessions"],
@@ -747,7 +758,9 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "score_breakdown":item["score_breakdown"],
             "validation_execution_stress":item["validation_execution_stress"],
             "held_out_cost_audit":_execution_cost_audit(test,item["_market"],item["_metadata"],broker["slippage_bps"]),
-            "validation_score":item["score"],
+            "validation_score":practical["selected"]["score"],
+            "original_validation_score":item["score"],
+            "practical_selection":practical["selected"],
             "training":item["train"],"validation":item["validation"],
             "validation_regimes":item["regime_validation"],
             "held_out_regimes":adv.scenario_grade(test["equity_curve"],
@@ -798,6 +811,8 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
         "pareto_candidate_count":sum(bool(item.get("pareto_optimal",False)) for item in ranked),
         "shortlist_targets_observed":sum(bool(item["held_out_target_observed"]) for item in leaders),
         "top10":leaders,
+        "best_strategy":leaders[0] if leaders else None,
+        "single_best_selection":practical,
         "selection_method":(
             ("Expanded correlation-aware asset search; " if params.get("basket_search","focused")=="expanded" else "Focused asset screening; ")
             +("Execution-stressed validation ranking; " if params.get("selection_policy","return_risk")=="execution_robust" else "Standard validation ranking; ")
@@ -808,19 +823,24 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "The final 20% is evaluated only AFTER ranking. A three-window stability "
             "diagnostic is not a trained walk-forward model. Validation ranking "
             "penalizes underperformance versus a same-basket equal-weight control; "
-            "the top ten are the ten highest validation scores."
+            "a single manually cash-executable candidate is selected by "
+            "validation Sharpe, drawdown and realistic fee, FX, tax-sensitivity "
+            "and delayed-execution penalties."
             if mode=="high_performance" else
-            "Select the ten highest scores on validation only, using return, drawdown, "
-            "turnover, volatility, adverse regimes, and same-basket equal-weight "
-            "underperformance penalties. No family gets a reserved slot. "
-            "Held-out tests and scenarios never determine selection.")),
-        "shortlist_is_global_top_ten":True,
+            "Choose one cash-executable portfolio using Sharpe, drawdown, "
+            "same-basket benchmark, realistic trading costs, delayed-fill stress, "
+            "FX/account complexity and assumed realized-gain tax sensitivity. "
+            "No family buckets or extra winners. Held-out tests never select the model.")),
+        "shortlist_is_global_top_ten":False,
+        "selection_is_single_practical_candidate":True,
         "execution_assumptions":{**broker_assumptions,"configured_delay_sessions":params["delay_sessions"],
                                   "rebalance_sessions":params.get("rebalance_sessions",pr.REBALANCE_SESSIONS),
                                  "long_only_target_investment_pct":investment if mode=="high_performance" else 95.,
                                  "long_only_equity_class_cap_pct":equity_cap if mode=="high_performance" else 70.,
                                  "long_only_redistribute_excess":redistribute if mode=="high_performance" else False,
-                                 "commission_note":"User-configured per-order commission and FX bps apply only when currency differs from the funding account. Estimates, not verified broker charges."},
+                                 "commission_note":"User-configured per-order commission and FX bps apply only when currency differs from the funding account. Estimates, not verified broker charges.",
+                                 "assumed_gain_tax_pct":float(params.get("assumed_gain_tax_pct",25.)),
+                                 "tax_method":"Positive realized sale profits times an assumed effective rate, for ranking sensitivity only. No accurate after-tax equity."},
         "test_used_for_selection":False,
         "limitations":[
             "Expanded asset search screens only observations before the earliest training cutoff; validation and held-out prices cannot influence basket constituents, but the catalog may still have survivorship bias.",
@@ -834,7 +854,9 @@ def run_study(params, *, loader=None, report=None, pause=time.sleep):
             "The current provider-backed universe covers available USD/CAD stocks and ETFs. Futures, currencies, crypto and option contracts need separate historical pricing and execution models; excluded instruments are reported.",
             "Only symbols with sufficient actual valid historical daily data are evaluated. Exclusions are reported, not backfilled with synthetic observations.",
             "Research-only short and margin models use synthetic negative holdings, 6% annual short borrow and 8.5% margin funding assumptions, with 25% maintenance margin. These are approximations and cannot be deployed as Wealthsimple share shorts.",
-            "No direct Wealthsimple broker-price API, order routing, options margin engine, cash settlement, borrowing, taxes or dividend-adjusted total returns.",
+            "No direct Wealthsimple broker-price API, order routing, options margin engine, cash settlement, legal tax calculation or dividend-adjusted total returns.",
+            "The optional positive realized gain tax-reserve approximation does not account for loss offsets, capital-gain inclusion, business income classification, registered account rules or investor circumstances; it is not after-tax performance.",
+            "The single best candidate is based solely on pre-audit validation; signed shares and riskier leveraged/inverse ETF proxies are disqualified for simple cash-account operation.",
             "Signals from completed daily candles can take more than 12 calendar hours to reach the next regular-session open. A two-session stress test measures a longer delay.",
             "Rebalance sessions count daily shared close signals, not intraday opportunities. Daily cadence can increase costs and does not guarantee trades.",
             "Hypothetical future paths resample historical strategy outcomes and add shocks. They are not predictions or calibrated probabilities.",
