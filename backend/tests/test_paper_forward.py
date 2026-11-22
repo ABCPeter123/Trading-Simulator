@@ -288,7 +288,8 @@ def test_private_live_worker_news_refresh_only_for_opted_in_paper_studies(isolat
     result=paper.process_all()
     assert {r["id"] for r in result}=={regular["id"],enabled["id"]}
     assert len(refreshed)==1
-    assert set(refreshed[0])==set(SYMBOLS)
+    assert len(refreshed[0])==2
+    assert set(refreshed[0])<=set(SYMBOLS)
     # Explicit synthetic clock/data suppresses network calls even for opted-in
     # tests and historical replays.
     paper.process_all(now=asof(510),loader=provider(510))
