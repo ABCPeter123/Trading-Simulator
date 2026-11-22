@@ -655,6 +655,27 @@ def process_one(study_id, *, now=None, loader=None):
 def process_all(*, now=None, loader=None):
     _private()
     with LOCK, closing(_db()) as c:
-        ids=[r[0] for r in c.execute(
-            "SELECT id FROM paper_studies WHERE status='active'")]
-    return [process_one(uid,now=now,loader=loader) for uid in ids]
+        rows=c.execute(
+            "SELECT id,symbols,state FROM paper_studies WHERE status='active'").fetchall()
+    # Only opt-in paper portfolios cause external headlines to be queried.
+    # The private live worker calls this with real clock and real provider.
+    # Offline synthetic fixture runs may not access the network.
+    if now is None and loader is None:
+        interests=set()
+        for row in rows:
+            state=json.loads(row["state"])
+            if state.get("news_sentiment_overlay",False):
+                interests.update(json.loads(row["symbols"]))
+        if interests:
+            all_ids=sorted(interests)
+            # Bounded fairness across many portfolios: rotate the slice
+            # every worker pass. Each symbol is itself cached for 15 minutes,
+            # and every request goes through GDELT's paced query adapter.
+            cursor=(int(datetime.now(timezone.utc).timestamp())//90)%len(all_ids)
+            selected=[all_ids[(cursor+i)%len(all_ids)]
+                      for i in range(min(news_sentiment.MAX_SYMBOLS,len(all_ids)))]
+            try:
+                news_sentiment.refresh(selected)
+            except (ValueError,HTTPException,OSError,sqlite3.Error):
+                pass # Missing news must never stop a private price-ledger update.
+    return [process_one(row["id"],now=now,loader=loader) for row in rows]
