@@ -268,3 +268,28 @@ def test_news_overlay_validation_rejects_nonboolean(isolated):
         paper.create("invalid-news-mode",now=asof(510),loader=provider(510),
                      news_sentiment_overlay="yes")
     assert exc.value.status_code==422
+
+
+
+def test_private_live_worker_news_refresh_only_for_opted_in_paper_studies(isolated,monkeypatch):
+    monkeypatch.setattr(paper.news_sentiment,"scores_at",lambda symbols,stamp:{
+        symbol:{"score":None} for symbol in symbols})
+    regular=paper.create("plain-paper",now=asof(510),loader=provider(510))
+    refreshed=[]
+    monkeypatch.setattr(paper.news_sentiment,"refresh",
+                        lambda symbols:refreshed.append(tuple(sorted(symbols))))
+    monkeypatch.setattr(paper,"process_one",
+                        lambda uid,**kwargs:{"id":uid,"status":"active"})
+    result=paper.process_all()
+    assert len(result)==1 and result[0]["id"]==regular["id"]
+    assert refreshed==[]
+    enabled=paper.create("opt-in-paper",now=asof(510),
+                         loader=provider(510),news_sentiment_overlay=True)
+    result=paper.process_all()
+    assert {r["id"] for r in result}=={regular["id"],enabled["id"]}
+    assert len(refreshed)==1
+    assert set(refreshed[0])==set(SYMBOLS)
+    # Explicit synthetic clock/data suppresses network calls even for opted-in
+    # tests and historical replays.
+    paper.process_all(now=asof(510),loader=provider(510))
+    assert len(refreshed)==1
