@@ -232,3 +232,39 @@ def test_forward_paper_preserves_weekly_cadence_across_new_observed_sessions(iso
     repeated=paper.process_one(created["id"],now=asof(515),loader=provider(515))
     assert repeated["observed_sessions"]==5
     assert repeated["pending_execution"] is True
+
+
+
+def test_news_overlay_is_explicit_opt_in_and_frozen_per_forward_study(isolated,monkeypatch):
+    import json
+    from contextlib import closing
+    monkeypatch.setattr(paper.news_sentiment,"scores_at",lambda names,at:{
+        name:{"score":-.8} if name=="spy" else {"score":None} for name in names})
+    usual=paper.create("synthetic-news",now=asof(510),loader=provider(510),
+                       news_sentiment_overlay=False)
+    news=paper.create("synthetic-news",now=asof(510),loader=provider(510),
+                      news_sentiment_overlay=True)
+    assert usual["id"]!=news["id"]
+    assert usual["news_sentiment_overlay"] is False
+    assert news["news_sentiment_overlay"] is True
+    def pending(uid):
+        with closing(paper._db()) as conn:
+            return json.loads(conn.execute("SELECT state FROM paper_studies WHERE id=?",
+                                           (uid,)).fetchone()[0])["pending"]["weights"]
+    baseline=pending(usual["id"])
+    tilted=pending(news["id"])
+    assert tilted["spy"]==pytest.approx(baseline["spy"]*(1-.35*.8))
+    assert tilted["ief"]==pytest.approx(baseline["ief"])
+    assert sum(tilted.values())<=sum(baseline.values())
+    # Existing forward allocations never change because the collector
+    # receives later news: no retroactive study recalculation.
+    monkeypatch.setattr(paper.news_sentiment,"scores_at",lambda names,at:{
+        name:{"score":+.95} for name in names})
+    assert pending(news["id"])==tilted
+
+
+def test_news_overlay_validation_rejects_nonboolean(isolated):
+    with pytest.raises(HTTPException) as exc:
+        paper.create("invalid-news-mode",now=asof(510),loader=provider(510),
+                     news_sentiment_overlay="yes")
+    assert exc.value.status_code==422
