@@ -79,7 +79,7 @@ def evaluate(candidate, *, max_drawdown_pct=30., tax_rate_pct=25.,
         return None
     # Real simulation already deducts modeled spread/slippage/commission/FX
     # and (where applicable) borrow/funding charges.
-    reserve=realized_gain_reserve(validation.get("executions",[]),tax_rate_pct)
+    reserve=realized_gain_reserve(candidate.get("_validation_executions",[]),tax_rate_pct)
     tax_pct=reserve/STARTING_CAPITAL*100.
     turnover=max(0.,float(validation.get("turnover_pct",0.)))
     drawdown=abs(float(validation["max_drawdown_pct"]))
