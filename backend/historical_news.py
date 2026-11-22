@@ -349,7 +349,7 @@ def process_one(*,fetcher=None):
             sqlite3.Error,UnicodeError,RuntimeError):
         with LOCK,closing(_db()) as c,c:
             c.execute("""UPDATE historic_news_jobs SET status='failed',
-                stage='Archive unavailable or malformed: '+?,error_code='gkg_fetch_failed',
+                stage='Archive unavailable or malformed: ' || ?,error_code='gkg_fetch_failed',
                 updated_at=? WHERE id=? AND status='running'""",
                 (day.isoformat(),_now().isoformat(),job["id"]))
     return get_job(job["id"])
