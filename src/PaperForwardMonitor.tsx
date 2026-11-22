@@ -47,6 +47,7 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
   const [shortRate,setShortRate]=useState("6");
   const [slippage,setSlippage]=useState("8");
   const [fxSpread,setFxSpread]=useState("0");
+  const [newsOverlay,setNewsOverlay]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const load=useCallback(async()=>{
@@ -97,7 +98,7 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
       ...(fxSpread.trim()?{fx_spread_bps:Number(fxSpread)}:{}),
     };
     void update(async()=>{
-      const created=await createPaperForward(sourceJobId,n,d,execution);
+      const created=await createPaperForward(sourceJobId,n,d,execution,newsOverlay);
       setSelected(await getPaperForward(created.id));
     });
   };
@@ -156,6 +157,10 @@ export default function PaperForwardMonitor({sourceJobId}:{sourceJobId?:string})
         {say("Assume shortable shares for research only, without verified locate",
           "仅供研究假设可借券，未核实实际融券供应")}
       </label>}
+      <label className="pf-borrow"><input type="checkbox" checked={newsOverlay} onChange={e=>setNewsOverlay(e.target.checked)}/>
+        {say("Experimental news-risk overlay. Reduce portfolio exposure after negative GDELT headlines already archived locally.","实验性新闻风控。仅在本地已归档的GDELT负面新闻出现后减少组合敞口。")}
+      </label>
+      <p>{say("News sentiment is unvalidated. Activate only for new forward-paper trials; it never rewrites historical trades or uses later downloaded articles.","新闻情绪尚未验证。仅用于新创建的前向模拟，不会修改历史交易或使用事后下载的新闻。")}</p>
       <label>{say("Drawdown stop (%)","回撤止损（%）")}
         <input type="number" min="5" max="60" value={drawdown}
           onChange={e=>setDrawdown(e.target.value)}/></label>

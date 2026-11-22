@@ -17,6 +17,7 @@ export interface PaperForwardOverview {
   cash:number;equity:number;positions:Record<string,number>;peak_equity:number;
   gross_exposure_pct:number;current_drawdown_pct:number;financing_paid:number;
   transaction_fees_paid:number;pending_execution:boolean;delay_sessions:number;
+  news_sentiment_overlay?:boolean;
   audit_reference:{risk_free_pct:number;objectives:{cagr_pct:number|null;excess_sharpe:number|null}};
   execution_profile:PaperExecution & {rate_snapshot_date:string;manual_margin_override?:boolean};
   broker:{broker:string;account_type:string;pricing_date:string;currency:string;
@@ -49,9 +50,9 @@ export const listPaperForward=()=>request<PaperForwardOverview[]>("/live/researc
 export const getPaperForward=(id:string)=>request<PaperForwardDetail>(
   "/live/research/paper-forward/"+encodeURIComponent(id));
 export const createPaperForward=(job_id:string,capital:number,max_drawdown_pct:number,
-  execution?:PaperExecution)=>
+  execution?:PaperExecution,news_sentiment_overlay=false)=>
   request<PaperForwardOverview>("/live/research/paper-forward",{
-    method:"POST",body:JSON.stringify({job_id,capital,max_drawdown_pct,execution})});
+    method:"POST",body:JSON.stringify({job_id,capital,max_drawdown_pct,execution,news_sentiment_overlay})});
 export const evaluatePaperForward=(id:string)=>request<PaperForwardOverview>(
   "/live/research/paper-forward/"+encodeURIComponent(id)+"/evaluate",{method:"POST"});
 export const changePaperForwardState=(id:string,status:"active"|"paused"|"retired")=>
