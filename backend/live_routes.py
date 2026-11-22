@@ -277,6 +277,7 @@ class UniverseStudyBody(BaseModel):
     include_blends:bool=True
     basket_search:Literal["focused","expanded"]="focused"
     selection_policy:Literal["return_risk","execution_robust"]="return_risk"
+    assumed_gain_tax_pct:float=Field(default=25,ge=0,le=50)
 
 
 class TournamentSourceBody(BaseModel):
