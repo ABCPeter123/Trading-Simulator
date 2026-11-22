@@ -673,7 +673,7 @@ def process_all(*, now=None, loader=None):
             # and every request goes through GDELT's paced query adapter.
             cursor=(int(datetime.now(timezone.utc).timestamp())//90)%len(all_ids)
             selected=[all_ids[(cursor+i)%len(all_ids)]
-                      for i in range(min(news_sentiment.MAX_SYMBOLS,len(all_ids)))]
+                      for i in range(min(2,news_sentiment.MAX_SYMBOLS,len(all_ids)))]
             try:
                 news_sentiment.refresh(selected)
             except (ValueError,HTTPException,OSError,sqlite3.Error):
