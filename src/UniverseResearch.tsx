@@ -258,7 +258,8 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     <header className="ur-header"><div>
       <p className="ur-kicker">{t("PRIVATE QUANTITATIVE RESEARCH")}</p>
       <h1>{t("Strategy Tournament")}</h1>
-      <p>{t("Scan actual instrument history, rank the top ten portfolio strategies, and inspect delay and scenario stress. Nothing trades automatically.")}</p>
+      <p>{bilingual("Search real price history, select one executable research portfolio, inspect costs and drawdown, and test free news signals prospectively. Nothing trades automatically.",
+      "筛选真实历史价格，只选出一个可操作的研究组合，检查费用和回撤，并在前向模拟中测试免费新闻信号。平台不会自动真实交易。")}</p>
     </div></header>
     <details className="ur-workflow-help"><summary>{bilingual("How the research test works","研究测试如何进行")}</summary>
     <div className="ur-steps">{[
@@ -270,6 +271,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
     </details>
     {error&&<p className="ops-error" role="alert">{error}</p>}
     {notice&&<p className="ops-message" role="status">{notice}</p>}
+    <NewsSentimentPanel symbols={result?.best_strategy?.symbols??["spy","qqq","nvda"]}/>
     <div className="ur-columns">
       <section className="ur-panel ur-setup"><h2>{bilingual("Run a strategy test","运行策略测试")}</h2>
         <p className="ur-subtitle">{bilingual("Use the defaults, or adjust the essentials below.","可以使用默认设置，也可以修改以下主要选项。")}</p>
@@ -443,15 +445,15 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             <h2>{bilingual("Single best practical strategy","唯一最优可操作策略")}</h2>
             <p className="ur-subtitle">{bilingual("One manually tradable candidate is selected based on validation excess Sharpe, drawdown, delayed fills, turnover, FX costs, account complexity and a hypothetical tax reserve. No strategy-family quotas.",
               "仅选择一个手动可交易的策略，综合考虑验证期夏普、回撤、延迟、换手、换汇、账户复杂度及假设税款预留，不设置策略类别保留名额。")}</p>
-            <NewsSentimentPanel symbols={result.best_strategy?.symbols??["spy","qqq","nvda"]}/>
+
             {result.top10.length>0&&result.top10.every(row=>row.validation_quality_label!=="benchmark_advantage")&&
               <p className="ur-warning">{bilingual(
                 "No candidate has demonstrated both higher validation returns and higher excess Sharpe than its same-basket equal-weight control. These are research candidates, not recommended live strategies.",
                 "没有候选策略在验证期收益率及超额夏普比率上同时超过同资产组合的等权对照。这些仅为研究候选策略，不代表可直接实盘使用。")}</p>}
-            <details className="ur-batch-actions" hidden><summary>{bilingual("Archive older multi-candidate tools","旧版多候选工具存档")}</summary>
+            {result.top10.length>1&&<details className="ur-batch-actions"><summary>{bilingual("Archive older multi-candidate tools","旧版多候选工具存档")}</summary>
               <button type="button" className="ur-secondary" disabled={busy||!result.top10.length}
                 onClick={()=>void importAll()}>{t("Save all top 10 strategy models")}</button>
-            </details>
+            </details>}
             {result.top10.length===0?<p>{t("No qualifying candidates. Inspect missing history or relax the validation constraints.")}</p>:
             <>
               {result.top10.length>1&&<label className="ur-ranking-picker">{bilingual("Select a strategy to inspect","选择要查看的策略")}
