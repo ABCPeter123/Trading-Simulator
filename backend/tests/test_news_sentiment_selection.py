@@ -77,7 +77,7 @@ def test_sentiment_direction_and_risk_tilt_are_conservative():
     assert sum(new.values())<=sum(prior.values())
 
 
-def test_private_api_and_demo_guard(archive):
+def test_private_api_and_demo_guard(archive,monkeypatch):
     client=TestClient(app)
     req=client.get("/api/live/research/news/sentiment?symbols=nvda,spy")
     assert req.status_code==200
@@ -86,16 +86,12 @@ def test_private_api_and_demo_guard(archive):
         json={"symbols":["invalid-no-such-ticker"]})
     assert invalid.status_code==422
     # Public demo has no access to private news sources or archive.
-    import os
-    original=os.environ.get("TRADING_SIM_PUBLIC_DEMO")
-    os.environ["TRADING_SIM_PUBLIC_DEMO"]="1"
-    try:
-        assert client.get("/api/live/research/news/sentiment?symbols=nvda").status_code==403
-        assert client.post("/api/live/research/news/refresh",
-                           json={"symbols":["nvda"]}).status_code==403
-    finally:
-        if original is None:os.environ.pop("TRADING_SIM_PUBLIC_DEMO",None)
-        else:os.environ["TRADING_SIM_PUBLIC_DEMO"]=original
+    # Route-level isolation is a startup constant. Patch the app runtime,
+    # not the environment after module import.
+    monkeypatch.setattr("backend.main.PUBLIC_DEMO",True)
+    assert client.get("/api/live/research/news/sentiment?symbols=nvda").status_code==403
+    assert client.post("/api/live/research/news/refresh",
+                       json={"symbols":["nvda"]}).status_code==403
 
 
 def selection_candidate(model="trend_filter", sharpe=1.1, dd=-12., symbols=None):
@@ -119,7 +115,7 @@ def selection_candidate(model="trend_filter", sharpe=1.1, dd=-12., symbols=None)
 
 def test_selects_only_one_best_executable_sharpe_drawdown_and_tax():
     simple=selection_candidate(sharpe=1.4,dd=-12.)
-    high_vol=selection_candidate(sharpe=1.6,dd=-29.)
+    high_vol=selection_candidate(sharpe=1.6,dd=-26.)
     short=selection_candidate(model="market_neutral",sharpe=6.,dd=-1.)
     leveraged=selection_candidate(symbols=["tqqq","spy"],sharpe=7.,dd=-1.)
     chosen,report=practical.choose([high_vol,short,leveraged,simple],
