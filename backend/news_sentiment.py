@@ -102,7 +102,11 @@ def _timestamp(value):
     for pattern in ("%Y%m%dT%H%M%SZ","%Y%m%d%H%M%S"):
         try:return int(datetime.strptime(raw,pattern).replace(tzinfo=timezone.utc).timestamp())
         except ValueError:pass
-    try:return int(datetime.fromisoformat(raw.replace("Z","+00:00")).timestamp())
+    try:
+        result=datetime.fromisoformat(raw.replace("Z","+00:00"))
+        if result.tzinfo is None:
+            result=result.replace(tzinfo=timezone.utc)
+        return int(result.timestamp())
     except ValueError as exc:raise ValueError("Unparseable headline timestamp.") from exc
 
 
