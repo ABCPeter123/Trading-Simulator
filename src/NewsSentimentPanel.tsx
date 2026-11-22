@@ -1,5 +1,6 @@
 import {useEffect,useState} from "react";
 import {request} from "./api";
+import HistoricalNewsPanel from "./HistoricalNewsPanel";
 import {useI18n} from "./i18n";
 
 type Score={score:number|null;direction:string;scored_headlines:number};
@@ -72,5 +73,6 @@ export default function NewsSentimentPanel({symbols}:{symbols:string[]}){
       </div>}
     <p className="ur-subtitle">{l("Historical Sharpe results do not include these headlines. Enable the optional news-risk overlay on a NEW forward-paper trial to evaluate whether reducing exposure after negative archived headlines actually helps. A headline's earlier publication date cannot make it usable before the local archive first observed it.",
       "历史夏普结果不包括这些新闻。请在新建前向模拟时选择新闻风控，以测试负面新闻之后降低敞口是否有效。即使新闻更早发布，也不能在本地首次观察之前用于历史交易。")}</p>
+    <HistoricalNewsPanel/>
   </details>;
 }
