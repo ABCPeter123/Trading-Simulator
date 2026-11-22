@@ -22,7 +22,8 @@ export default function NewsSentimentPanel({symbols}:{symbols:string[]}){
   useEffect(()=>{
     let current=true;setSnapshot(null);
     void request<Snapshot>("/live/research/news/sentiment?symbols="+encodeURIComponent(key))
-      .then(s=>{if(current)setSnapshot(s);})
+      .then(s=>{if(!s||!s.scores||!s.instruments||typeof s.scores!=="object"||typeof s.instruments!=="object")throw new Error("News archive response unavailable");
+        if(current)setSnapshot(s);})
       .catch(e=>{if(current)setError(String(e));});
     return()=>{current=false};
   },[key]);
@@ -32,7 +33,9 @@ export default function NewsSentimentPanel({symbols}:{symbols:string[]}){
       const result=await request<Update>("/live/research/news/refresh",{
         method:"POST",body:JSON.stringify({symbols:names})});
       setUpdate(result);
-      setSnapshot(await request<Snapshot>("/live/research/news/sentiment?symbols="+encodeURIComponent(key)));
+      const fresh=await request<Snapshot>("/live/research/news/sentiment?symbols="+encodeURIComponent(key));
+      if(!fresh||!fresh.scores||!fresh.instruments)throw new Error("News archive response unavailable");
+      setSnapshot(fresh);
     }catch(e){setError(e instanceof Error?e.message:String(e))}
     finally{setBusy(false);}
   };
@@ -51,7 +54,7 @@ export default function NewsSentimentPanel({symbols}:{symbols:string[]}){
     {!snapshot?<p>{l("Reading local news archive…","读取本地新闻数据库中…")}</p>:
       <div className="ur-kpis">
         {names.map(symbol=>{
-          const score=snapshot.scores[symbol],collection=snapshot.instruments[symbol];
+          const score=snapshot.scores?.[symbol],collection=snapshot.instruments?.[symbol];
           return <div key={symbol} style={{minWidth:0}}>
             <small>{symbol.toUpperCase()}</small>
             <strong>{score?.score==null?"N/A":score.score.toFixed(3)}</strong>
