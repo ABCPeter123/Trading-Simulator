@@ -25,6 +25,7 @@ from . import (advanced_portfolio_research as adv, blended_portfolio_research as
                performance_objectives as metrics, portfolio_research as pr,
                walkforward_queue, broker_execution as broker_model)
 from .assets import get_instrument
+from . import news_sentiment
 from .market import history
 
 NY = ZoneInfo("America/New_York")
@@ -322,8 +323,10 @@ def get_study(study_id):
 
 
 def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=None,
-           execution=None):
+           execution=None, news_sentiment_overlay=False):
     _private()
+    if type(news_sentiment_overlay) is not bool:
+        raise HTTPException(422,"News sentiment overlay must be explicitly enabled or disabled.")
     if (not isinstance(capital, (int,float)) or isinstance(capital,bool)
         or not math.isfinite(capital) or not 100<=capital<=1e9
         or not isinstance(max_drawdown_pct,(int,float)) or isinstance(max_drawdown_pct,bool)
@@ -356,6 +359,11 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
         )
         closes = {s:[b["close"] for b in market[s]] for s in symbols}
         targets = _safe_targets(config, symbols, closes, meta, len(days))
+        if news_sentiment_overlay:
+            # Only articles already archived at activation may affect the
+            # NEXT planned order. No historical headline backfill.
+            targets = news_sentiment.risk_tilt(
+                targets, news_sentiment.scores_at(symbols,int(at.timestamp())))
     except (ValueError,KeyError,TypeError,HTTPException) as exc:
         raise HTTPException(422,"Forward-paper initialization requires fresh synchronized real data and a valid frozen model.") from exc
     audit_reference={"objectives":audit["objectives"],
@@ -387,6 +395,7 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
            "pending":pending, "since_signal":0,
            "financing_paid":0.,"transaction_fees_paid":0.,
            "broker":profile,"capital_currency":profile["capital_currency"],
+           "news_sentiment_overlay":news_sentiment_overlay,
            "initial_amount":float(capital),"fx_rate":observed_fx,
            "fx_conversion_fee_usd":fx_fee,
            "peak_cad":float(capital) if spot else None}
@@ -399,6 +408,7 @@ def create(job_id, *, capital=100000., max_drawdown_pct=30., now=None, loader=No
         for existing in existing_rows:
             previous=json.loads(existing["state"])
             if (previous.get("broker")==profile
+                and previous.get("news_sentiment_overlay",False)==news_sentiment_overlay
                 and previous.get("initial_amount")==float(capital)
                 and float(existing["max_drawdown"])==max_drawdown_pct):
                 c.commit()
@@ -581,7 +591,14 @@ def _advance(c, row, days, market, meta, fx_rates, at):
             break
         if state["since_signal"]>=config.get("rebalance_sessions",REBALANCE) and state["pending"] is None:
             known={s:[b["close"] for b in market[s][:index+1]] for s in symbols}
-            state["pending"]={"weights":_safe_targets(config,symbols,known,meta,index+1),
+            planned=_safe_targets(config,symbols,known,meta,index+1)
+            if state.get("news_sentiment_overlay",False):
+                # The study sees local archived news only when the observer
+                # reaches this session, never retroactively via pub timestamps.
+                planned=news_sentiment.risk_tilt(
+                    planned,news_sentiment.scores_at(
+                        symbols,int(at.timestamp())))
+            state["pending"]={"weights":planned,
                               "remaining":config["delay_sessions"],
                               "signal_session":day}
             state["since_signal"]=0
