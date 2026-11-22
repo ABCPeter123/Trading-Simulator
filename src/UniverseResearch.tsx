@@ -3,6 +3,7 @@ import {request} from "./api";
 import {importTournamentRank,createTournamentReplay,createCustomPeriodStudy} from "./tournamentApi";
 import type {CustomPeriodJob} from "./tournamentApi";
 import TournamentStrategyInspector from "./TournamentStrategyInspector";
+import NewsSentimentPanel from "./NewsSentimentPanel";
 import type {TournamentModelSpec} from "./TournamentStrategyInspector";
 import {useI18n} from "./i18n";
 import "./universeResearch.css";
@@ -29,6 +30,11 @@ type CostAudit={explicit_total_usd:number;transaction_and_fx_usd:number;margin_i
 type Winner={rank:number;basket_type:string;symbols:string[];model:string;validation_score:number;training:Metric;
   sleeves?:{model:string;weight_pct:number}[]|null;
   score_breakdown?:ScoreBreakdown;held_out_cost_audit?:CostAudit;
+  practical_selection?:{score:number;validation_excess_sharpe:number;
+    validation_drawdown_pct:number;delayed_fill_return_loss_pct:number;
+    estimated_tax_reserve_usd:number;tax_assumption_pct:number;
+    operation:string;cross_currency_asset_count:number;
+    demonstrated_edge:boolean;recommendation_status:string;score_components:Record<string,number>};
   validation_execution_stress?:{return_pct:number;max_drawdown_pct:number;score:number;
     delay_sessions:number;slippage_bps:number;selection_only_validation_data:boolean}|null;
   validation_objectives?:ObjectiveMetrics;held_out_objectives?:ObjectiveMetrics;
@@ -49,7 +55,8 @@ type Outcome={universe_count:number;eligible_count:number;excluded_count:number;
   research_objective?:"balanced"|"high_performance";
   objective_targets?:{cagr_pct:number;excess_sharpe:number;risk_free_pct:number;max_drawdown_pct:number};
   pareto_candidate_count?:number;shortlist_targets_observed?:number;
-  basket_count:number;candidates_evaluated:number;top10:Winner[];limitations:string[];
+  basket_count:number;candidates_evaluated:number;top10:Winner[];best_strategy?:Winner|null;
+  single_best_selection?:{eligible:number;reason:string};limitations:string[];
   basket_search?:"focused"|"expanded";selection_policy?:"return_risk"|"execution_robust";
   asset_screen?:{screen_cutoff:string|null;screened_instruments:number;
     screened_pool:number;generated_baskets:number;method:string};
@@ -66,7 +73,7 @@ type Job={id:string;status:"queued"|"running"|"completed"|"failed"|"cancelled";c
     target_investment_pct?:number;equity_class_cap_pct?:number;
     redistribute_excess?:boolean;base_currency?:"USD"|"CAD";slippage_bps?:number;
     commission_usd?:number;fx_conversion_bps?:number;include_blends?:boolean;
-    basket_search?:"focused"|"expanded";selection_policy?:"return_risk"|"execution_robust"};result:Outcome|null};
+    basket_search?:"focused"|"expanded";selection_policy?:"return_risk"|"execution_robust";assumed_gain_tax_pct?:number};result:Outcome|null};
 import {validatedPercent} from "./validatedPercent";
 
 const pct=(x:number)=>Number.isFinite(x)?x.toFixed(2)+"%":"N/A";
@@ -83,6 +90,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
   const [slippage,setSlippage]=useState("8");
   const [commission,setCommission]=useState("0");
   const [fxBps,setFxBps]=useState("150");
+  const [taxRate,setTaxRate]=useState("25");
   const [includeBlends,setIncludeBlends]=useState(true);
   const [basketSearch,setBasketSearch]=useState<"focused"|"expanded">("expanded");
   const [selectionPolicy,setSelectionPolicy]=useState<"return_risk"|"execution_robust">("execution_robust");
@@ -144,10 +152,11 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
       const slippage_bps=validatedPercent(slippage,"Slippage in basis points",0,100);
       const commission_usd=validatedPercent(commission,"Commission in USD",0,30);
       const fx_conversion_bps=validatedPercent(fxBps,"FX conversion in basis points",0,300);
+      const assumed_gain_tax_pct=validatedPercent(taxRate,"Assumed realized-gain tax reserve",0,50);
       const job=await request<Job>("/live/research/universe/jobs",{method:"POST",
         body:JSON.stringify({scope,delay_sessions:delay,rebalance_sessions:rebalance,
           max_drawdown_pct,max_position_pct,research_objective:objective,
-          base_currency:baseCurrency,slippage_bps,commission_usd,fx_conversion_bps,
+          base_currency:baseCurrency,slippage_bps,commission_usd,fx_conversion_bps,assumed_gain_tax_pct,
           include_blends:includeBlends,basket_search:basketSearch,
           selection_policy:selectionPolicy,
           target_cagr_pct,target_sharpe,risk_free_pct,
@@ -319,6 +328,10 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
             <input type="number" min="0" max="100" value={slippage} onChange={e=>setSlippage(e.target.value)}/></label>
           <label>{bilingual("Commission per trade (USD)","每笔佣金（美元）")}
             <input type="number" min="0" max="30" step="0.1" value={commission} onChange={e=>setCommission(e.target.value)}/></label>
+          <label>{bilingual("Assumed tax reserve on profitable sales (%)","盈利卖出交易预留税款假设（%）")}
+            <input type="number" min="0" max="50" step="1" value={taxRate} onChange={e=>setTaxRate(e.target.value)}/></label>
+          <p>{bilingual("A ranking sensitivity only, not an after-tax backtest. Set 0 for a tax-free scenario. Your actual tax treatment depends on account type and circumstances.",
+            "税款仅用于排名敏感度分析，而非税后回测。设为0可模拟免税场景，实际税务依账户及个人情况而定。")}</p>
           <label>{bilingual("FX conversion (bps on cross-currency orders)","跨币种交易换汇费（基点）")}
             <input type="number" min="0" max="300" value={fxBps} onChange={e=>setFxBps(e.target.value)}/></label>
           <label className="ur-checkbox-label"><input type="checkbox" checked={includeBlends}
@@ -427,25 +440,28 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                 <div key={name}><small>{label(name)}</small><strong>{count}</strong></div>)}</div>
             </details>}
             </details>
-            <h2>{bilingual("Validation-ranked research candidates","按验证期表现排名的研究候选策略")}</h2>
+            <h2>{bilingual("Single best practical strategy","唯一最优可操作策略")}</h2>
+            <p className="ur-subtitle">{bilingual("One manually tradable candidate is selected based on validation excess Sharpe, drawdown, delayed fills, turnover, FX costs, account complexity and a hypothetical tax reserve. No strategy-family quotas.",
+              "仅选择一个手动可交易的策略，综合考虑验证期夏普、回撤、延迟、换手、换汇、账户复杂度及假设税款预留，不设置策略类别保留名额。")}</p>
+            <NewsSentimentPanel symbols={result.best_strategy?.symbols??["spy","qqq","nvda"]}/>
             {result.top10.length>0&&result.top10.every(row=>row.validation_quality_label!=="benchmark_advantage")&&
               <p className="ur-warning">{bilingual(
                 "No candidate has demonstrated both higher validation returns and higher excess Sharpe than its same-basket equal-weight control. These are research candidates, not recommended live strategies.",
                 "没有候选策略在验证期收益率及超额夏普比率上同时超过同资产组合的等权对照。这些仅为研究候选策略，不代表可直接实盘使用。")}</p>}
-            <details className="ur-batch-actions"><summary>{bilingual("Save all ranked models","保存全部排名模型")}</summary>
+            <details className="ur-batch-actions" hidden><summary>{bilingual("Archive older multi-candidate tools","旧版多候选工具存档")}</summary>
               <button type="button" className="ur-secondary" disabled={busy||!result.top10.length}
                 onClick={()=>void importAll()}>{t("Save all top 10 strategy models")}</button>
             </details>
             {result.top10.length===0?<p>{t("No qualifying candidates. Inspect missing history or relax the validation constraints.")}</p>:
             <>
-              <label className="ur-ranking-picker">{bilingual("Select a strategy to inspect","选择要查看的策略")}
+              {result.top10.length>1&&<label className="ur-ranking-picker">{bilingual("Select a strategy to inspect","选择要查看的策略")}
                 <select value={pick} onChange={event=>{setPick(Number(event.target.value));setDetailTab("overview");}}>
                   {result.top10.map((row,i)=><option key={row.rank} value={i}>
                     #{row.rank} · {label(row.model)} · {pct(row.validation.return_pct)} {bilingual("validation","验证期")}
                   </option>)}
                 </select>
-              </label>
-              <details className="ur-ranking-table">
+              </label>}
+              {result.top10.length>1&&<details className="ur-ranking-table">
                 <summary>{bilingual("Compare all ranked strategies","比较所有排名策略")} ({result.top10.length})</summary>
                 <div className="ur-scroll"><table><thead><tr><th>{t("Rank")}</th>
               <th>{t("Basket / Model")}</th><th>{t("Validation")}</th>
@@ -459,7 +475,7 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
               <td>{pct(row.validation.return_pct)}</td><td>{pct(row.validation.max_drawdown_pct)}</td>
               <td>{pct(row.held_out.return_pct)}</td><td>{row.validation_score.toFixed(2)}</td>
             </tr>)}</tbody></table></div>
-              </details>
+              </details>}
             </>}
             {chosen&&<article className="ur-detail">
               <h3>#{chosen.rank} {label(chosen.basket_type)} · {label(chosen.model)}</h3>
@@ -477,6 +493,17 @@ export default function UniverseResearch({onOpenDiscovery,onOpenSimulation,onOpe
                   aria-selected={detailTab===id} className={detailTab===id?"selected":""}
                   onClick={()=>setDetailTab(id)}>{title}</button>)}
               </nav>
+              {detailTab==="overview"&&chosen.practical_selection&&<div className="ur-kpis">
+                <div><small>{bilingual("Validation excess Sharpe","验证期超额夏普")}</small><strong>{chosen.practical_selection.validation_excess_sharpe.toFixed(2)}</strong></div>
+                <div><small>{bilingual("Maximum drawdown","最大回撤")}</small><strong>{pct(chosen.practical_selection.validation_drawdown_pct)}</strong></div>
+                <div><small>{bilingual("Delay return deterioration","延迟成交收益恶化")}</small><strong>{pct(chosen.practical_selection.delayed_fill_return_loss_pct)}</strong></div>
+                <div><small>{bilingual("Assumed tax reserve (USD)","假设税款预留（美元）")}</small><strong>{"$"+chosen.practical_selection.estimated_tax_reserve_usd.toFixed(2)}</strong></div>
+                <div><small>{bilingual("Practical selection score","可操作策略总分")}</small><strong>{chosen.practical_selection.score.toFixed(2)}</strong></div>
+              </div>}
+              {detailTab==="overview"&&chosen.practical_selection&&<p className="ur-subtitle">
+                {bilingual("Trade setup:","交易配置：")}{chosen.practical_selection.operation}.
+                {" "}{bilingual("Tax figures are hypothetical ranking sensitivities, not liabilities.","税款数字是排名假设，不代表实际税款。")}
+              </p>}
               {detailTab==="overview"&&<div className="ur-kpis ur-key-metrics">
                 <div><small>{bilingual("Training return","训练期收益")}</small><strong>{pct(chosen.training.return_pct)}</strong></div>
                 <div><small>{bilingual("Validation return","验证期收益")}</small><strong>{pct(chosen.validation.return_pct)}</strong></div>
