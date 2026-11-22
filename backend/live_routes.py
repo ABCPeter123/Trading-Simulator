@@ -19,6 +19,7 @@ from . import strategy_source
 from . import strategy_period_queue
 from . import walkforward_queue
 from . import paper_forward
+from . import news_sentiment
 from . import execution_windows
 from . import broker_reconciliation
 
@@ -374,6 +375,7 @@ class BrokerPaperExecution(BaseModel):
     fx_spread_bps:float|None=Field(default=None,ge=0,le=500)
 
 class ForwardPaperStart(BaseModel):
+    news_sentiment_overlay:bool=False
     job_id:str=Field(min_length=1,max_length=100)
     capital:float=Field(default=100000,ge=100,le=1e9)
     max_drawdown_pct:float=Field(default=30,ge=5,le=60)
@@ -387,6 +389,7 @@ def create_forward_paper(body:ForwardPaperStart):
     private()
     return paper_forward.create(body.job_id,capital=body.capital,
                                 max_drawdown_pct=body.max_drawdown_pct,
+                                news_sentiment_overlay=body.news_sentiment_overlay,
                                 execution=body.execution.model_dump(exclude_none=True)
                                   if body.execution else None)
 
@@ -409,6 +412,22 @@ def evaluate_forward_paper(study_id:str):
 def set_forward_paper_state(study_id:str,body:ForwardPaperState):
     private()
     return paper_forward.change_status(study_id,body.status)
+
+
+class NewsRefreshBody(BaseModel):
+    symbols:list[str]=Field(min_length=1,max_length=5)
+
+
+@router.get("/research/news/sentiment")
+def read_news_sentiment(symbols:str="spy,qqq"):
+    private()
+    return news_sentiment.snapshot(news_sentiment._symbols(symbols.split(",")))
+
+
+@router.post("/research/news/refresh")
+def update_news_sentiment(body:NewsRefreshBody):
+    private()
+    return news_sentiment.refresh(body.symbols)
 
 
 @router.get("/research/universe/strategies")
